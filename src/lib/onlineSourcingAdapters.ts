@@ -860,6 +860,21 @@ export function parseHtmlForOnlineListing(url: string, html: string): OnlineList
 }
 
 /**
+ * Safely joins ShopGoodwill's `imageServer` with a relative gallery path.
+ * Handles: missing/duplicate slashes, Windows backslashes, protocol-relative `//host/...`, and full `https://` URLs.
+ */
+export function joinSgImageUrl(imgServer: string | null | undefined, rawPath: string | null | undefined): string {
+  const clean = String(rawPath || '').trim().replace(/\\/g, '/');
+  if (!clean) return '';
+  if (/^https?:\/\//i.test(clean)) return clean;
+  if (clean.startsWith('//')) return `https:${clean}`;
+  const base = String(imgServer || '').trim();
+  if (!base) return '';
+  const normalizedBase = /^https?:\/\//i.test(base) ? base : base.startsWith('//') ? `https:${base}` : `https://${base.replace(/^\/+/, '')}`;
+  return `${normalizedBase.replace(/\/+$/, '')}/${clean.replace(/^\/+/, '')}`;
+}
+
+/**
  * Resolves any online listing URL (or client-harvested DOM snapshot) into a canonical OnlineListingEnvelope.
  * Uses ShopGoodwill's official Buyer API + CalculateShipping when on shopgoodwill.com, and merges
  * client-side DOM harvests on eBay / FB Marketplace / HiBid / CTBids so bot-walls never block scouting.
@@ -947,13 +962,22 @@ export async function fetchAndResolveOnlineListing(options: {
       const imgServer = parsedData.imageServer || 'https://shopgoodwillimages.azureedge.net/production/';
       const imgUrls: string[] = [];
       if (parsedData.imageUrlString) {
-        parsedData.imageUrlString.split(';').forEach((p: string) => {
-          const clean = p.trim().replace(/\\/g, '/');
-          if (clean) imgUrls.push(imgServer + clean);
-        });
+        String(parsedData.imageUrlString)
+          .split(';')
+          .forEach((p: string) => {
+            const joined = joinSgImageUrl(imgServer, p);
+            if (joined && !imgUrls.includes(joined)) imgUrls.push(joined);
+          });
       } else if (parsedData.imageURL) {
         const fixed = fixRemoteUrl(parsedData.imageURL);
         if (fixed) imgUrls.push(fixed);
+      }
+      // Vercel WAF fallback: API answered but gave 0 photos → keep the browser-harvested gallery
+      if (imgUrls.length === 0 && options.clientDomListing?.imageUrls?.length) {
+        for (const u of options.clientDomListing.imageUrls) {
+          const joined = joinSgImageUrl('', u);
+          if (joined && !imgUrls.includes(joined)) imgUrls.push(joined);
+        }
       }
 
       let shippingQuote: OnlineShippingQuote | null = null;

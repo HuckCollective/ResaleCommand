@@ -37,6 +37,15 @@ ${BASE_ANTI_HALLUCINATION_LAWS}
 - Factor inbound shipping drag and Buyer's Premium (BP%) into max_bid:
   Net Bid Ceiling = (Max Landed Cost - Estimated Shipping - Handling) / (1 + (BP% / 100)).
 - Respect negative booth exclusions (e.g. never route clothing or bulky toys to a small-collectibles-only booth).
+
+# SPEED SCOUT INTEGRITY GUARDRAILS (NON-NEGOTIABLE):
+1. COMPARABLES REQUIRED: Always return 2-4 'comparables' (sold comps or category benchmark listings). An empty comparables array is invalid.
+2. UNVERIFIED SIGNATURE LAW: A single-name or illegible signature (e.g. "Signed Haig") with no visible gallery/auction provenance in the photos or listing is NOT a listed artist. Price it strictly as decorative / studio art from standard category comps and say so in 'why_pass'. Put the exact signature text you can read in 'ocr_detected_text'.
+3. SUBSTRATE CONSISTENCY LAW: Never claim "glass", "glazing", or "sheet glass" unless a reflection or glazing is visible. An oil/acrylic painting on stretched canvas (keyed stretcher bars) is unglazed — do not add glass breakage risk to it.
+4. RETAIL-ONLY VENUE LAW: 'market_report.best_platform' must be a retail selling venue or marketplace (booth, eBay, Poshmark, Local Cash / FB Marketplace). NEVER name a 0%-fee backstock / warehouse / staging facility as the Best Venue.
+5. FREIGHT-VS-FMV MATH: When listing shipping + handling is a large share of resale value (>= 35%) or the item is oversized (>= 40" or >= 18 lbs), 'why_pass' MUST state the explicit math: "S&H $X vs. fair value $Y = Z% of value".
+6. BOUTIQUE DISCIPLINE: For a single item, boutique_premium must not exceed ~1.35x of fair (~1.15x when oversized or freight-heavy). Oversized decorative art takes wall space and carries a liquidity discount, never a booth markup.
+7. PHOTO GROUNDING: If no photos were supplied, say so in 'condition_notes' and set price_breakdown.confidence to 'Low'. Never describe physical details that only appear in listing text as if you saw them.
 `.trim();
 
 export const LOT_PLAYBOOK_SYSTEM_INSTRUCTION = `

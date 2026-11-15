@@ -19,12 +19,17 @@
       <div class="flex items-center gap-2 flex-wrap shrink-0">
         <a
           :href="bookmarkletHref"
+          @mousedown="stampFreshHref"
+          @dragstart="stampFreshHref"
           @click.prevent="handleBookmarkletClick"
           class="btn btn-xs sm:btn-sm btn-primary text-primary-content font-black shadow-sm border border-primary-content/20 cursor-grab active:cursor-grabbing gap-1.5"
           :title="`Drag me to your Chrome Bookmarks Bar! (${bookmarkletBarLabel})`"
         >
           <span>{{ bookmarkletBarLabel }}</span>
         </a>
+        <span v-if="targetHost" class="text-[10px] font-mono font-bold text-base-content/60 whitespace-nowrap">
+          🌐 Target Host: {{ targetHost }}
+        </span>
 
         <!-- Optional Companion Action Slot (e.g., 📌 Buy Trackers on /purchases) -->
         <slot name="companion" />
@@ -195,7 +200,6 @@ import {
   type BookmarkletToolId,
 } from '../../lib/bml/registry';
 import { useMemberCapabilities } from '../../lib/memberAccess';
-import { siteConfig } from '../../site-config';
 import { addToast } from '../../stores/toast';
 
 const props = withDefaults(
@@ -217,9 +221,15 @@ const emit = defineEmits<{
 const { capabilities } = useMemberCapabilities();
 const showGuideModal = ref(false);
 const bmlRegistry = ref<BookmarkletRegistryConfig>(getCachedBmlRegistryConfig());
-const browserOrigin = ref(
-  typeof window !== 'undefined' ? window.location.origin : siteConfig.siteUrl
-);
+// SSR-hydration lock: start EMPTY on server and client; onMounted() then produces a real change so Vue patches the href.
+const browserOrigin = ref<string>('');
+const targetHost = computed(() => {
+  try {
+    return browserOrigin.value ? new URL(browserOrigin.value).host : '';
+  } catch {
+    return browserOrigin.value;
+  }
+});
 
 const isVisible = computed(() => {
   if (!capabilities.value.canUseBml) return false;
@@ -229,12 +239,23 @@ const isVisible = computed(() => {
   return true;
 });
 
-const bookmarkletHref = computed(() => {
+const buildHref = (origin?: string) => {
   if (props.tool === 'ricochet_sync') {
-    return buildRicochetBookmarkletHref(props.locationMeta?.code || 'MD');
+    return buildRicochetBookmarkletHref(props.locationMeta?.code || 'MD', origin || undefined);
   }
-  return buildEvergreenBookmarkletHref('/scripts/auction-bookmarklet.js', browserOrigin.value);
-});
+  return buildEvergreenBookmarkletHref('/scripts/auction-bookmarklet.js', origin || undefined);
+};
+
+const bookmarkletHref = computed(() => buildHref(browserOrigin.value));
+
+/** Re-stamps the anchor synchronously from the LIVE page origin right before a drag / click begins. */
+const stampFreshHref = (event: Event) => {
+  if (typeof window === 'undefined' || !window.location?.origin) return;
+  const anchor = event.currentTarget as HTMLAnchorElement | null;
+  if (!anchor) return;
+  const fresh = buildHref(window.location.origin);
+  if (anchor.getAttribute('href') !== fresh) anchor.setAttribute('href', fresh);
+};
 
 const bookmarkletBarLabel = computed(() => {
   if (props.tool === 'ricochet_sync') {
@@ -335,6 +356,9 @@ const openAdvancedGuide = () => {
 };
 
 onMounted(async () => {
+  if (typeof window !== 'undefined' && window.location?.origin) {
+    browserOrigin.value = window.location.origin;
+  }
   try {
     bmlRegistry.value = await loadBmlRegistryConfig();
   } catch {

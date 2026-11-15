@@ -1,6 +1,14 @@
 (function () {
+  // Hot-swap: if an older tray (any version) is still mounted on this tab, tear it down before booting v4.3
+  try {
+    if (typeof window.__RC_SCOUT_TEARDOWN__ === 'function') window.__RC_SCOUT_TEARDOWN__();
+  } catch (e) {}
+  var SCRIPT_VERSION = window.__RC_SCRIPT_VERSION__ || 'v4.3';
   var ORIGIN = window.__RC_ORIGIN__ || 'https://resalecmd.com';
   var ORIGINS = window.__RC_ORIGINS__ || [ORIGIN, 'https://alpha.resalecmd.com', 'https://resalecmd.com'];
+  var ORIGIN_HOST = (function () {
+    try { return new URL(ORIGIN).host; } catch (e) { return String(ORIGIN || ''); }
+  })();
 
   function getBmlToolConfig() {
     var def = {
@@ -201,7 +209,9 @@
     coverPhotoUrl: '',
     resellerNotes: '',
     detailsOpen: false,
-    lastSyncedItemId: ''
+    lastSyncedItemId: '',
+    sgwApi: {},
+    sgwApiLoading: ''
   };
 
   function isShopGoodwillHost() {
@@ -872,14 +882,52 @@
     var imgs = [];
     var seen = {};
     var primaryFolderPrefix = null;
+    var SGW_CDN_RE = /shopgoodwillimages|azureedge|azurefd|blob\.core\.windows\.net|shopgoodwill\.com/i;
+    var BAD_IMG_RE = /logo|icon|avatar|banner|badge|pixel|analytics|rokt|doubleclick|sprite|placeholder|paypal|tiktok/i;
 
+    function pickImgSrc(img) {
+      var cand = [
+        img.getAttribute('data-src'),
+        img.getAttribute('data-lazy-src'),
+        img.getAttribute('data-original'),
+        img.getAttribute('src'),
+        img.currentSrc,
+        img.src
+      ];
+      var ss = img.getAttribute('srcset') || img.getAttribute('data-srcset');
+      if (ss) {
+        var parts = ss.split(',');
+        var last = parts[parts.length - 1] || '';
+        cand.unshift(cleanText(last).split(' ')[0]);
+      }
+      for (var i = 0; i < cand.length; i++) {
+        var s = String(cand[i] || '').trim();
+        if (s && /^https?:\/\//i.test(s) && s.indexOf('data:') !== 0) return s;
+      }
+      return '';
+    }
+
+    function hiResSgwUrl(src) {
+      // Strip thumbnail suffixes (-thumb / -small / -t1 / _t2 / -tn) and legacy /t1. folders
+      return src
+        .replace(/[-_](?:thumb|small|t1|t2|tn)(?=\.(?:jpe?g|png|webp|gif)(?:\?|$))/i, '')
+        .replace(/\/t1\.(?=[^/]+$)/i, '/');
+    }
+
+    function pushImg(src) {
+      var hiRes = hiResSgwUrl(src);
+      if (!seen[hiRes]) {
+        seen[hiRes] = true;
+        imgs.push(hiRes);
+      }
+    }
+
+    // Pass 1 — strict: images under the item's own Azure folder prefix (blocks "YOU MAY ALSO LIKE" bleed)
     Array.prototype.slice.call(document.querySelectorAll('img')).forEach(function (img) {
       if (isElementInsideRelatedSection(img)) return;
-      var src = String(img.getAttribute('src') || img.src || '').trim();
-      if (!src || !/^https?:\/\//i.test(src)) return;
-      if (/logo|icon|avatar|banner|badge|pixel|analytics|rokt|doubleclick/i.test(src)) return;
+      var src = pickImgSrc(img);
+      if (!src || BAD_IMG_RE.test(src) || !SGW_CDN_RE.test(src)) return;
 
-      // Filter strictly to the main item's Azure folder prefix so "YOU MAY ALSO LIKE" sidebar images never leak in
       var folderMatch = src.match(/(\/Items\/\d{1,2}-\d{1,2}-\d{4}\/[^/]+\/)/i);
       if (folderMatch && folderMatch[1]) {
         if (!primaryFolderPrefix) {
@@ -890,15 +938,38 @@
       } else if (primaryFolderPrefix) {
         return;
       }
-
-      if (src.indexOf('shopgoodwillimages') !== -1 || src.indexOf('azureedge') !== -1) {
-        var hiRes = src.replace(/-thumb\b|-small\b/i, '');
-        if (!seen[hiRes]) {
-          seen[hiRes] = true;
-          imgs.push(hiRes);
-        }
-      }
+      pushImg(src);
     });
+
+    // Pass 2 — CDN-agnostic gallery fallback: any sizeable image inside a gallery / carousel / thumbnail container
+    if (imgs.length === 0) {
+      var galleryImgs = document.querySelectorAll(
+        '[class*="gallery"] img, [class*="carousel"] img, [class*="slick"] img, [class*="thumb"] img, [class*="product-image"] img, [id*="gallery"] img'
+      );
+      Array.prototype.slice.call(galleryImgs).forEach(function (img) {
+        if (isElementInsideRelatedSection(img)) return;
+        var src = pickImgSrc(img);
+        if (!src || BAD_IMG_RE.test(src)) return;
+        pushImg(src);
+      });
+    }
+
+    // Browser-direct Buyer API gallery (hydrateShopGoodwillItemApi) always wins ordering — official order, all 10-24 photos
+    var apiHit = state.sgwApi && state.sgwApi[itemId];
+    if (apiHit && apiHit.images && apiHit.images.length) {
+      var ordered = [];
+      var orderedSeen = {};
+      apiHit.images.concat(imgs).forEach(function (u) {
+        if (!orderedSeen[u]) {
+          orderedSeen[u] = true;
+          ordered.push(u);
+        }
+      });
+      imgs = ordered;
+      if (!currentPrice && apiHit.currentPrice) currentPrice = apiHit.currentPrice;
+      if (apiHit.shippingWeight && !weightMatch) shippingWeight = apiHit.shippingWeight;
+      if (!h1 && apiHit.title) h1 = apiHit.title;
+    }
 
     return {
       itemId: itemId,
@@ -907,8 +978,74 @@
       seller: seller || 'ShopGoodwill',
       shippingWeight: shippingWeight,
       endingDate: endingDate,
+      description: apiHit && apiHit.description ? apiHit.description : '',
       images: imgs.slice(0, 24)
     };
+  }
+
+  // Browser-direct ShopGoodwill Buyer API pre-fetch: the user's own browser is never WAF-throttled like Vercel's AWS IPs.
+  function hydrateShopGoodwillItemApi() {
+    if (!isShopGoodwillHost()) return;
+    var m = String(window.location.pathname || '').match(/\/item\/(\d+)/i);
+    if (!m) return;
+    var itemId = m[1];
+    state.sgwApi = state.sgwApi || {};
+    if (state.sgwApi[itemId] || state.sgwApiLoading === itemId) return;
+    state.sgwApiLoading = itemId;
+    try {
+      fetch('https://buyerapi.shopgoodwill.com/api/ItemDetail/GetItemDetailModelByItemId/' + itemId, {
+        method: 'GET',
+        headers: { Accept: 'application/json, text/plain, */*' }
+      })
+        .then(function (res) { return res.ok ? res.json() : null; })
+        .then(function (json) {
+          state.sgwApiLoading = '';
+          if (!json || !(json.title || json.itemName)) {
+            state.sgwApi[itemId] = { images: [], failed: true };
+            return;
+          }
+          var server = String(json.imageServer || 'https://shopgoodwillimages.azureedge.net/production/');
+          if (!/^https?:\/\//i.test(server)) server = 'https://' + server.replace(/^\/+/, '');
+          server = server.replace(/\/+$/, '') + '/';
+          var urls = [];
+          String(json.imageUrlString || '')
+            .split(';')
+            .forEach(function (p) {
+              var clean = String(p || '').trim().replace(/\\/g, '/');
+              if (!clean) return;
+              var full = /^https?:\/\//i.test(clean)
+                ? clean
+                : clean.indexOf('//') === 0
+                ? 'https:' + clean
+                : server + clean.replace(/^\/+/, '');
+              if (urls.indexOf(full) === -1) urls.push(full);
+            });
+          state.sgwApi[itemId] = {
+            images: urls.slice(0, 24),
+            currentPrice: parseFloat(json.currentPrice) || parseFloat(json.minimumBid) || 0,
+            shippingWeight: parseFloat(json.shippingWeight || json.weight || 0) || 0,
+            title: String(json.title || json.itemName || ''),
+            description: cleanText(String(json.description || '').replace(/<[^>]*>/g, ' ')).slice(0, 4000)
+          };
+          // Re-seed the 12-photo strip with the official gallery unless the user already hand-picked photos
+          if (!state.hasManualPhotoToggles) {
+            state.galleryUrls = [];
+            state.selectedPhotoUrls = {};
+            state.coverPhotoUrl = '';
+          }
+          if (state.pageType === 'item') {
+            detectPageAndRows();
+            syncGalleryStateForItem(getActiveItemRow());
+          }
+          renderUI();
+        })
+        .catch(function () {
+          state.sgwApiLoading = '';
+          state.sgwApi[itemId] = { images: [], failed: true };
+        });
+    } catch (e) {
+      state.sgwApiLoading = '';
+    }
   }
 
   function syncGalleryStateForItem(itemRow, extraUrls) {
@@ -1365,39 +1502,39 @@
       ? 'USER GROUND-TRUTH NOTES: ' + cleanText(state.resellerNotes)
       : '';
 
-    var clientDomPayload = !isShopGoodwillHost()
-      ? {
-          sourceUrl: window.location.href,
-          platformName: itemRow.platformName || '',
-          domainFamily: itemRow.domainFamily || '',
-          listingMode: itemRow.listingMode || '',
-          externalItemId: itemRow.externalItemId || itemRow.itemId || '',
-          title: itemRow.title || '',
-          description: itemRow.description || '',
-          currentPrice: Number(itemRow.currentPrice || 0),
-          buyersPremiumPct: Number(itemRow.buyersPremiumPct || 0),
-          shippingCost: itemRow.shippingCost !== undefined && itemRow.shippingCost !== null ? Number(itemRow.shippingCost) : undefined,
-          isLocalPickupOnly: Boolean(itemRow.isLocalPickupOnly),
-          isAuction: Boolean(itemRow.isAuction),
-          isSoftClose: Boolean(itemRow.isSoftClose),
-          termsText: itemRow.termsText || '',
-          sellerName: itemRow.seller || '',
-          locationText: itemRow.locationText || '',
-          endingDate: itemRow.endingDate || '',
-          imageUrls: selectedUrls.length > 0 ? selectedUrls : (itemRow.images || [])
-        }
-      : null;
+    // ALWAYS send clientDomListing + selected photo URLs (even on ShopGoodwill) so Vercel is never empty-handed
+    // if Cloudflare / WAF throttles buyerapi.shopgoodwill.com for the server's datacenter IP.
+    var isSgwHost = isShopGoodwillHost();
+    var clientDomPayload = {
+      sourceUrl: window.location.href,
+      platformName: isSgwHost ? 'ShopGoodwill' : (itemRow.platformName || ''),
+      domainFamily: isSgwHost ? 'shopgoodwill' : (itemRow.domainFamily || ''),
+      listingMode: isSgwHost ? 'auction' : (itemRow.listingMode || ''),
+      externalItemId: itemRow.externalItemId || itemRow.itemId || '',
+      title: itemRow.title || '',
+      description: itemRow.description || '',
+      currentPrice: Number(itemRow.currentPrice || 0),
+      buyersPremiumPct: isSgwHost ? 0 : Number(itemRow.buyersPremiumPct || 0),
+      shippingCost: !isSgwHost && itemRow.shippingCost !== undefined && itemRow.shippingCost !== null ? Number(itemRow.shippingCost) : undefined,
+      shippingWeight: Number(itemRow.shippingWeight || 0) || undefined,
+      isLocalPickupOnly: Boolean(itemRow.isLocalPickupOnly),
+      isAuction: isSgwHost ? true : Boolean(itemRow.isAuction),
+      isSoftClose: isSgwHost ? false : Boolean(itemRow.isSoftClose),
+      termsText: itemRow.termsText || '',
+      sellerName: itemRow.seller || '',
+      locationText: itemRow.locationText || '',
+      endingDate: itemRow.endingDate || '',
+      imageUrls: selectedUrls.length > 0 ? selectedUrls : (itemRow.images || [])
+    };
 
     var reqBody = {
       url: window.location.href,
       notes: humanNotes,
       zipCode: state.zipCode || '97206',
       selectedRemoteImageUrls: selectedUrls,
-      remoteImageUrls: isSgwItemPage && !state.hasManualPhotoToggles ? [] : selectedUrls
+      remoteImageUrls: selectedUrls.length > 0 ? selectedUrls : (itemRow.images || []).slice(0, 12),
+      clientDomListing: clientDomPayload
     };
-    if (clientDomPayload) {
-      reqBody.clientDomListing = clientDomPayload;
-    }
 
     callRcApi('POST', '/api/identify-item', reqBody)
       .then(function (data) {
@@ -1407,6 +1544,12 @@
           throw new Error('AI Scout returned an empty report.');
         }
         state.scoutReport = firstItem;
+        // Auto-expand Sold Comps / OCR / Condition details when the call is a PASS or a >= $100 item
+        try {
+          var _verdict = firstItem.purchase_strategy && firstItem.purchase_strategy.verdict;
+          var _bid = Number(firstItem.currentBid || (firstItem.auction_meta && firstItem.auction_meta.current_bid) || itemRow.currentPrice || 0);
+          state.detailsOpen = _verdict === 'PASS' || _bid >= 100;
+        } catch (e) {}
         syncGalleryStateForItem(itemRow, firstItem.fetched_images || firstItem.image_urls || []);
         if (firstItem.seller_info && firstItem.seller_info.seller_name && state.rows[0]) {
           state.rows[0].seller = firstItem.seller_info.seller_name;
@@ -1556,24 +1699,44 @@
     var effectiveShip = isLocalPickupOnly ? 0 : Math.max(isSgw ? (shipHandling || 2) : 0, shipTotal - combineSavings);
     var allowSniperCents = Boolean(isAuction && !isSoftClose && buyersPremiumPct <= 0);
 
+    // Mirrors src/lib/scoutReportSections.ts#computeCanonicalAuctionTiers (signed P&L, S&H-cap vs outbid vs active)
+    var bpMultTier = 1 + (buyersPremiumPct > 0 ? buyersPremiumPct / 100 : 0);
+    function landedAtBid(bid) {
+      return Math.round((bid * bpMultTier + effectiveShip) * 100) / 100;
+    }
+    var netAtCurrentBid = currentBid > 0 ? Math.round(netPayout - landedAtBid(currentBid)) : null;
+
     function calcTier(roiMultiple) {
       var targetLanded = Math.round((targetResale / roiMultiple) * 100) / 100;
-      var availAfterShip = Math.max(0, targetLanded - effectiveShip);
-      var bpMult = 1 + (buyersPremiumPct > 0 ? buyersPremiumPct / 100 : 0);
-      var rawHammer = bpMult > 1 ? availAfterShip / bpMult : availAfterShip;
-      var baseMax = isAuction ? Math.max(0, Math.floor(rawHammer)) : Math.max(0, Math.round(rawHammer * 100) / 100);
-      var finalMax = baseMax > 0 && allowSniperCents && state.useProxyCents ? Number((baseMax + 0.87).toFixed(2)) : baseMax;
+      var availAfterShip = targetLanded - effectiveShip;
+      var rawHammer = availAfterShip / bpMultTier;
+      var baseMax = availAfterShip <= 0
+        ? 0
+        : isAuction ? Math.max(0, Math.floor(rawHammer)) : Math.max(0, Math.round(rawHammer * 100) / 100);
+      var status = 'active';
+      var statusLabel = '';
+      if (baseMax <= 0) {
+        baseMax = 0;
+        status = 'ship_exceeds_cap';
+        statusLabel = '🛑 S&H > $' + Math.round(targetLanded) + ' Cap';
+      } else if (currentBid > 0 && currentBid > baseMax) {
+        status = 'outbid';
+        statusLabel = '🚫 Outbid ($' + Math.round(currentBid) + ' > $' + Math.round(baseMax) + ')';
+      }
+      var finalMax = status === 'active' && allowSniperCents && state.useProxyCents ? Number((baseMax + 0.87).toFixed(2)) : baseMax;
       var bpDollars = buyersPremiumPct > 0 ? Math.round(finalMax * buyersPremiumPct) / 100 : 0;
       var estLanded = Math.round((finalMax + bpDollars + effectiveShip) * 100) / 100;
-      var netProfit = Math.max(0, Math.round(netPayout - estLanded));
       return {
         roi: roiMultiple.toFixed(1) + 'x',
         maxBid: finalMax,
         bpDollars: bpDollars,
         estLanded: estLanded,
         targetLanded: targetLanded,
-        netProfit: netProfit,
-        passed: currentBid > 0 && currentBid > finalMax
+        // SIGNED P&L — never clamped at 0. Dead tiers report the real at-current-bid result.
+        netProfit: status !== 'active' && netAtCurrentBid !== null ? netAtCurrentBid : Math.round(netPayout - estLanded),
+        status: status,
+        statusLabel: statusLabel,
+        passed: status !== 'active'
       };
     }
 
@@ -1582,6 +1745,14 @@
       balanced: calcTier(2.2),
       aggressive: calcTier(1.7)
     };
+    var allDead = tiers.conservative.passed && tiers.balanced.passed && tiers.aggressive.passed;
+    var allShipDead = tiers.conservative.status === 'ship_exceeds_cap' && tiers.balanced.status === 'ship_exceeds_cap' && tiers.aggressive.status === 'ship_exceeds_cap';
+    var forcePass = allDead && (isAuction || allShipDead);
+    var freightPct = targetResale > 0 ? Math.round((shipTotal / targetResale) * 100) : 0;
+    var isFreightTrap = shipTotal > 0 && targetResale > 0 && (shipTotal >= 0.45 * targetResale || (shipTotal >= 65 && shipTotal >= 0.35 * targetResale));
+    var atCurrentBid = currentBid > 0
+      ? { landed: landedAtBid(currentBid), netProfit: netAtCurrentBid }
+      : null;
 
     var targetCashOfferStr = purchaseStrat.target_cash_offer || '';
     if (!targetCashOfferStr && listingMode === 'local_cash') {
@@ -1613,7 +1784,7 @@
       isSoftClose: isSoftClose,
       isLocalPickupOnly: isLocalPickupOnly,
       buyersPremiumPct: buyersPremiumPct,
-      allowSniperCents: allowSniperCents,
+      allowSniperCents: allowSniperCents && !allDead,
       actionLabel: actionLabel,
       targetCashOfferStr: targetCashOfferStr,
       shipTotal: shipTotal,
@@ -1632,8 +1803,14 @@
       fairMid: fairMid,
       netPayout: netPayout,
       sumPieceBoutique: Math.round(sumPieceBoutique * 100) / 100,
-      verdict: purchaseStrat.verdict || 'WATCH',
-      bestPlatform: (rep.market_report && rep.market_report.best_platform) || "Memory Den (#0EJ)",
+      verdict: forcePass || purchaseStrat.dead_deal ? 'PASS' : (purchaseStrat.verdict || 'WATCH'),
+      allDead: allDead || Boolean(purchaseStrat.dead_deal),
+      isFreightTrap: isFreightTrap || Boolean(rep.is_freight_trap),
+      freightPct: freightPct,
+      atCurrentBid: atCurrentBid,
+      visionPhotosScanned: rep.vision_photos_scanned !== undefined && rep.vision_photos_scanned !== null ? Number(rep.vision_photos_scanned) : null,
+      ocrText: cleanText(rep.ocr_detected_text || ''),
+      bestPlatform: (rep.market_report && rep.market_report.best_platform) || '',
       whyPayUp: rep.why_pay_up || purchaseStrat.advice || '',
       whyPass: rep.why_pass || '',
       lotItems: lotItems,
@@ -2093,6 +2270,9 @@
 
   function renderCatalystsSection(fin) {
     var html = '';
+    if (fin.ocrText) {
+      html += '<div style="font-size:10.5px;color:#bae6fd;background:#0f172a;border-left:3px solid #38bdf8;padding:6px 9px;border-radius:6px;margin-bottom:6px;"><strong>🔎 OCR / Signature Read:</strong> ' + escHtml(fin.ocrText.slice(0, 300)) + '</div>';
+    }
     if (fin.whyPayUp) {
       html += '<div style="font-size:11px;color:#cbd5e1;background:#0f172a;border-left:3px solid #34d399;padding:6px 9px;border-radius:6px;margin-bottom:6px;"><strong>💡 Why Buy:</strong> ' + escHtml(fin.whyPayUp) + '</div>';
     }
@@ -2286,15 +2466,26 @@
       ? 'In-Person ($0 S&amp;H)'
       : (fin.combineSavings > 0 ? 'Saved ~$' + fin.combineSavings + ' combine!' : '$' + fin.shipBase.toFixed(2) + ' + $' + fin.shipHandling.toFixed(2) + ' hdl');
 
+    var visionBadgeHtml = '';
+    if (fin.visionPhotosScanned !== null && fin.visionPhotosScanned !== undefined) {
+      visionBadgeHtml = fin.visionPhotosScanned > 0
+        ? '<div style="background:#052e2b;border:1px solid #34d399;color:#6ee7b7;border-radius:8px;padding:5px 9px;margin-bottom:8px;font-size:10.5px;font-weight:800;">📸 AI Inspected ' + fin.visionPhotosScanned + ' Photo' + (fin.visionPhotosScanned === 1 ? '' : 's') + '</div>'
+        : '<div style="background:#450a0a;border:1px solid #f87171;color:#fecaca;border-radius:8px;padding:6px 9px;margin-bottom:8px;font-size:10.5px;font-weight:800;line-height:1.35;">⚠️ 0 Photos Reached AI — this report is TEXT-ONLY. Pick photos in the strip above and tap 🔄 Re-Scan Selected.</div>';
+    }
+
+    html += visionBadgeHtml;
+
     html +=
       '<div style="background:#020617;border:1px solid #334155;border-radius:12px;padding:11px 12px;margin-bottom:10px;">' +
         '<div style="display:flex;justify-content:space-between;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:8px;">' +
           '<span style="background:' + verdictBg + ';color:#fff;padding:3px 9px;border-radius:999px;font-size:11px;font-weight:900;">' +
             verdictIcon + escHtml(fin.verdict) +
           '</span>' +
-          '<span style="background:#1e293b;color:#cbd5e1;padding:3px 8px;border-radius:8px;font-size:10.5px;font-weight:800;">' +
-            '🏆 Best Venue: ' + escHtml(fin.bestPlatform) +
-          '</span>' +
+          (fin.bestPlatform
+            ? '<span style="background:#1e293b;color:#cbd5e1;padding:3px 8px;border-radius:8px;font-size:10.5px;font-weight:800;">' +
+                '🏆 Best Venue: ' + escHtml(fin.bestPlatform) +
+              '</span>'
+            : '') +
         '</div>' +
 
         // Valuation + S&H / BP 3-box strip
@@ -2316,6 +2507,23 @@
           '</div>' +
         '</div>';
 
+    // "At Current Bid" signed P&L strip — honest red loss when underwater (never clamped, never fake green)
+    if (fin.atCurrentBid) {
+      var acbNet = Number(fin.atCurrentBid.netProfit || 0);
+      var acbLoss = acbNet < 0;
+      html +=
+        '<div style="background:' + (acbLoss ? 'rgba(127,29,29,0.35)' : 'rgba(6,95,70,0.32)') + ';border:1px solid ' + (acbLoss ? '#f87171' : '#34d399') + ';border-radius:8px;padding:6px 9px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;gap:6px;font-size:10.5px;">' +
+          '<span style="color:' + (acbLoss ? '#fecaca' : '#d1fae5') + ';font-weight:800;">At Current Bid $' + fin.currentBid.toFixed(2) + ' + $' + fin.effectiveShip.toFixed(2) + ' S&amp;H = $' + fin.atCurrentBid.landed.toFixed(2) + ' landed</span>' +
+          '<span style="font-family:monospace;font-weight:900;color:' + (acbLoss ? '#f87171' : '#6ee7b7') + ';white-space:nowrap;">' + (acbLoss ? '-$' + Math.abs(acbNet) + ' Loss' : '+$' + acbNet + ' Net') + '</span>' +
+        '</div>';
+    }
+    if (fin.isFreightTrap) {
+      html +=
+        '<div style="background:#431407;border:1px solid #fb923c;color:#fed7aa;border-radius:8px;padding:5px 9px;margin-bottom:8px;font-size:10.5px;font-weight:800;line-height:1.35;">' +
+          '🚚 Freight Killer: S&amp;H $' + fin.shipTotal.toFixed(2) + ' = ' + fin.freightPct + '% of resale value' +
+        '</div>';
+    }
+
     if (fin.targetCashOfferStr) {
       html +=
         '<div style="background:rgba(6,95,70,0.32);border:1px solid #34d399;border-radius:8px;padding:6px 9px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;gap:6px;font-size:11px;">' +
@@ -2336,7 +2544,9 @@
           '<span>+.87 Sniper Cents</span>' +
         '</label>'
       : '<span style="font-size:9.5px;color:#fbbf24;font-weight:800;">' +
-          (fin.buyersPremiumPct > 0
+          (fin.allDead
+            ? '🛑 No Profitable Bid'
+            : fin.buyersPremiumPct > 0
             ? ('⚡ Auto-Deducts +' + fin.buyersPremiumPct + '% BP')
             : fin.listingMode === 'local_cash'
             ? '💵 Local Cash Tiers'
@@ -2361,11 +2571,18 @@
       var isSel = state.selectedTier === tk.key;
       var borderCol = isSel ? '#818cf8' : '#334155';
       var bgCol = isSel ? '#1e1b4b' : '#0f172a';
+      var tierLine;
+      if (tObj.status === 'ship_exceeds_cap' || tObj.status === 'outbid') {
+        tierLine = '<div style="font-size:9.5px;color:#f87171;font-weight:800;line-height:1.25;">' + escHtml(tObj.statusLabel) + '</div>';
+      } else {
+        tierLine = '<div style="font-size:9.5px;color:' + (tObj.netProfit < 0 ? '#f87171' : '#34d399') + ';font-weight:700;">' +
+          (tObj.netProfit < 0 ? '-$' + Math.abs(tObj.netProfit) + ' Loss' : '+$' + tObj.netProfit + ' Net') + ' (' + tk.sub + ')</div>';
+      }
       html +=
-        '<button type="button" class="rc-tier-pick-btn" data-tier="' + tk.key + '" style="background:' + bgCol + ';border:2px solid ' + borderCol + ';border-radius:10px;padding:7px 6px;text-align:center;cursor:pointer;color:#f8fafc;">' +
+        '<button type="button" class="rc-tier-pick-btn" data-tier="' + tk.key + '" style="background:' + bgCol + ';border:2px solid ' + borderCol + ';border-radius:10px;padding:7px 6px;text-align:center;cursor:pointer;color:#f8fafc;' + (tObj.passed ? 'opacity:0.88;' : '') + '">' +
           '<div style="font-size:10px;font-weight:800;color:#cbd5e1;">' + tk.label + '</div>' +
-          '<div style="font-size:14px;font-weight:900;color:' + (tObj.passed ? '#f87171' : '#a5b4fc') + ';font-family:monospace;margin:2px 0;">$' + tObj.maxBid.toFixed(2) + '</div>' +
-          '<div style="font-size:9.5px;color:#34d399;font-weight:700;">+$' + tObj.netProfit + ' Net (' + tk.sub + ')</div>' +
+          '<div style="font-size:14px;font-weight:900;color:' + (tObj.passed ? '#f87171' : '#a5b4fc') + ';font-family:monospace;margin:2px 0;">' + (tObj.status === 'ship_exceeds_cap' ? 'PASS ($0)' : '$' + tObj.maxBid.toFixed(2)) + '</div>' +
+          tierLine +
         '</button>';
     });
     html += '</div>';
@@ -2639,6 +2856,10 @@
       ? '📌 Track & Copy Max Offer'
       : '📌 Track & Copy Max Bid';
 
+    // Dead-deal detection (every tier is S&H-capped or outbid) → "Watch Only" CTA, never copy $0.00 to the clipboard
+    var finForCta = (isItemScoutMode() && state.scoutReport) ? computeScoutFinancials() : null;
+    var isDeadDeal = Boolean(finForCta && finForCta.allDead && !(parseFloat(state.customMaxBid) > 0));
+
     var footerHtml = '';
     if (isItemScoutMode()) {
       if (itemRow) syncGalleryStateForItem(itemRow);
@@ -2664,7 +2885,7 @@
             '<button id="rc-scout-save-track-btn" style="width:100%;background:#10b981;color:#052e16;border:0;border-radius:10px;padding:11px 14px;font-weight:900;cursor:pointer;font-size:13px;">' +
               (state.savingTrack
                 ? '⏳ Archiving Photos & Saving to Tracker...'
-                : saveActionBtnPrefix + ' ($' + Number(activeMax || 0).toFixed(2) + ')') +
+                : (isDeadDeal ? '📌 Log Pass / Watch Only ($0 Bid)' : saveActionBtnPrefix + ' ($' + Number(activeMax || 0).toFixed(2) + ')')) +
             '</button>' +
             '<div style="display:flex;gap:6px;">' +
               '<button id="rc-scout-run-ai-btn" style="flex:1;background:#1e293b;color:#cbd5e1;border:1px solid #334155;border-radius:8px;padding:7px 10px;font-weight:800;cursor:pointer;font-size:11px;">' +
@@ -2690,9 +2911,11 @@
         '</div>';
     }
 
-    var trayHeaderTitle = isShopGoodwillHost()
-      ? '🔭 ShopGoodwill Sync'
-      : ('🔭 RC Scout — ' + escHtml((itemRow && itemRow.platformName) || 'Online Listing'));
+    var trayHeaderTitle = (isShopGoodwillHost()
+      ? '🔭 RC Auction Scout'
+      : ('🔭 RC Scout — ' + escHtml((itemRow && itemRow.platformName) || 'Online Listing'))) +
+      ' <span title="Script version • serving host" style="background:#1e1b4b;color:#a5b4fc;border:1px solid #4338ca;padding:1px 6px;border-radius:6px;font-size:9px;font-weight:800;font-family:monospace;vertical-align:middle;">' +
+      escHtml(SCRIPT_VERSION) + ' • ' + escHtml(ORIGIN_HOST) + '</span>';
 
     var prevTrayBody = document.getElementById('rc-scout-tray-body');
     var prevScrollTop = prevTrayBody ? prevTrayBody.scrollTop : 0;
@@ -2991,7 +3214,7 @@
     }
   }
 
-  window.addEventListener('rc-bml-authenticated', function () {
+  function onBmlAuthenticated() {
     fetchWatchlist(function () {
       if (state.trayOpen && !isItemScoutMode()) {
         runPreviewOrSync(true);
@@ -2999,7 +3222,17 @@
         renderUI();
       }
     });
-  });
+  }
+  window.addEventListener('rc-bml-authenticated', onBmlAuthenticated);
+
+  window.__RC_SCOUT_TEARDOWN__ = function () {
+    try { window.removeEventListener('rc-bml-authenticated', onBmlAuthenticated); } catch (e) {}
+    ['rc-scout-tray', 'rc-scout-fab-bar', 'rc-scout-tray-styles'].forEach(function (id) {
+      var el = document.getElementById(id);
+      if (el && el.parentNode) el.parentNode.removeChild(el);
+    });
+    window.__RC_SCOUT_TEARDOWN__ = null;
+  };
 
   window.__RC_REFRESH_FROM_CLOUD__ = function () {
     detectPageAndRows();
@@ -3022,6 +3255,8 @@
   }
   decoratePageRows();
   renderUI();
+  // Immediately hydrate the full 10-24 photo gallery from SGW's Buyer API (browser-direct) so the strip is full BEFORE Scan
+  hydrateShopGoodwillItemApi();
   fetchWatchlist(function () {
     harvestPageCsvSilently(function () {
       if (state.trayOpen && !isItemScoutMode() && !state.previewData && !state.loadingPreview) {

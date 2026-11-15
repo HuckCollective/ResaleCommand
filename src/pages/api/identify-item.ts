@@ -11,6 +11,7 @@ import { verifyAppwriteJwtToMember, requireBookmarkletMember } from '../../lib/b
 import type { AiSurface } from '../../lib/aiTelemetry';
 import { loadAppraisalRules, compileRulesPrompt } from '../../lib/appraisalCalibration';
 import { getAllLocationSettingMetas } from '../../lib/warehouses';
+import { applyScoutReportGuardrails } from '../../lib/scoutReportSections';
 import {
     fetchAndResolveOnlineListing,
     buildDomainAcquisitionLens,
@@ -450,25 +451,32 @@ export const ALL: APIRoute = async ({ request }) => {
             return '';
         };
 
+        // Listing marketplace origin (e.g. https://shopgoodwill.com/) — sent as the PRIMARY Referer for gallery photos
+        // so hot-link protection on azureedge / azurefd / CDN hosts accepts the request.
+        let listingRefererOrigin: string | undefined = undefined;
+        const usedImageUrls: string[] = [];
+
         // Fetch a single remote image into a Gemini inlineData part (order-safe)
         const fetchSingleImagePart = async (
             imgUrl: string
         ): Promise<{ url: string; part: { inlineData: { data: string; mimeType: string } } } | null> => {
             if (!imgUrl) return null;
             try {
-                let referer: string | undefined = undefined;
+                const referers: Array<string | undefined> = [];
+                if (listingRefererOrigin) referers.push(listingRefererOrigin);
                 try {
-                    const u = new URL(imgUrl);
-                    referer = u.origin + '/';
+                    const cdnOrigin = new URL(imgUrl).origin + '/';
+                    if (!referers.includes(cdnOrigin)) referers.push(cdnOrigin);
                 } catch {}
+                if (referers.length === 0) referers.push(undefined);
 
                 const headers: Record<string, string> = {
                     'User-Agent':
                         'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
                     Accept: 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8',
                 };
-                if (referer) {
-                    headers['Referer'] = referer;
+                if (referers[0]) {
+                    headers['Referer'] = referers[0];
                 }
 
                 const isAppwrite = imgUrl.includes('/storage/buckets/');
@@ -502,24 +510,32 @@ export const ALL: APIRoute = async ({ request }) => {
 
                 let res: Response | null = null;
                 for (const cUrl of candidateUrls) {
-                    try {
-                        const attempt = await fetch(cUrl, { headers, signal: AbortSignal.timeout(9000) });
-                        if (attempt.ok) {
-                            res = attempt;
-                            break;
-                        } else if ((attempt.status === 401 || attempt.status === 403) && isAppwrite && process.env.APPWRITE_API_KEY) {
-                            try {
-                                const authAttempt = await fetch(cUrl, {
-                                    headers: { ...headers, 'X-Appwrite-Key': process.env.APPWRITE_API_KEY },
-                                    signal: AbortSignal.timeout(9000),
-                                });
-                                if (authAttempt.ok) {
-                                    res = authAttempt;
-                                    break;
-                                }
-                            } catch {}
-                        }
-                    } catch {}
+                    // Appwrite never needs a marketplace Referer; remote CDNs retry across [listing origin, CDN origin]
+                    const refererTries = isAppwrite ? [referers[referers.length - 1]] : referers;
+                    for (const ref of refererTries) {
+                        const tryHeaders = { ...headers };
+                        if (ref) tryHeaders['Referer'] = ref;
+                        else delete tryHeaders['Referer'];
+                        try {
+                            const attempt = await fetch(cUrl, { headers: tryHeaders, signal: AbortSignal.timeout(9000) });
+                            if (attempt.ok) {
+                                res = attempt;
+                                break;
+                            } else if ((attempt.status === 401 || attempt.status === 403) && isAppwrite && process.env.APPWRITE_API_KEY) {
+                                try {
+                                    const authAttempt = await fetch(cUrl, {
+                                        headers: { ...tryHeaders, 'X-Appwrite-Key': process.env.APPWRITE_API_KEY },
+                                        signal: AbortSignal.timeout(9000),
+                                    });
+                                    if (authAttempt.ok) {
+                                        res = authAttempt;
+                                        break;
+                                    }
+                                } catch {}
+                            }
+                        } catch {}
+                    }
+                    if (res) break;
                 }
 
                 if (res && res.ok) {
@@ -556,6 +572,7 @@ export const ALL: APIRoute = async ({ request }) => {
             for (const r of results) {
                 if (r && r.part) {
                     imageParts.push(r.part);
+                    usedImageUrls.push(r.url);
                     if (!successfulImageUrl) successfulImageUrl = r.url;
                 }
             }
@@ -761,6 +778,9 @@ export const ALL: APIRoute = async ({ request }) => {
         // 3. Smart Multi-Domain URL & Client-DOM Resolution (SGW, eBay, FB Marketplace, HiBid, CTBids, EstateSales.net, Generic)
         const notesUrlMatch = userNotes ? userNotes.match(/https?:\/\/[^\s]+/) : null;
         const targetUrl = explicitUrl || clientDomListing?.sourceUrl || (notesUrlMatch ? notesUrlMatch[0] : '');
+        try {
+            if (targetUrl) listingRefererOrigin = new URL(targetUrl).origin + '/';
+        } catch {}
 
         if (targetUrl || clientDomListing) {
             const resolvedEnvelope = await fetchAndResolveOnlineListing({
@@ -888,6 +908,13 @@ export const ALL: APIRoute = async ({ request }) => {
               : Boolean(scrapedListingContext) || Boolean(parsedListingData) || /https?:\/\//i.test(userNotes)
                 ? 'scout_url'
                 : 'scout_camera';
+
+        if (imageParts.length === 0 && (scrapedListingContext || targetUrl)) {
+            // Zero-Blind-Scan Law: Gemini must know it is text-only so it never fakes physical detail it cannot see.
+            console.warn('[identify-item] 0 photos reached the vision engine — running TEXT-ONLY (flagged in response).');
+            scrapedListingContext +=
+                '\n[SYSTEM NOTICE: 0 listing photos reached the vision engine. Work from listing text only. Do NOT describe physical details as if seen; set confidence Low and say photos were unavailable.]\n';
+        }
 
         const promptText = buildSpeedScoutUserPrompt({
             authoritativeUserNotes: notesWithCalibration,
@@ -1188,6 +1215,27 @@ export const ALL: APIRoute = async ({ request }) => {
                     target.sellerName = target.seller_info.seller_name;
                     target.shippingWeight = target.seller_info.shipping_weight;
                     target.canCombineShipping = target.seller_info.can_combine_shipping;
+                }
+
+                // Canonical guardrails: valuation sanity, backstock-free Best Venue, oversized-freight combine flag,
+                // signed-P&L tiers + PASS override, and 📸 vision proof (photos actually sent to Gemini).
+                try {
+                    const guardMetas = getAllLocationSettingMetas(outerTargetLocations);
+                    const primaryBooth = guardMetas.find((m) => m.commissionRate > 0);
+                    applyScoutReportGuardrails(target, {
+                        venueMetas: guardMetas,
+                        shippingTotal: shipTotal,
+                        currentBid: currentAskNum > 0 ? currentAskNum : 0,
+                        buyersPremiumPct: bpPct,
+                        isAuction,
+                        isSoftClose,
+                        isLocalPickupOnly,
+                        boothFeePct: primaryBooth?.commissionRate,
+                        visionPhotosScanned: imageParts.length,
+                        visionPhotoUrls: usedImageUrls.slice(0, maxVisionPhotos),
+                    });
+                } catch (guardErr) {
+                    console.warn('[identify-item] scout guardrails failed (non-fatal):', guardErr);
                 }
             };
 

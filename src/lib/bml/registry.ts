@@ -131,7 +131,7 @@ export function buildEvergreenBookmarkletHref(scriptPathAndQuery: string, prefer
     !window.location.origin.includes('localhost')
       ? window.location.origin
       : siteConfig.siteUrl);
-  const origins = Array.from(new Set([currentOrigin, ...SYNC_FALLBACK_ORIGINS, ALPHA_SITE_URL].filter(Boolean)));
+  const origins = Array.from(new Set([currentOrigin, ALPHA_SITE_URL, ...SYNC_FALLBACK_ORIGINS].filter(Boolean)));
   const sep = scriptPathAndQuery.includes('?') ? '&' : '?';
   return `javascript:(function(){delete window.__RC_PRELOADED_BARCODES__;var h=${JSON.stringify(origins)},i=0;function l(){if(i>=h.length)return;var s=document.createElement('script');s.src=h[i++]+${JSON.stringify(scriptPathAndQuery + sep + 't=')}+Date.now();s.onerror=l;document.body.appendChild(s);}l();})();`;
 }

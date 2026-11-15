@@ -37,6 +37,7 @@ export const speedScoutResponseSchema: ResponseSchema = {
           price_breakdown: priceBreakdownSchema,
           comparables: {
             type: SchemaType.ARRAY,
+            description: 'REQUIRED: 2-4 sold or category benchmark comps (name, price, status). Never leave empty.',
             items: {
               type: SchemaType.OBJECT,
               properties: {
@@ -95,6 +96,7 @@ export const speedScoutResponseSchema: ResponseSchema = {
           'condition_notes',
           'red_flags',
           'price_breakdown',
+          'comparables',
           'purchase_strategy',
           'market_report'
         ]

@@ -28,6 +28,9 @@ export const TENANT_ROOT_DOMAIN = readEnv("PUBLIC_TENANT_ROOT_DOMAIN") || "resal
 // Alpha/QA deployment (branch preview) used in internal QA prompts.
 export const ALPHA_SITE_URL = (readEnv("PUBLIC_ALPHA_SITE_URL") || `https://alpha.${TENANT_ROOT_DOMAIN}`).replace(/\/+$/, "");
 
+// Bookmarklet/userscript runtime version — shown as `v4.3 • <host>` in the tray header so stale tabs are obvious.
+export const BML_SCRIPT_VERSION = "v4.3";
+
 export const siteConfig = {
   title: envBrandName,
   shortTitle: "The Works",

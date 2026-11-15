@@ -263,10 +263,12 @@
                                      'badge-warning text-warning-content': getAuctionFinancials(item).tiers.balanced.status === 'passed' && getAuctionFinancials(item).tiers.aggressive.status === 'active',
                                      'badge-success text-success-content': getAuctionFinancials(item).tiers.balanced.status === 'active'
                                  }">
-                                <Icon :icon="getAuctionFinancials(item).tiers.aggressive.status === 'passed' ? 'solar:close-circle-bold' : (getAuctionFinancials(item).tiers.balanced.status === 'passed' ? 'solar:eye-bold' : 'solar:check-circle-bold')" class="w-4 h-4" />
+                                <Icon :icon="isDeadAuctionDeal(item) || getAuctionFinancials(item).tiers.aggressive.status === 'passed' ? 'solar:close-circle-bold' : (getAuctionFinancials(item).tiers.balanced.status === 'passed' ? 'solar:eye-bold' : 'solar:check-circle-bold')" class="w-4 h-4" />
                                 {{ 
-                                    getAuctionFinancials(item).tiers.aggressive.status === 'passed'
-                                        ? 'OUTBID / AT CEILING'
+                                    getAuctionFinancials(item).allShipCapped
+                                        ? 'PASS — S&H EXCEEDS CAP'
+                                        : getAuctionFinancials(item).tiers.aggressive.status === 'passed'
+                                            ? 'OUTBID / AT CEILING'
                                         : getAuctionFinancials(item).tiers.balanced.status === 'passed'
                                             ? 'WATCH (AGGRESSIVE 1.7x ONLY)'
                                             : 'IN PLAY (ROOM TO BID)'
@@ -295,6 +297,22 @@
                             </div>
                         </div>
 
+                        <!-- Vision proof: how many photos actually reached Gemini (zero-blind-scan law) -->
+                        <div v-if="getVisionPhotoCount(item) !== null"
+                             class="rounded-xl px-3 py-1.5 mb-3 text-xs font-bold border flex items-center gap-1.5"
+                             :class="getVisionPhotoCount(item)! > 0 ? 'bg-success/10 border-success/40 text-success' : 'bg-error/15 border-error text-error'">
+                            <Icon :icon="getVisionPhotoCount(item)! > 0 ? 'solar:camera-bold' : 'solar:danger-triangle-bold'" class="w-4 h-4 shrink-0" />
+                            <span v-if="getVisionPhotoCount(item)! > 0">📸 AI Inspected {{ getVisionPhotoCount(item) }} Photo{{ getVisionPhotoCount(item) === 1 ? '' : 's' }}</span>
+                            <span v-else>⚠️ 0 Photos Reached AI — this report is text-only. Re-scan with photos selected.</span>
+                        </div>
+
+                        <!-- Freight Killer: S&H is eating the resale value -->
+                        <div v-if="getAuctionFinancials(item).isFreightTrap"
+                             class="rounded-xl px-3 py-1.5 mb-3 text-xs font-bold border border-warning bg-warning/15 text-warning-content flex items-center gap-1.5">
+                            <Icon icon="solar:delivery-bold" class="w-4 h-4 shrink-0" />
+                            🚚 Freight Killer: S&amp;H ${{ Number(getAuctionFinancials(item).shipping).toFixed(2) }} = {{ getAuctionFinancials(item).freightPct }}% of resale value
+                        </div>
+
                         <!-- Active Bid Cash Summary Strip -->
                         <div class="bg-base-100/90 dark:bg-base-200/90 rounded-2xl p-3 sm:p-3.5 border border-base-300 shadow-xs mb-3 space-y-2">
                             <div class="flex flex-wrap items-center justify-between gap-2">
@@ -309,9 +327,10 @@
                                     </span>
                                 </div>
                                 <div class="flex items-center gap-2">
-                                    <span class="badge badge-sm badge-success font-mono font-black gap-1 shadow-2xs">
+                                    <span class="badge badge-sm font-mono font-black gap-1 shadow-2xs"
+                                          :class="getAuctionFinancials(item).currentNetProfit < 0 ? 'badge-error text-error-content' : 'badge-success'">
                                         <Icon icon="solar:wallet-money-bold" class="w-3.5 h-3.5" />
-                                        +${{ Number(getAuctionFinancials(item).currentNetProfit).toFixed(2) }} Cash Profit
+                                        {{ fmtSignedProfit(getAuctionFinancials(item).currentNetProfit) }} {{ getAuctionFinancials(item).currentNetProfit < 0 ? 'Loss at Current Bid' : 'Cash Profit' }}
                                     </span>
                                     <span class="badge badge-sm badge-outline font-mono font-bold">
                                         {{ getAuctionFinancials(item).roi }}x ROI
@@ -324,8 +343,8 @@
                             </div>
                         </div>
 
-                        <!-- Set & Forget Proxy Ceiling (Auto-Bids for you, No babysitting) -->
-                        <div v-if="getAuctionFinancials(item).recommendedProxy > 0" 
+                        <!-- Set & Forget Proxy Ceiling (Auto-Bids for you, No babysitting) — hidden on dead deals -->
+                        <div v-if="getAuctionFinancials(item).recommendedProxy > 0 && !isDeadAuctionDeal(item)" 
                              class="p-3.5 bg-gradient-to-r from-primary/15 via-primary/10 to-base-100 rounded-2xl border-2 border-primary/40 shadow-xs mb-3 flex flex-wrap items-center justify-between gap-3">
                             <div class="flex items-center gap-2.5">
                                 <div class="p-2.5 rounded-xl bg-primary text-primary-content shrink-0 shadow-xs">
@@ -381,12 +400,12 @@
                                     </div>
                                     <div class="text-[10px] font-mono text-success font-extrabold flex items-center justify-between border-t border-base-200 pt-1.5">
                                         <span>Cash Profit:</span>
-                                        <span>+${{ getAuctionFinancials(item).tiers.conservative.netProfit }}</span>
+                                        <span>{{ tierProfitText(getAuctionFinancials(item).tiers.conservative) }}</span>
                                     </div>
                                     <div class="mt-2 pt-1.5 flex items-center justify-between gap-1">
                                         <span class="badge badge-xs font-bold"
                                               :class="getAuctionFinancials(item).tiers.conservative.status === 'passed' ? 'badge-ghost text-error' : 'badge-success text-success-content'">
-                                            {{ getAuctionFinancials(item).tiers.conservative.status === 'passed' ? 'Passed at $' + Number(getAuctionFinancials(item).currentBid).toFixed(2) : 'Room: +$' + Number(getAuctionFinancials(item).tiers.conservative.room).toFixed(2) }}
+                                            {{ getAuctionFinancials(item).tiers.conservative.status === 'passed' ? getAuctionFinancials(item).tiers.conservative.statusLabel : 'Room: +$' + Number(getAuctionFinancials(item).tiers.conservative.room).toFixed(2) }}
                                         </span>
                                         <button type="button" 
                                                 @click="copyMaxBid(getAuctionFinancials(item).tiers.conservative.maxBid, 'tier-cons-' + index); selectBiddingTier(item, 'conservative')"
@@ -424,12 +443,12 @@
                                     <div class="text-[10px] font-mono font-extrabold flex items-center justify-between border-t border-success/20 pt-1.5"
                                          :class="getAuctionFinancials(item).tiers.balanced.status === 'passed' ? 'text-base-content/50' : 'text-success'">
                                         <span>Cash Profit:</span>
-                                        <span>+${{ getAuctionFinancials(item).tiers.balanced.netProfit }}</span>
+                                        <span>{{ tierProfitText(getAuctionFinancials(item).tiers.balanced) }}</span>
                                     </div>
                                     <div class="mt-2 pt-1.5 flex items-center justify-between gap-1">
                                         <span class="badge badge-xs font-bold"
                                               :class="getAuctionFinancials(item).tiers.balanced.status === 'passed' ? 'badge-ghost text-error' : 'badge-success text-success-content'">
-                                            {{ getAuctionFinancials(item).tiers.balanced.status === 'passed' ? 'Passed at $' + Number(getAuctionFinancials(item).currentBid).toFixed(2) : 'Room: +$' + Number(getAuctionFinancials(item).tiers.balanced.room).toFixed(2) }}
+                                            {{ getAuctionFinancials(item).tiers.balanced.status === 'passed' ? getAuctionFinancials(item).tiers.balanced.statusLabel : 'Room: +$' + Number(getAuctionFinancials(item).tiers.balanced.room).toFixed(2) }}
                                         </span>
                                         <button type="button" 
                                                 @click="copyMaxBid(getAuctionFinancials(item).tiers.balanced.maxBid, 'tier-bal-' + index); selectBiddingTier(item, 'balanced')"
@@ -456,12 +475,12 @@
                                     </div>
                                     <div class="text-[10px] font-mono text-secondary font-extrabold flex items-center justify-between border-t border-base-200 pt-1.5">
                                         <span>Cash Profit:</span>
-                                        <span>+${{ getAuctionFinancials(item).tiers.aggressive.netProfit }}</span>
+                                        <span>{{ tierProfitText(getAuctionFinancials(item).tiers.aggressive) }}</span>
                                     </div>
                                     <div class="mt-2 pt-1.5 flex items-center justify-between gap-1">
                                         <span class="badge badge-xs font-bold"
                                               :class="getAuctionFinancials(item).tiers.aggressive.status === 'passed' ? 'badge-ghost text-error' : 'badge-secondary text-secondary-content'">
-                                            {{ getAuctionFinancials(item).tiers.aggressive.status === 'passed' ? 'Passed at $' + Number(getAuctionFinancials(item).currentBid).toFixed(2) : 'Room: +$' + Number(getAuctionFinancials(item).tiers.aggressive.room).toFixed(2) }}
+                                            {{ getAuctionFinancials(item).tiers.aggressive.status === 'passed' ? getAuctionFinancials(item).tiers.aggressive.statusLabel : 'Room: +$' + Number(getAuctionFinancials(item).tiers.aggressive.room).toFixed(2) }}
                                         </span>
                                         <button type="button" 
                                                 @click="copyMaxBid(getAuctionFinancials(item).tiers.aggressive.maxBid, 'tier-agg-' + index); selectBiddingTier(item, 'aggressive')"
@@ -643,6 +662,23 @@
                                 </div>
                                 <p class="text-base-content text-xs leading-relaxed font-medium">{{ item.why_pass }}</p>
                             </div>
+                        </div>
+
+                        <!-- Proof layer: verbatim OCR / signature read + sold comps (auto-open on PASS or >= $100) -->
+                        <div v-if="item.ocr_detected_text || item.comparables?.length" class="grid grid-cols-1 gap-3 mt-3" :class="{ 'md:grid-cols-2': item.ocr_detected_text && item.comparables?.length }">
+                            <div v-if="item.ocr_detected_text" class="p-3 rounded-2xl bg-info/10 border border-info/25 text-xs shadow-xs">
+                                <div class="font-extrabold text-info flex items-center gap-1.5 mb-1 uppercase text-[11px] tracking-wider">
+                                    <Icon icon="solar:eye-scan-bold" class="w-4 h-4 shrink-0" /> 🔎 OCR / Signature Read
+                                </div>
+                                <p class="text-base-content text-xs leading-relaxed font-mono break-words">{{ item.ocr_detected_text }}</p>
+                            </div>
+                            <details v-if="item.comparables?.length" :open="shouldAutoOpenComps(item)" class="p-3 rounded-2xl bg-base-200/80 border border-base-300 text-xs shadow-xs">
+                                <summary class="font-extrabold text-primary cursor-pointer uppercase text-[11px] tracking-wider">💬 Sold Comps ({{ item.comparables.length }})</summary>
+                                <div v-for="(comp, ci) in item.comparables" :key="ci" class="flex items-center justify-between gap-2 py-1 border-b border-base-300/50 last:border-0">
+                                    <span class="truncate">{{ comp.name }}</span>
+                                    <span class="font-mono font-bold whitespace-nowrap">{{ comp.price }} <span class="opacity-60">[{{ comp.status || 'Sold' }}]</span></span>
+                                </div>
+                            </details>
                         </div>
                     </div>
 
@@ -1035,7 +1071,7 @@
 
                             <!-- Comparables Dropdown -->
                             <div class="collapse collapse-arrow bg-base-200/80 border border-base-300 rounded-xl">
-                                <input type="checkbox" /> 
+                                <input type="checkbox" :checked="shouldAutoOpenComps(item)" /> 
                                 <div class="collapse-title font-bold text-xs flex items-center gap-1.5">
                                     <Icon icon="solar:chart-square-linear" class="w-4 h-4 text-primary" />
                                     View Market Comparables
@@ -1983,7 +2019,7 @@ function getAuctionFinancials(item: any) {
     // 15% standard consignment overhead
     const commPct = 15;
     const netPayout = estResale > 0 ? Math.round(estResale * (1 - commPct / 100) * 100) / 100 : 0;
-    const currentNetProfit = (netPayout > 0 && currentLanded > 0) ? Math.max(0, Math.round((netPayout - currentLanded) * 100) / 100) : 0;
+    const currentNetProfit = (netPayout > 0 && currentLanded > 0) ? Math.round((netPayout - currentLanded) * 100) / 100 : 0;
     const roi = currentLanded > 0 ? (estResale / currentLanded).toFixed(1) : '0';
 
     // Multi-Tier Reseller Profit Curve:
@@ -1991,21 +2027,21 @@ function getAuctionFinancials(item: any) {
     const consTargetLanded = estResale > 0 ? Math.round(estResale / 3.0) : 0;
     const consMaxBid = Math.max(0, Math.floor((consTargetLanded - shipping) / (1 + bpPercent / 100)));
     const consLandedAtMax = Math.round((consMaxBid * (1 + bpPercent / 100) + shipping) * 100) / 100;
-    const consNetProfit = netPayout > 0 ? Math.max(0, Math.round(netPayout - consLandedAtMax)) : 0;
+    const consNetProfit = netPayout > 0 ? Math.round(netPayout - consLandedAtMax) : 0;
     const consStatus = currentBid > consMaxBid ? 'passed' : 'active';
 
     // 2. Balanced (2.2x ROI / ~45% Landed Ceiling - Standard Target)
     const balTargetLanded = estResale > 0 ? Math.round(estResale / 2.2) : 0;
     const balMaxBid = Math.max(0, Math.floor((balTargetLanded - shipping) / (1 + bpPercent / 100)));
     const balLandedAtMax = Math.round((balMaxBid * (1 + bpPercent / 100) + shipping) * 100) / 100;
-    const balNetProfit = netPayout > 0 ? Math.max(0, Math.round(netPayout - balLandedAtMax)) : 0;
+    const balNetProfit = netPayout > 0 ? Math.round(netPayout - balLandedAtMax) : 0;
     const balStatus = currentBid > balMaxBid ? 'passed' : 'active';
 
     // 3. Aggressive / High-Ticket / Fast-Turn (1.7x ROI / ~59% Landed Ceiling)
     const aggTargetLanded = estResale > 0 ? Math.round(estResale / 1.7) : 0;
     const aggMaxBid = Math.max(0, Math.floor((aggTargetLanded - shipping) / (1 + bpPercent / 100)));
     const aggLandedAtMax = Math.round((aggMaxBid * (1 + bpPercent / 100) + shipping) * 100) / 100;
-    const aggNetProfit = netPayout > 0 ? Math.max(0, Math.round(netPayout - aggLandedAtMax)) : 0;
+    const aggNetProfit = netPayout > 0 ? Math.round(netPayout - aggLandedAtMax) : 0;
     const aggStatus = currentBid > aggMaxBid ? 'passed' : 'active';
 
     // 4. Velocity / Win-It Target (1.4x ROI / Minimum $10.00 cash in pocket)
@@ -2013,8 +2049,23 @@ function getAuctionFinancials(item: any) {
     const velocityTargetLanded = Math.max(0, netPayout - minProfit);
     const velocityMaxBid = Math.max(0, Math.floor((velocityTargetLanded - shipping) / (1 + bpPercent / 100)));
     const velocityLandedAtMax = Math.round((velocityMaxBid * (1 + bpPercent / 100) + shipping) * 100) / 100;
-    const velocityNetProfit = netPayout > 0 ? Math.max(0, Math.round(netPayout - velocityLandedAtMax)) : 0;
+    const velocityNetProfit = netPayout > 0 ? Math.round(netPayout - velocityLandedAtMax) : 0;
     const velocityStatus = currentBid > velocityMaxBid ? 'passed' : 'active';
+
+    // Honest dead-deal states (mirrors src/lib/scoutReportSections.ts#computeCanonicalAuctionTiers):
+    //  ship_exceeds_cap → maxBid is 0 because S&H alone eats the landed budget; outbid → live bid already above the ceiling.
+    const tierReason = (maxBid: number, targetLanded: number, status: string) => {
+        if (maxBid <= 0) return { reason: 'ship_exceeds_cap', statusLabel: `🛑 S&H > $${Math.round(targetLanded)} Cap` };
+        if (status === 'passed') return { reason: 'outbid', statusLabel: `🚫 Outbid ($${Math.round(currentBid)} > $${Math.round(maxBid)})` };
+        return { reason: 'active', statusLabel: '' };
+    };
+    const consMeta = tierReason(consMaxBid, consTargetLanded, consStatus);
+    const balMeta = tierReason(balMaxBid, balTargetLanded, balStatus);
+    const aggMeta = tierReason(aggMaxBid, aggTargetLanded, aggStatus);
+    const allTiersDead = consStatus === 'passed' && balStatus === 'passed' && aggStatus === 'passed' || (consMaxBid <= 0 && balMaxBid <= 0 && aggMaxBid <= 0);
+    const allShipCapped = consMaxBid <= 0 && balMaxBid <= 0 && aggMaxBid <= 0;
+    const isFreightTrap = shipping > 0 && estResale > 0 && (shipping >= 0.45 * estResale || (shipping >= 65 && shipping >= 0.35 * estResale));
+    const freightPct = estResale > 0 ? Math.round((shipping / estResale) * 100) : 0;
 
     // 5. "Set & Forget" Proxy Sniper (auto-bids for you, no babysitting):
     // Adds odd-cents (.87) to beat amateur round-number proxy bids ($17.00, $20.00)
@@ -2044,7 +2095,7 @@ function getAuctionFinancials(item: any) {
     const nextBidIncrement = currentBid < 25 ? 1 : currentBid < 100 ? 2 : currentBid < 500 ? 5 : 10;
     const nextBid = currentBid + nextBidIncrement;
     const nextBidLanded = Math.round((nextBid * (1 + bpPercent / 100) + shipping) * 100) / 100;
-    const nextNetProfit = netPayout > 0 ? Math.max(0, Math.round(netPayout - nextBidLanded)) : 0;
+    const nextNetProfit = netPayout > 0 ? Math.round(netPayout - nextBidLanded) : 0;
 
     const isLocalPickup = Boolean(
         item?.auction_meta?.is_local_pickup_only ||
@@ -2074,6 +2125,10 @@ function getAuctionFinancials(item: any) {
         nextBidIncrement,
         nextBidLanded,
         nextNetProfit,
+        allTiersDead,
+        allShipCapped,
+        isFreightTrap,
+        freightPct,
         tiers: {
             conservative: {
                 label: 'Conservative',
@@ -2082,6 +2137,8 @@ function getAuctionFinancials(item: any) {
                 maxLanded: consTargetLanded,
                 netProfit: consNetProfit,
                 status: consStatus,
+                reason: consMeta.reason,
+                statusLabel: consMeta.statusLabel,
                 room: Number((consMaxBid - currentBid).toFixed(2))
             },
             balanced: {
@@ -2091,6 +2148,8 @@ function getAuctionFinancials(item: any) {
                 maxLanded: balTargetLanded,
                 netProfit: balNetProfit,
                 status: balStatus,
+                reason: balMeta.reason,
+                statusLabel: balMeta.statusLabel,
                 room: Number((balMaxBid - currentBid).toFixed(2))
             },
             aggressive: {
@@ -2100,6 +2159,8 @@ function getAuctionFinancials(item: any) {
                 maxLanded: aggTargetLanded,
                 netProfit: aggNetProfit,
                 status: aggStatus,
+                reason: aggMeta.reason,
+                statusLabel: aggMeta.statusLabel,
                 room: Number((aggMaxBid - currentBid).toFixed(2))
             },
             velocity: {
@@ -2124,8 +2185,39 @@ function selectBiddingTier(item: any, tier: 'conservative' | 'balanced' | 'aggre
         if (!isAcquired.value) {
             cost.value = String(chosen.maxBid);
         }
-        addToast({ type: 'info', message: `🎯 Selected ${chosen.label} ceiling: $${chosen.maxBid} (${chosen.roi} ROI, +$${chosen.netProfit} profit)` });
+        addToast({ type: 'info', message: `🎯 Selected ${chosen.label} ceiling: $${chosen.maxBid} (${chosen.roi} ROI, ${fmtSignedProfit(chosen.netProfit)} profit)` });
     }
+}
+
+/** Signed P&L text — never prints "+$-99". */
+function fmtSignedProfit(n: number | string | undefined | null): string {
+    const v = Math.round(Number(n || 0) * 100) / 100;
+    const abs = Math.abs(v);
+    const txt = Number.isInteger(abs) ? String(abs) : abs.toFixed(2);
+    return v < 0 ? `-$${txt}` : `+$${txt}`;
+}
+
+/** Tier profit cell: dead tiers show their honest status label instead of a fake green profit. */
+function tierProfitText(t: any): string {
+    return t && t.reason && t.reason !== 'active' ? t.statusLabel : fmtSignedProfit(t?.netProfit);
+}
+
+/** Dead deal = every tier is S&H-capped / outbid. Drives PASS override, hides sniper cents & $0.00 copy CTAs. */
+function isDeadAuctionDeal(item: any): boolean {
+    if (!item) return false;
+    if (item?.purchase_strategy?.dead_deal) return true;
+    const fin = getAuctionFinancials(item);
+    return Boolean(fin.allTiersDead && (isAuctionItem(item) || fin.allShipCapped));
+}
+
+function getVisionPhotoCount(item: any): number | null {
+    const n = item?.vision_photos_scanned;
+    return n === undefined || n === null ? null : Number(n);
+}
+
+function shouldAutoOpenComps(item: any): boolean {
+    const bid = Number(item?.currentBid || item?.auction_meta?.current_bid || 0);
+    return item?.purchase_strategy?.verdict === 'PASS' || bid >= 100 || isDeadAuctionDeal(item);
 }
 
 function selectProxyCeiling(item: any) {

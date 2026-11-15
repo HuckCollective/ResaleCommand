@@ -85,16 +85,22 @@
             </div>
 
             <!-- Live Draggable Pill Preview -->
-            <a
-              v-if="registry.tools[toolId].status === 'active'"
-              :href="getToolHref(toolId)"
-              @click.prevent="notifyDrag(toolId)"
-              class="btn btn-xs sm:btn-sm font-black shadow-xs cursor-grab active:cursor-grabbing gap-1.5"
-              :class="toolId === 'ricochet_sync' ? 'btn-warning text-warning-content border border-warning-content/20' : 'btn-primary text-primary-content border border-primary-content/20'"
-              :title="'⬆️ Drag me to your Desktop Chrome Bookmarks Bar (Ctrl+Shift+B)!'"
-            >
-              <span>{{ getBarPreview(toolId) }}</span>
-            </a>
+            <div v-if="registry.tools[toolId].status === 'active'" class="flex flex-col items-end gap-0.5">
+              <a
+                :href="getToolHref(toolId)"
+                @mousedown="stampFreshHref($event, toolId)"
+                @dragstart="stampFreshHref($event, toolId)"
+                @click.prevent="notifyDrag(toolId)"
+                class="btn btn-xs sm:btn-sm font-black shadow-xs cursor-grab active:cursor-grabbing gap-1.5"
+                :class="toolId === 'ricochet_sync' ? 'btn-warning text-warning-content border border-warning-content/20' : 'btn-primary text-primary-content border border-primary-content/20'"
+                :title="'⬆️ Drag me to your Desktop Chrome Bookmarks Bar (Ctrl+Shift+B)!'"
+              >
+                <span>{{ getBarPreview(toolId) }}</span>
+              </a>
+              <span v-if="targetHost" class="text-[10px] font-mono font-bold text-base-content/60 whitespace-nowrap">
+                🌐 Target Host: {{ targetHost }}
+              </span>
+            </div>
             <span
               v-else
               class="badge badge-sm badge-ghost border border-base-300 font-bold whitespace-nowrap"
@@ -249,6 +255,8 @@
         <div class="flex items-center gap-2 flex-wrap shrink-0">
           <a
             :href="bmlTestHref"
+            @mousedown="stampFreshHref($event, 'bml_test')"
+            @dragstart="stampFreshHref($event, 'bml_test')"
             @click.prevent="notifyTestDrag"
             class="btn btn-xs sm:btn-sm btn-info text-info-content font-black shadow-xs border border-info-content/20 cursor-grab active:cursor-grabbing gap-1.5"
             title="⬆️ Drag me to your Desktop Chrome Bookmarks Bar (Ctrl+Shift+B)!"
@@ -373,14 +381,13 @@ const minting = ref(false);
 const savedMsg = ref('');
 const errMsg = ref('');
 const localSession = ref<{ name: string; prefix: string } | null>(null);
-const browserOrigin = ref<string>(
-  typeof window !== 'undefined' && window.location?.origin ? window.location.origin : ''
-);
+// SSR-hydration lock: MUST start empty on BOTH server and client so onMounted() produces a real reactive change
+// (initializing with window.location.origin made the onMounted assignment a no-op and left the SSR `main` href in the DOM).
+const browserOrigin = ref<string>('');
 
-const ricochetHref = computed(() => {
-  void browserOrigin.value;
-  return buildRicochetBookmarkletHref(props.defaultLocationCode || 'MD');
-});
+const ricochetHref = computed(() =>
+  buildRicochetBookmarkletHref(props.defaultLocationCode || 'MD', browserOrigin.value || undefined)
+);
 const auctionScoutHref = computed(() =>
   buildEvergreenBookmarkletHref('/scripts/auction-bookmarklet.js', browserOrigin.value || undefined)
 );
@@ -388,8 +395,31 @@ const bmlTestHref = computed(() =>
   buildEvergreenBookmarkletHref('/scripts/bml-test.js', browserOrigin.value || undefined)
 );
 
+const targetHost = computed(() => {
+  try {
+    return browserOrigin.value ? new URL(browserOrigin.value).host : '';
+  } catch {
+    return browserOrigin.value;
+  }
+});
+
 const getToolHref = (id: BookmarkletToolId) =>
   id === 'ricochet_sync' ? ricochetHref.value : auctionScoutHref.value;
+
+/** Synchronously re-stamps the anchor with a fresh href built from the LIVE page origin right before a drag / click begins. */
+const stampFreshHref = (event: Event, id: BookmarkletToolId | 'bml_test') => {
+  if (typeof window === 'undefined' || !window.location?.origin) return;
+  const anchor = event.currentTarget as HTMLAnchorElement | null;
+  if (!anchor) return;
+  const origin = window.location.origin;
+  const fresh =
+    id === 'ricochet_sync'
+      ? buildRicochetBookmarkletHref(props.defaultLocationCode || 'MD', origin)
+      : id === 'auction_scout'
+        ? buildEvergreenBookmarkletHref('/scripts/auction-bookmarklet.js', origin)
+        : buildEvergreenBookmarkletHref('/scripts/bml-test.js', origin);
+  if (anchor.getAttribute('href') !== fresh) anchor.setAttribute('href', fresh);
+};
 
 const getBarPreview = (id: BookmarkletToolId) =>
   formatBmlBarLabel(

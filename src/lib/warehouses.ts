@@ -473,7 +473,7 @@ import { buildEvergreenBookmarkletHref } from './bml/registry';
  * Generates a thin multi-origin fallback loader that fetches `/scripts/rico-bookmarklet.js?location=${code}&t=...`
  * so the user's browser bookmark never goes stale and works across `works.thehc.llc`, `works.thehc.coop`, and `resalecmd.com`.
  */
-export function buildRicochetBookmarkletHref(locationCode = 'MD'): string {
+export function buildRicochetBookmarkletHref(locationCode = 'MD', preferredOrigin?: string): string {
     const locCode = encodeURIComponent(resolveCanonicalLocationCode(locationCode) || 'MD');
-    return buildEvergreenBookmarkletHref(`/scripts/rico-bookmarklet.js?location=${locCode}`);
+    return buildEvergreenBookmarkletHref(`/scripts/rico-bookmarklet.js?location=${locCode}`, preferredOrigin);
 }

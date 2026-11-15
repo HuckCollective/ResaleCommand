@@ -2,6 +2,7 @@ import { databases, storage, ID, Query } from './appwrite';
 import type { Models } from 'appwrite';
 import { Permission, Role } from 'appwrite';
 import { withRateLimitRetry } from './retry';
+import { renderScoutReportMarkdown } from './scoutReportSections';
 
 import { isAlphaMode } from '../stores/env';
 
@@ -525,75 +526,8 @@ export function isValidOrgUpc(upc: string | null | undefined, prefix: string = '
 }
 
 export function formatScoutReportMarkdown(item: any): string {
-    if (!item) return '';
-    const obj = typeof item === 'string' ? (() => { try { return JSON.parse(item); } catch { return null; } })() : item;
-    if (!obj) return '';
-    const target = Array.isArray(obj) ? obj[0] : (obj.items ? obj.items[0] : obj);
-    if (!target) return '';
-
-    let report = `### 🕵️ Speed Scout Appraisal Report\n\n`;
-    if (target.tier_label || target.tier) {
-        const tierName = target.tier_label || (target.tier === 'showcase' ? '🌟 Showcase' : target.tier === 'quick_turn' ? '⚡ Quick Turn' : '📦 Core');
-        report += `**Inventory Tier:** ${tierName}\n\n`;
-    }
-    if (target.title) {
-        const cleanTitle = target.title.replace(/\[Tier \d[^\]]*\]\s*/i, '').trim();
-        report += `**Title:** ${cleanTitle}\n\n`;
-    }
-    if (target.why_pay_up) report += `**💎 Sourcing Catalyst (Why Pay Up):** ${target.why_pay_up}\n\n`;
-    if (target.why_pass) report += `**⚠️ Risk Rationale (Why Pass):** ${target.why_pass}\n\n`;
-    if (target.condition_notes) report += `**Condition:** ${target.condition_notes}\n\n`;
-    if (target.red_flags && target.red_flags.length > 0) {
-        const flags = Array.isArray(target.red_flags) ? target.red_flags.join(', ') : target.red_flags;
-        report += `**🚩 Red Flags:** ${flags}\n\n`;
-    }
-
-    if (target.pricing_potential || target.price_breakdown) {
-        report += `**Valuation Breakdown:**\n`;
-        const fair = target.pricing_potential?.fair || target.price_breakdown?.fair;
-        const boutique = target.pricing_potential?.boutique || target.price_breakdown?.boutique_premium;
-        if (fair) report += `- **Fair Market:** ${fair}\n`;
-        if (boutique) report += `- **Boutique Booth:** ${boutique}\n`;
-        if (target.price_breakdown?.mint) report += `- **Mint / New:** ${target.price_breakdown.mint}\n`;
-        if (target.price_breakdown?.poor) report += `- **Poor / As-Is:** ${target.price_breakdown.poor}\n`;
-        report += `\n`;
-    }
-    if (target.purchase_strategy) {
-        report += `**Sourcing Strategy:**\n`;
-        if (target.purchase_strategy.verdict) report += `- **Verdict:** ${target.purchase_strategy.verdict}\n`;
-        if (target.purchase_strategy.max_bid !== undefined && target.purchase_strategy.max_bid !== null) {
-            report += `- **Max Bid Target:** $${Number(target.purchase_strategy.max_bid).toFixed(2)}\n`;
-        }
-        if (target.purchase_strategy.max_landed_cost !== undefined && target.purchase_strategy.max_landed_cost !== null) {
-            report += `- **Max Landed Cost:** $${Number(target.purchase_strategy.max_landed_cost).toFixed(2)}\n`;
-        }
-        if (target.purchase_strategy.advice) report += `- **Advice:** ${target.purchase_strategy.advice}\n`;
-        report += `\n`;
-    }
-    if (target.market_report) {
-        report += `**Market & Channels:**\n`;
-        if (target.market_report.best_platform) report += `- **Best Platform:** ${target.market_report.best_platform}\n`;
-        if (target.market_report.sell_through_velocity) report += `- **Velocity:** ${target.market_report.sell_through_velocity}\n`;
-        if (target.market_report.platform_rationale) report += `- **Rationale:** ${target.market_report.platform_rationale}\n`;
-        if (target.market_report.channels && Array.isArray(target.market_report.channels)) {
-            target.market_report.channels.forEach((ch: any) => {
-                report += `  - *${ch.name}*: ${ch.est_price || ''} (Payout: ${ch.net_payout || ''}) ${ch.recommendation ? `[${ch.recommendation}]` : ''}\n`;
-            });
-        }
-        report += `\n`;
-    }
-    if (target.comparables && target.comparables.length > 0) { 
-        report += `**Comparables:**\n`; 
-        target.comparables.forEach((c: any) => report += `- ${c.name} (${c.price}) [${c.status || 'Sold'}]\n`); 
-        report += `\n`;
-    }
-    if (target.lot_items && target.lot_items.length > 0) {
-        report += `**📦 Lot Items (${target.lot_items.length}):**\n`;
-        target.lot_items.forEach((li: any, idx: number) => {
-            report += `${idx + 1}. **${li.name || li.title || li.identity}** - Est: ${li.estimated_value || '-'}\n`;
-        });
-    }
-    return report.trim();
+    // Single Source of Truth: delegated to the composable section registry (Law 3 / Golden Rule #3)
+    return renderScoutReportMarkdown(item, 'DRAWER_MD');
 }
 
 /**
