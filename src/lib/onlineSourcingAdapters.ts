@@ -46,6 +46,7 @@ export interface ClientDomListingPayload {
   title?: string;
   description?: string;
   currentPrice?: number | string;
+  minimumBid?: number | string;
   buyersPremiumPct?: number | string;
   shippingCost?: number | string | null;
   isLocalPickupOnly?: boolean;
@@ -73,6 +74,7 @@ export interface OnlineListingEnvelope {
   title: string;
   description: string;
   currentPrice: number;
+  minimumBid: number;
   askingPriceFormatted: string;
   bidCount: number | null;
   endTimeIso: string | null;
@@ -358,9 +360,14 @@ function buildContextBlockFromEnvelope(env: Omit<OnlineListingEnvelope, 'context
     lines.push(`Seller: ${env.sellerName}${env.sellerId ? ` (ID: ${env.sellerId})` : ''}`);
   }
   if (env.locationText) lines.push(`Location: ${env.locationText}`);
-  if (env.currentPrice > 0) {
+  if (env.currentPrice > 0 || env.minimumBid > 0) {
     const label = env.isAuction ? 'Current Bid' : 'Asking Price';
-    lines.push(`${label}: $${env.currentPrice.toFixed(2)}${env.bidCount != null ? ` | Bids: ${env.bidCount}` : ''}`);
+    const basePrice = env.currentPrice > 0 ? env.currentPrice : env.minimumBid;
+    const minBidNote =
+      env.isAuction && env.minimumBid > basePrice
+        ? ` | Minimum Next Bid: $${env.minimumBid.toFixed(2)}`
+        : '';
+    lines.push(`${label}: $${basePrice.toFixed(2)}${minBidNote}${env.bidCount != null ? ` | Bids: ${env.bidCount}` : ''}`);
   }
   if (env.buyersPremiumPct > 0) {
     lines.push(`Buyer's Premium: ${env.buyersPremiumPct}% (Added on top of hammer bid!${env.isSoftClose ? ' Soft-close auction.' : ''})`);
@@ -561,7 +568,10 @@ export function mergeClientDomListing(
       /local\s*pick\s*-?\s*up\s*only|no\s*shipping/i.test(String(clientDom.termsText || ''))
   );
 
-  const currentPrice = parseNumericPrice(clientDom.currentPrice);
+  const rawCurrentPrice = parseNumericPrice(clientDom.currentPrice);
+  const rawMinimumBid = parseNumericPrice(clientDom.minimumBid);
+  const currentPrice = rawCurrentPrice > 0 ? rawCurrentPrice : rawMinimumBid;
+  const minimumBid = Math.max(currentPrice, rawMinimumBid);
   const shippingWeight = Math.max(0, parseFloat(String(clientDom.shippingWeight || 0)) || 0);
   const canCombineShipping =
     clientDom.canCombineShipping !== undefined ? Boolean(clientDom.canCombineShipping) : domainFamily === 'shopgoodwill';
@@ -624,6 +634,7 @@ export function mergeClientDomListing(
     title: String(clientDom.title || '').trim(),
     description,
     currentPrice,
+    minimumBid,
     askingPriceFormatted: currentPrice > 0 ? `$${currentPrice.toFixed(2)}` : '',
     bidCount: clientDom.bidCount != null ? Number(clientDom.bidCount) : null,
     endTimeIso,
@@ -836,6 +847,7 @@ export function parseHtmlForOnlineListing(url: string, html: string): OnlineList
     title: title || `${detected.platformName} Listing`,
     description,
     currentPrice,
+    minimumBid: currentPrice,
     askingPriceFormatted: currentPrice > 0 ? `$${currentPrice.toFixed(2)}` : '',
     bidCount: null,
     endTimeIso: timeLeftText ? parsePacificDateToIso(timeLeftText) || null : null,
@@ -1032,7 +1044,10 @@ export async function fetchAndResolveOnlineListing(options: {
         }
       }
 
-      const currentPrice = parseFloat(parsedData.currentPrice) || parseFloat(parsedData.minimumBid) || 0;
+      const rawCurrentPrice = parseFloat(parsedData.currentPrice) || 0;
+      const rawMinimumBid = parseFloat(parsedData.minimumBid) || 0;
+      const currentPrice = rawCurrentPrice > 0 ? rawCurrentPrice : rawMinimumBid;
+      const minimumBid = Math.max(currentPrice, rawMinimumBid);
       const endTimeRaw = parsedData.endTime ? String(parsedData.endTime) : null;
       const endTimeIso = endTimeRaw ? parsePacificDateToIso(endTimeRaw) || null : null;
       const cleanDesc = sanitizeListingDescription(parsedData.description || '');
@@ -1048,6 +1063,7 @@ export async function fetchAndResolveOnlineListing(options: {
         title: String(parsedData.title || parsedData.itemName || `ShopGoodwill #${itemId}`).trim(),
         description: cleanDesc,
         currentPrice,
+        minimumBid,
         askingPriceFormatted: `$${currentPrice.toFixed(2)}`,
         bidCount: parsedData.bidCount != null ? Number(parsedData.bidCount) : null,
         endTimeIso,

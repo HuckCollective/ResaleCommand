@@ -51,14 +51,14 @@ export const GET: APIRoute = async ({ url }) => {
     authRuntimeJs = buildInjectableBmlAuthRuntimeJs(activeOrigins, origin);
   } catch {}
 
-  const injectedBootstrap = `window.__RC_ORIGIN__ = ${JSON.stringify(origin)};\nwindow.__RC_ORIGINS__ = ${JSON.stringify(activeOrigins)};\nwindow.__RC_BML_TOOL_CONFIG__ = ${JSON.stringify(bmlToolConfig)};\nwindow.__RC_SCRIPT_VERSION__ = ${JSON.stringify(BML_SCRIPT_VERSION)};\n${authRuntimeJs}\n`;
+  const injectedBootstrap = `window.__RC_BOOKMARKLET_CLICKED__ = true;\nwindow.__RC_BML_CLICK_SEQ__ = (window.__RC_BML_CLICK_SEQ__ || 0) + 1;\nwindow.__RC_BML_CLICK_TOOL__ = "auction_scout";\nwindow.__RC_ORIGIN__ = ${JSON.stringify(origin)};\nwindow.__RC_ORIGINS__ = ${JSON.stringify(activeOrigins)};\nwindow.__RC_BML_TOOL_CONFIG__ = ${JSON.stringify(bmlToolConfig)};\nwindow.__RC_SCRIPT_VERSION__ = ${JSON.stringify(BML_SCRIPT_VERSION)};\n${authRuntimeJs}\n`;
 
   const source = readPublicScriptOrNull('auction-scout-sync.user.js');
   if (source) {
     return new Response(injectedBootstrap + source, { status: 200, headers: CORS_NO_STORE_HEADERS });
   }
 
-  // Vercel Serverless: script lives on the Edge CDN → inject globals now, then chain-load the CDN copy (cache-busted).
-  const cdnLoader = `(function(){var h=${JSON.stringify(activeOrigins)},i=0;function l(){if(i>=h.length)return;var s=document.createElement('script');s.src=h[i++]+'/auction-scout-sync.user.js?t='+Date.now();s.onerror=l;document.body.appendChild(s);}l();})();`;
+  // Vercel Serverless: short-circuit to in-page toggle if same version is already live; otherwise chain-load CDN copy.
+  const cdnLoader = `(function(){var lv=window.__RC_SCOUT_LIVE__;if(lv&&lv.version===${JSON.stringify(BML_SCRIPT_VERSION)}&&typeof lv.onBookmarkletClick==='function'){lv.onBookmarkletClick();return;}var h=${JSON.stringify(activeOrigins)},i=0;function l(){if(i>=h.length)return;var s=document.createElement('script');s.src=h[i++]+'/auction-scout-sync.user.js?t='+Date.now();s.onerror=l;document.body.appendChild(s);}l();})();`;
   return new Response(injectedBootstrap + cdnLoader, { status: 200, headers: CORS_NO_STORE_HEADERS });
 };

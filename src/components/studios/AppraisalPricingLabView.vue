@@ -817,6 +817,116 @@
         </div>
       </div>
 
+      <!-- Sourcing Domain Guardrails (Cloud-Stored in manifests/ai_appraisal_rules_v1) -->
+      <div
+        v-if="draftRules.domainProfiles"
+        class="card bg-base-100 border border-base-300 rounded-2xl p-4 space-y-3 shadow-xs"
+      >
+        <div class="flex items-center justify-between gap-2 flex-wrap">
+          <div>
+            <h3 class="text-sm font-black text-base-content">
+              🧭 Sourcing Domain Guardrails &amp; Combined Shipping
+            </h3>
+            <p class="text-xs text-base-content/65">
+              Global camera <code>/scout</code> stays 100% free of online auction bias. Combined shipping is enabled for ShopGoodwill only by default and bucketed by domain tracker prefix.
+            </p>
+          </div>
+          <span class="badge badge-sm badge-primary text-primary-content font-bold">
+            Cloud Synced
+          </span>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-2.5">
+          <div
+            v-for="domKey in editableDomainKeys"
+            :key="domKey"
+            class="p-3 rounded-xl bg-base-200/50 border border-base-300 space-y-2"
+          >
+            <div class="flex items-center justify-between gap-2 flex-wrap">
+              <div class="flex items-center gap-1.5 min-w-0">
+                <span class="text-base leading-none">{{ draftRules.domainProfiles[domKey].icon }}</span>
+                <span class="text-xs font-black text-base-content">
+                  {{ draftRules.domainProfiles[domKey].label }}
+                </span>
+                <span class="badge badge-2xs badge-neutral font-mono font-bold">
+                  {{ draftRules.domainProfiles[domKey].trackerPrefix }}-
+                </span>
+              </div>
+
+              <label
+                v-if="domKey !== 'in_person'"
+                class="inline-flex items-center gap-1.5 cursor-pointer select-none"
+              >
+                <input
+                  v-model="draftRules.domainProfiles[domKey].allowsCombinedShipping"
+                  type="checkbox"
+                  class="toggle toggle-xs toggle-success"
+                />
+                <span class="text-[11px] font-bold text-base-content/80">
+                  Combine S&amp;H
+                </span>
+              </label>
+              <span
+                v-else
+                class="badge badge-2xs badge-success text-success-content font-bold"
+              >
+                Zero-Bias Camera Lock
+              </span>
+            </div>
+
+            <div
+              v-if="domKey !== 'in_person'"
+              class="grid grid-cols-1 sm:grid-cols-12 gap-2 items-end"
+            >
+              <div class="sm:col-span-3">
+                <label class="label py-0.5">
+                  <span class="label-text text-[10px] font-bold uppercase opacity-70">Buyer Prem %</span>
+                </label>
+                <input
+                  v-model.number="draftRules.domainProfiles[domKey].defaultBuyersPremiumPct"
+                  type="number"
+                  min="0"
+                  max="50"
+                  step="0.5"
+                  class="input input-bordered input-xs w-full font-mono font-bold bg-base-100"
+                />
+              </div>
+
+              <div class="sm:col-span-3">
+                <label class="label py-0.5">
+                  <span class="label-text text-[10px] font-bold uppercase opacity-70">Max Box Lbs</span>
+                </label>
+                <input
+                  v-model.number="draftRules.domainProfiles[domKey].maxWeightLbs"
+                  type="number"
+                  min="0"
+                  max="200"
+                  step="1"
+                  :disabled="!draftRules.domainProfiles[domKey].allowsCombinedShipping"
+                  class="input input-bordered input-xs w-full font-mono font-bold bg-base-100"
+                />
+              </div>
+
+              <div class="sm:col-span-6">
+                <label class="label py-0.5">
+                  <span class="label-text text-[10px] font-bold uppercase opacity-70">Domain Prompt Note (≤120c)</span>
+                </label>
+                <input
+                  v-model="draftRules.domainProfiles[domKey].guardrailNote"
+                  type="text"
+                  maxlength="120"
+                  placeholder="Optional domain-only note..."
+                  class="input input-bordered input-xs w-full bg-base-100"
+                />
+              </div>
+            </div>
+            <p v-else class="text-[11px] text-base-content/65">
+              Used when scanning physical items with the camera in <code>/scout</code>. Never injects auction shipping or online marketplace assumptions.
+            </p>
+          </div>
+        </div>
+      </div>
+
       <!-- Category Calibration Notes (Max 5 notes, <= 120 chars each) -->
       <div class="card bg-base-100 border border-base-300 rounded-2xl p-4 space-y-3 shadow-xs">
         <div class="flex items-center justify-between gap-2 flex-wrap">
@@ -1459,8 +1569,15 @@ import type {
   AppraisalRulesConfig,
   EstimateVsSoldScorecard,
 } from '../../lib/appraisalCalibration';
+import {
+  SOURCING_DOMAIN_KEYS,
+  cloneDefaultDomainProfiles,
+  sanitizeDomainProfilesInput,
+  type SourcingDomainKey,
+} from '../../lib/sourcingDomains';
 
 const BookmarkletRegistryPanel = defineAsyncComponent(() => import('../bml/BookmarkletRegistryPanel.vue'));
+const editableDomainKeys: readonly SourcingDomainKey[] = SOURCING_DOMAIN_KEYS;
 
 type LabTab = 'scorecard' | 'rules' | 'telemetry' | 'bookmarklets';
 type ScorecardFilterKey =
@@ -1584,7 +1701,12 @@ async function buildLabAuthHeaders(): Promise<Record<string, string>> {
 }
 
 function cloneRules(r: AppraisalRulesConfig): AppraisalRulesConfig {
-  return JSON.parse(JSON.stringify(r));
+  const cloned: AppraisalRulesConfig = JSON.parse(JSON.stringify(r));
+  cloned.domainProfiles = sanitizeDomainProfilesInput(
+    cloned.domainProfiles,
+    cloneDefaultDomainProfiles()
+  );
+  return cloned;
 }
 
 const retailBoothMetas = computed(() =>
@@ -1944,6 +2066,13 @@ const ruleDiffs = computed<string[]>(() => {
 
   if (JSON.stringify(a.categoryNotes) !== JSON.stringify(b.categoryNotes)) {
     diffs.push(`Category Notes (${b.categoryNotes.length})`);
+  }
+
+  if (
+    JSON.stringify(sanitizeDomainProfilesInput(a.domainProfiles)) !==
+    JSON.stringify(sanitizeDomainProfilesInput(b.domainProfiles))
+  ) {
+    diffs.push('Sourcing Domain Guardrails updated');
   }
 
   return diffs;

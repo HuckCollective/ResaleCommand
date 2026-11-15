@@ -115,19 +115,23 @@ export function buildInjectableBmlAuthRuntimeJs(origins: string[], primaryOrigin
     }
   }
 
-  window.addEventListener('message', function(ev) {
-    if (!ev || !ev.data || ev.data.type !== 'RC_BML_AUTH_SUCCESS') return;
-    if (ev.origin && ORIGINS.indexOf(ev.origin) === -1) return;
-    if (ev.data.token) {
-      var sess = saveSession(ev.data.token, ev.data.member || {});
-      try {
-        window.dispatchEvent(new CustomEvent('rc-bml-authenticated', { detail: sess }));
-      } catch (_e) {}
-      if (typeof window.__RC_REFRESH_FROM_CLOUD__ === 'function') {
-        window.__RC_REFRESH_FROM_CLOUD__();
+  if (!window.__RC_BML_MSG_BOUND__) {
+    window.__RC_BML_MSG_BOUND__ = true;
+    window.addEventListener('message', function(ev) {
+      if (!ev || !ev.data || ev.data.type !== 'RC_BML_AUTH_SUCCESS') return;
+      var msgOrigins = (window.__RC_BML_CORE__ && window.__RC_BML_CORE__.origins) || ORIGINS;
+      if (ev.origin && msgOrigins.indexOf(ev.origin) === -1) return;
+      if (ev.data.token) {
+        var sess = saveSession(ev.data.token, ev.data.member || {});
+        try {
+          window.dispatchEvent(new CustomEvent('rc-bml-authenticated', { detail: sess }));
+        } catch (_e) {}
+        if (typeof window.__RC_REFRESH_FROM_CLOUD__ === 'function') {
+          window.__RC_REFRESH_FROM_CLOUD__();
+        }
       }
-    }
-  });
+    });
+  }
 
   function renderAuthBanner(needsLogin) {
     var id = 'rc-bml-auth-guard-bar';
@@ -136,8 +140,12 @@ export function buildInjectableBmlAuthRuntimeJs(origins: string[], primaryOrigin
       if (existing) existing.remove();
       return;
     }
-    // If a bottom-right launcher pill (#rc-sync-fab or #rc-scout-fab-bar) is present, it handles auth status inline!
-    if (document.getElementById('rc-sync-fab') || document.getElementById('rc-scout-fab-bar')) {
+    // Mutually-exclusive Pill Bar / Frozen-Top Drawer shell handles auth inline — never spawn duplicate top banner
+    if (
+      document.querySelector('[data-rc-bml-shell]') ||
+      document.getElementById('rc-sync-fab') ||
+      document.getElementById('rc-scout-fab-bar')
+    ) {
       if (existing) existing.remove();
       return;
     }
@@ -167,7 +175,8 @@ export function buildInjectableBmlAuthRuntimeJs(origins: string[], primaryOrigin
     var origFetch = window.fetch.bind(window);
     window.fetch = function(input, init) {
       var urlStr = typeof input === 'string' ? input : (input && (input.url || input.href)) || String(input || '');
-      var isRcApi = ORIGINS.some(function(o) { return o && urlStr.indexOf(o + '/api/') === 0; });
+      var activeOrigins = (window.__RC_BML_CORE__ && window.__RC_BML_CORE__.origins) || ORIGINS;
+      var isRcApi = activeOrigins.some(function(o) { return o && urlStr.indexOf(o + '/api/') === 0; });
       if (isRcApi) {
         var sess = getSession();
         init = Object.assign({}, init || {});
@@ -187,6 +196,102 @@ export function buildInjectableBmlAuthRuntimeJs(origins: string[], primaryOrigin
     };
   }
 
+  function ensureShellStyles() {
+    var styleId = 'rc-bml-shell-styles';
+    if (document.getElementById(styleId)) return;
+    var st = document.createElement('style');
+    st.id = styleId;
+    st.textContent =
+      '.rc-bml-pill-bar{position:fixed;bottom:16px;right:16px;z-index:2147483646;max-width:calc(100vw - 24px);display:inline-flex;align-items:center;gap:6px;font-family:system-ui,-apple-system,sans-serif;}' +
+      '.rc-bml-pill-bar[data-drawer-open="true"]{display:none !important;}' +
+      '.rc-bml-drawer,.rc-bml-drawer *{box-sizing:border-box;}' +
+      '.rc-bml-drawer{position:fixed;top:0;right:0;bottom:0;height:100dvh;width:456px;max-width:96vw;z-index:2147483646;background:#0f172a;color:#f8fafc;border-left:2px solid #818cf8;box-shadow:-16px 0 48px rgba(0,0,0,0.68);display:flex;flex-direction:column;overflow:hidden;font-family:system-ui,-apple-system,sans-serif;}' +
+      '.rc-bml-drawer[data-drawer-open="false"]{display:none !important;}' +
+      '.rc-bml-drawer-header{flex-shrink:0;position:sticky;top:0;z-index:20;background:#1e293b;border-bottom:1px solid #334155;}' +
+      '.rc-bml-drawer-body{flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;scrollbar-width:thin;scrollbar-color:#334155 transparent;}' +
+      '.rc-bml-drawer-body::-webkit-scrollbar{width:5px;height:5px;}' +
+      '.rc-bml-drawer-body::-webkit-scrollbar-track{background:transparent;}' +
+      '.rc-bml-drawer-body::-webkit-scrollbar-thumb{background:#334155;border-radius:999px;}' +
+      '.rc-bml-drawer-footer{flex-shrink:0;background:#1e293b;border-top:1px solid #334155;}';
+    (document.head || document.body || document.documentElement).appendChild(st);
+  }
+
+  function consumeBookmarkletClick(toolId, lastSeq) {
+    var curSeq = Number(window.__RC_BML_CLICK_SEQ__ || 0);
+    var toolTarget = window.__RC_BML_CLICK_TOOL__ || '';
+    var legacyClicked = Boolean(window.__RC_BOOKMARKLET_CLICKED__);
+    var isNewSeq = curSeq > 0 && curSeq !== Number(lastSeq || 0) && (!toolTarget || !toolId || toolTarget === toolId);
+    if (legacyClicked) {
+      window.__RC_BOOKMARKLET_CLICKED__ = false;
+    }
+    return {
+      clicked: Boolean(isNewSeq || legacyClicked),
+      seq: curSeq
+    };
+  }
+
+  function registerLive(toolId, handle) {
+    window.__RC_BML_LIVE_HANDLES__ = window.__RC_BML_LIVE_HANDLES__ || {};
+    window.__RC_BML_LIVE_HANDLES__[toolId] = handle;
+  }
+
+  function getLive(toolId) {
+    return (window.__RC_BML_LIVE_HANDLES__ && window.__RC_BML_LIVE_HANDLES__[toolId]) || null;
+  }
+
+  function watchSpaLocation(onChange) {
+    if (typeof onChange !== 'function') return function() {};
+    window.__RC_SPA_LISTENERS__ = window.__RC_SPA_LISTENERS__ || [];
+    window.__RC_SPA_LISTENERS__.push(onChange);
+
+    if (!window.__RC_SPA_WATCH_WRAPPED__) {
+      window.__RC_SPA_WATCH_WRAPPED__ = true;
+      window.__RC_SPA_LAST_HREF__ = String(window.location.href || '');
+
+      var notifyIfChanged = function() {
+        var nowHref = String(window.location.href || '');
+        if (nowHref === window.__RC_SPA_LAST_HREF__) return;
+        var prevHref = window.__RC_SPA_LAST_HREF__;
+        window.__RC_SPA_LAST_HREF__ = nowHref;
+        var list = (window.__RC_SPA_LISTENERS__ || []).slice();
+        setTimeout(function() {
+          for (var i = 0; i < list.length; i++) {
+            try { list[i](nowHref, prevHref); } catch (_err) {}
+          }
+        }, 0);
+      };
+
+      try {
+        var origPush = window.history.pushState;
+        if (typeof origPush === 'function') {
+          window.history.pushState = function() {
+            var r = origPush.apply(this, arguments);
+            notifyIfChanged();
+            return r;
+          };
+        }
+        var origReplace = window.history.replaceState;
+        if (typeof origReplace === 'function') {
+          window.history.replaceState = function() {
+            var r = origReplace.apply(this, arguments);
+            notifyIfChanged();
+            return r;
+          };
+        }
+      } catch (_hErr) {}
+
+      window.addEventListener('popstate', notifyIfChanged);
+      window.addEventListener('hashchange', notifyIfChanged);
+      setInterval(notifyIfChanged, 400);
+    }
+
+    return function unwatch() {
+      var arr = window.__RC_SPA_LISTENERS__ || [];
+      var idx = arr.indexOf(onChange);
+      if (idx !== -1) arr.splice(idx, 1);
+    };
+  }
+
   var bmlBroadcastChannel = null;
   try {
     if (typeof BroadcastChannel !== 'undefined') {
@@ -194,21 +299,30 @@ export function buildInjectableBmlAuthRuntimeJs(origins: string[], primaryOrigin
     }
   } catch (_bcErr) {}
 
-  function getToolConfig(defaults) {
-    var d = defaults || {};
+  function getToolConfig(idOrDefaults, maybeDefaults) {
+    var requestedId = typeof idOrDefaults === 'string' ? idOrDefaults : '';
+    var d = (typeof idOrDefaults === 'object' && idOrDefaults !== null ? idOrDefaults : maybeDefaults) || {};
     var cfg = (typeof window !== 'undefined' && window.__RC_BML_TOOL_CONFIG__) || {};
+    var icon = String(cfg.icon || d.icon || '🔭').trim();
+    var barTitle = String(cfg.barTitle || d.title || d.barTitle || 'Works@TheHC Sync').trim();
+    var compactTitle = String(cfg.compactTitle || d.compactTitle || barTitle || 'RC Sync').trim();
+    var hudTitle = String(cfg.hudTitle || d.trayTitle || d.hudTitle || 'Works@TheHC Sync').trim();
     return {
-      id: cfg.id || d.id || 'bookmarklet',
-      icon: String(cfg.icon || d.icon || '🔭').trim(),
-      barTitle: String(cfg.barTitle || d.barTitle || 'Works@TheHC Sync').trim(),
-      compactTitle: String(cfg.compactTitle || d.compactTitle || 'RC Sync').trim(),
-      hudTitle: String(cfg.hudTitle || d.hudTitle || 'Works@TheHC Sync').trim(),
+      id: cfg.id || requestedId || d.id || 'bookmarklet',
+      icon: icon,
+      barTitle: barTitle,
+      compactTitle: compactTitle,
+      hudTitle: hudTitle,
+      title: barTitle,
+      trayTitle: hudTitle,
       mobileKeyword: String(cfg.mobileKeyword || d.mobileKeyword || 'rc').trim()
     };
   }
 
-  function notifyTabsUpdated(eventType, detail) {
-    var msg = Object.assign({ type: eventType || 'RC_BML_SYNC_COMPLETED', timestamp: Date.now() }, detail || {});
+  function notifyTabsUpdated(typeOrDetail, maybeDetail) {
+    var evType = typeof typeOrDetail === 'string' ? typeOrDetail : 'RC_BML_SYNC_COMPLETED';
+    var detailObj = (typeof typeOrDetail === 'object' && typeOrDetail !== null ? typeOrDetail : maybeDetail) || {};
+    var msg = Object.assign({ type: evType, timestamp: Date.now() }, detailObj);
     try {
       if (bmlBroadcastChannel) bmlBroadcastChannel.postMessage(msg);
     } catch (_e1) {}
@@ -217,7 +331,14 @@ export function buildInjectableBmlAuthRuntimeJs(origins: string[], primaryOrigin
     } catch (_e2) {}
   }
 
+  ensureShellStyles();
+
   window.__RC_BML_CORE__ = {
+    ensureShellStyles: ensureShellStyles,
+    consumeBookmarkletClick: consumeBookmarkletClick,
+    registerLive: registerLive,
+    getLive: getLive,
+    watchSpaLocation: watchSpaLocation,
     getToolConfig: getToolConfig,
     notifyTabsUpdated: notifyTabsUpdated,
     origins: ORIGINS,

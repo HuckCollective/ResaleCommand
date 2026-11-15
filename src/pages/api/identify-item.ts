@@ -10,6 +10,7 @@ import { parsePacificDateToIso } from '../../lib/dateTimeUtils';
 import { verifyAppwriteJwtToMember, requireBookmarkletMember } from '../../lib/bml/serverAuth';
 import type { AiSurface } from '../../lib/aiTelemetry';
 import { loadAppraisalRules, compileRulesPrompt } from '../../lib/appraisalCalibration';
+import { resolveSourcingDomain } from '../../lib/sourcingDomains';
 import { getAllLocationSettingMetas } from '../../lib/warehouses';
 import { applyScoutReportGuardrails, extractDeclaredUnitCount } from '../../lib/scoutReportSections';
 import {
@@ -814,6 +815,7 @@ export const ALL: APIRoute = async ({ request }) => {
                     end_time: resolvedEnvelope.endTimeIso,
                     time_left_text: resolvedEnvelope.timeLeftText,
                     current_bid: resolvedEnvelope.currentPrice > 0 ? resolvedEnvelope.currentPrice : null,
+                    minimum_bid: resolvedEnvelope.minimumBid > 0 ? resolvedEnvelope.minimumBid : null,
                     buyers_premium_pct: resolvedEnvelope.buyersPremiumPct,
                     is_local_pickup_only: resolvedEnvelope.isLocalPickupOnly,
                     seller_id: resolvedEnvelope.sellerId,
@@ -882,10 +884,19 @@ export const ALL: APIRoute = async ({ request }) => {
         }
 
         const appraisalRules = await loadAppraisalRules();
+        const resolvedScanDomainKey = outerResolvedEnvelope
+            ? resolveSourcingDomain({
+                  url: outerResolvedEnvelope.sourceUrl || targetUrl,
+                  platformId: outerResolvedEnvelope.platformName,
+              })
+            : targetUrl
+              ? resolveSourcingDomain(targetUrl)
+              : 'in_person';
         const calibrationBlock = compileRulesPrompt(
             appraisalRules,
             outerTargetLocations,
-            `${userNotes} ${scrapedListingContext}`
+            `${userNotes} ${scrapedListingContext}`,
+            resolvedScanDomainKey
         );
         const listingTitleHint =
             outerResolvedEnvelope?.title || parsedListingData?.title || parsedListingData?.itemName || '';
@@ -1062,6 +1073,9 @@ export const ALL: APIRoute = async ({ request }) => {
                     if (target.auction_meta.current_bid !== undefined && target.auction_meta.current_bid !== null) {
                         target.currentBid = target.auction_meta.current_bid;
                     }
+                    if (target.auction_meta.minimum_bid !== undefined && target.auction_meta.minimum_bid !== null) {
+                        target.minimumBid = target.auction_meta.minimum_bid;
+                    }
                 }
                 if (target.purchase_strategy?.max_bid) {
                     target.maxBid = target.purchase_strategy.max_bid;
@@ -1099,11 +1113,18 @@ export const ALL: APIRoute = async ({ request }) => {
                     isLocalPickupOnly || listingMode === 'local_cash'
                         ? 0
                         : Number(target.shipping_info?.total ?? scrapedShipping?.total ?? 0);
-                const currentAskNum = Number(
+                const rawCurrentAskNum = Number(
                     target.currentBid ??
                         outerResolvedEnvelope?.currentPrice ??
                         parsePriceValue(target.purchase_strategy?.current_asking_price, 'midpoint', 0)
                 );
+                const minBidFloorNum = Number(
+                    target.minimumBid ??
+                        target.auction_meta?.minimum_bid ??
+                        outerResolvedEnvelope?.minimumBid ??
+                        0
+                );
+                const currentAskNum = Math.max(rawCurrentAskNum, minBidFloorNum);
 
                 if (target.lot_items && Array.isArray(target.lot_items) && target.lot_items.length > 1) {
                     const lotResaleSum = target.lot_items.reduce((s: number, it: any) => {

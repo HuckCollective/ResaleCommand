@@ -6,6 +6,12 @@ import {
   resolveCanonicalLocationCode,
   type LocationSettingMeta,
 } from './warehouses';
+import {
+  cloneDefaultDomainProfiles,
+  sanitizeDomainProfilesInput,
+  type SourcingDomainKey,
+  type SourcingDomainProfile,
+} from './sourcingDomains';
 
 export const MANIFESTS_COL = 'manifests';
 export const AI_APPRAISAL_RULES_DOC_ID = 'ai_appraisal_rules_v1';
@@ -48,6 +54,8 @@ export interface AppraisalRulesConfig {
     poshmarkUnder15FlatUsd: number;
   };
   categoryNotes: AppraisalCategoryNote[];
+  /** Cloud-stored per-domain sourcing guardrails & combined-shipping toggles (zero bias on global camera /scout) */
+  domainProfiles: Record<SourcingDomainKey, SourcingDomainProfile>;
 }
 
 export type AccuracyChip = 'on_target' | 'under_priced_gem' | 'over_estimated';
@@ -540,6 +548,7 @@ export function getDefaultAppraisalRules(): AppraisalRulesConfig {
         note: 'Value from sold comps per line; extract standout titles as singles (quantity 1) and group like series/author/format items with a quantity.',
       },
     ],
+    domainProfiles: cloneDefaultDomainProfiles(),
   };
 }
 
@@ -623,17 +632,23 @@ export function sanitizeAppraisalRulesInput(
       ),
     },
     categoryNotes: nextNotes,
+    domainProfiles: sanitizeDomainProfilesInput(
+      patch.domainProfiles,
+      current.domainProfiles || cloneDefaultDomainProfiles()
+    ),
   };
 }
 
 /**
  * Compiles live calibration rules + dynamic `warehouses.ts` fees into a single prompt block
  * strictly <= 600 characters (~150 tokens), truncated only on complete rule lines (Section 2b-D).
+ * When `domainKey` is omitted or `'in_person'`, global camera `/scout` stays 100% free of online-auction bias.
  */
 export function compileRulesPrompt(
   rules: AppraisalRulesConfig,
   liveWarehouses?: any[],
-  itemHintText?: string
+  itemHintText?: string,
+  domainKey?: SourcingDomainKey
 ): string {
   const metas: LocationSettingMeta[] = getAllLocationSettingMetas(liveWarehouses);
   const retailBooths = metas.filter((m) => m.commissionRate > 0);
@@ -655,6 +670,14 @@ export function compileRulesPrompt(
   const notesToEmit = matchedNotes.length > 0 ? matchedNotes.slice(0, 2) : [];
 
   const lines: string[] = [headerLine];
+  if (domainKey && domainKey !== 'in_person') {
+    const prof = rules.domainProfiles?.[domainKey];
+    const cleanDomNote = prof?.guardrailNote ? sanitizeRuleNote(prof.guardrailNote) : '';
+    if (prof && cleanDomNote) {
+      const bpTag = prof.defaultBuyersPremiumPct > 0 ? ` (${prof.defaultBuyersPremiumPct}% BP)` : '';
+      lines.push(`- [${prof.shortLabel}${bpTag}]: ${cleanDomNote}`);
+    }
+  }
   for (const cn of notesToEmit) {
     if (!cn.note) continue;
     lines.push(`- ${cn.label}: ${sanitizeRuleNote(cn.note)}`);

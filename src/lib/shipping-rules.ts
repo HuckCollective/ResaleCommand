@@ -6,6 +6,14 @@
  * from Vue components to maintain clean architecture.
  */
 
+import {
+    getDomainProfile,
+    isPlaceholderSellerName,
+    resolveSourcingDomain,
+    type SourcingDomainKey,
+    type SourcingDomainProfile,
+} from './sourcingDomains';
+
 export type MarketplacePlatform = 'shopgoodwill' | 'ctbids' | 'hibid' | 'ebay' | 'generic';
 
 export interface MarketplaceShippingPolicy {
@@ -65,10 +73,10 @@ export const MARKETPLACE_POLICIES: Record<MarketplacePlatform, MarketplaceShippi
     ebay: {
         platform: 'ebay',
         displayName: 'eBay',
-        allowsCombinedShipping: true,
-        maxWeightLbs: 70.0,
+        allowsCombinedShipping: false, // Locked default: ShopGoodwill ONLY unless enabled in Appraisal Lab
+        maxWeightLbs: 50.0,
         maxItemCount: 40,
-        combineWindowDays: 30,
+        combineWindowDays: 5,
         allowsAuctionWithBuyNow: true,
         requiresSameCarrier: true,
         supportsPennyShipping: false,
@@ -78,14 +86,14 @@ export const MARKETPLACE_POLICIES: Record<MarketplacePlatform, MarketplaceShippi
     generic: {
         platform: 'generic',
         displayName: 'General Marketplace',
-        allowsCombinedShipping: true,
+        allowsCombinedShipping: false,
         maxWeightLbs: 50.0,
         maxItemCount: 50,
         combineWindowDays: 14,
         allowsAuctionWithBuyNow: true,
         requiresSameCarrier: false,
         supportsPennyShipping: false,
-        baseCarrierSavingsPerItem: 8.00,
+        baseCarrierSavingsPerItem: 0,
         defaultBuyerPremiumPercent: 0
     }
 };
@@ -225,22 +233,33 @@ export function formatReadableSellerLabel(input: {
 }
 
 /**
- * Detect platform from item URL, seller info, or raw data
+ * Detect platform from item URL, normalized sourcing envelope, or explicit source metadata.
+ * NEVER defaults camera `/scout` or non-SGW listings to `'shopgoodwill'`.
  */
 export function detectPlatform(item: any): MarketplacePlatform {
-    const url = (item?.source_url || item?.url || item?.listing_url || '').toLowerCase();
+    const url = String(item?.source_url || item?.url || item?.listing_url || item?.sourcing?.sourceUrl || '').toLowerCase();
     if (url.includes('shopgoodwill.com')) return 'shopgoodwill';
     if (url.includes('ctbids.com')) return 'ctbids';
     if (url.includes('hibid.com')) return 'hibid';
-    if (url.includes('ebay.com')) return 'ebay';
+    if (url.includes('ebay.')) return 'ebay';
 
-    const source = (item?.sourcingLocation || item?.source || item?.platform || '').toLowerCase();
-    if (source.includes('goodwill') || source.includes('sgw')) return 'shopgoodwill';
+    const domainKey = resolveSourcingDomain({
+        domainKey: item?.domainKey || item?.sourcing?.domainKey,
+        url,
+        sourcingLocation: item?.sourcingLocation,
+        platformId: item?.source || item?.platform,
+        rawAnalysis: item?.rawAnalysis,
+    });
+    if (domainKey === 'shopgoodwill') return 'shopgoodwill';
+    if (domainKey === 'ebay') return 'ebay';
+
+    const source = String(item?.sourcingLocation || item?.source || item?.platform || '').toLowerCase();
+    if (source.includes('shopgoodwill') || source === 'sgw') return 'shopgoodwill';
     if (source.includes('ctbids') || source.includes('caring transitions')) return 'ctbids';
     if (source.includes('hibid')) return 'hibid';
     if (source.includes('ebay')) return 'ebay';
 
-    return 'shopgoodwill'; // Default to shopgoodwill when seller info exists
+    return 'generic';
 }
 
 /**
@@ -278,28 +297,62 @@ export function isBuyNowItem(item: any): boolean {
     return title.includes('buy it now') || title.includes('[buy now]');
 }
 
+function resolveItemDomainKey(item: any): SourcingDomainKey {
+    return resolveSourcingDomain({
+        domainKey: item?.domainKey || item?.sourcing?.domainKey,
+        url: item?.source_url || item?.url || item?.listing_url || item?.sourcing?.sourceUrl,
+        sourcingLocation: item?.sourcingLocation,
+        platformId: item?.source || item?.platform,
+        rawAnalysis: item?.rawAnalysis,
+    });
+}
+
 /**
- * Pure evaluator for a scouted candidate item against existing tracker items
+ * Pure evaluator for a scouted candidate item against existing tracker items.
+ * Scoped strictly by `SourcingDomainKey` and `allowsCombinedShipping` so global `/scout`
+ * and non-combinable domains never inherit ShopGoodwill 20-lb shipping synergy.
  */
-export function evaluateCombinedShipping(candidateItem: any, existingTrackerItems: any[]): SynergyEvaluationResult | null {
+export function evaluateCombinedShipping(
+    candidateItem: any,
+    existingTrackerItems: any[],
+    domainProfilesOverride?: Partial<Record<SourcingDomainKey, Partial<SourcingDomainProfile>>> | null
+): SynergyEvaluationResult | null {
     if (!candidateItem) return null;
 
+    const candidateDomain = resolveItemDomainKey(candidateItem);
+    const domainProfile = getDomainProfile(candidateDomain, domainProfilesOverride);
+    if (!domainProfile.allowsCombinedShipping) return null;
+
     const sellerId = candidateItem.sellerId || candidateItem.seller_info?.seller_id;
-    const sellerName = candidateItem.sellerName || candidateItem.seller_info?.seller_name;
+    const rawSellerName = candidateItem.sellerName || candidateItem.seller_info?.seller_name || '';
+    const sellerName = isPlaceholderSellerName(rawSellerName) ? '' : String(rawSellerName).trim();
     if (!sellerId && !sellerName) return null;
 
-    // Filter items in active tracker sharing the same seller
+    // Filter items in active tracker sharing BOTH the exact same domainKey AND the same real seller
     const matches = (existingTrackerItems || []).filter(item => {
         if (!item) return false;
+        if (resolveItemDomainKey(item) !== candidateDomain) return false;
         if (sellerId && item.sellerId && String(item.sellerId) === String(sellerId)) return true;
-        if (sellerName && item.sellerName && item.sellerName.trim().toLowerCase() === sellerName.trim().toLowerCase()) return true;
+        const itemSeller = isPlaceholderSellerName(item.sellerName) ? '' : String(item.sellerName || '').trim();
+        if (sellerName && itemSeller && itemSeller.toLowerCase() === sellerName.toLowerCase()) return true;
         return false;
     });
 
     if (matches.length === 0) return null;
 
     const platform = detectPlatform(candidateItem);
-    const policy = MARKETPLACE_POLICIES[platform] || MARKETPLACE_POLICIES.shopgoodwill;
+    const basePolicy = MARKETPLACE_POLICIES[platform] || MARKETPLACE_POLICIES.generic;
+    const policy: MarketplaceShippingPolicy = {
+        ...basePolicy,
+        allowsCombinedShipping: domainProfile.allowsCombinedShipping,
+        maxWeightLbs: domainProfile.maxWeightLbs || basePolicy.maxWeightLbs || 20.0,
+        maxItemCount: domainProfile.maxItemCount || basePolicy.maxItemCount || 20,
+        combineWindowDays: domainProfile.combineWindowDays || basePolicy.combineWindowDays || 7,
+        baseCarrierSavingsPerItem:
+            basePolicy.baseCarrierSavingsPerItem > 0
+                ? basePolicy.baseCarrierSavingsPerItem
+                : (candidateDomain === 'shopgoodwill' ? 12.0 : 6.0),
+    };
 
     // 1. Weight Evaluation
     const candidateWeight = getItemWeight(candidateItem);
@@ -315,7 +368,7 @@ export function evaluateCombinedShipping(candidateItem: any, existingTrackerItem
     const itemLimit = policy.maxItemCount || 20;
     const isOverItemLimit = totalItemCount > itemLimit;
 
-    // 3. 7-Day Date Window Evaluation
+    // 3. Date Window Evaluation
     const allEndTimes: number[] = [];
     const candidateEndTime = candidateItem.auctionEndsAt || candidateItem.auction_meta?.end_time;
     if (candidateEndTime) {
@@ -361,8 +414,8 @@ export function evaluateCombinedShipping(candidateItem: any, existingTrackerItem
     }
 
     // 5. Penny (1-Cent) Shipping Evaluation
-    const isCandidatePenny = isPennyShippingItem(candidateItem);
-    const existingPennyCount = matches.filter(isPennyShippingItem).length;
+    const isCandidatePenny = policy.supportsPennyShipping && isPennyShippingItem(candidateItem);
+    const existingPennyCount = policy.supportsPennyShipping ? matches.filter(isPennyShippingItem).length : 0;
     const allPennyShipping = isCandidatePenny && existingPennyCount === matches.length;
     const hasPennyShippingItem = isCandidatePenny || existingPennyCount > 0;
 
@@ -384,22 +437,22 @@ export function evaluateCombinedShipping(candidateItem: any, existingTrackerItem
         ? matches.length * policy.baseCarrierSavingsPerItem 
         : 0;
 
-    // 8. Warning Generation
+    // 8. Warning Generation (Policy-Driven — zero hardcoded Goodwill labels on other domains)
     const warnings: string[] = [];
     if (!isSellerCombinable) {
         warnings.push("Seller marked listing as non-combinable (fragile/oversized). Must ship in its own box.");
     }
     if (isOverWeightLimit) {
-        warnings.push(`Combined weight (${totalWeight} lbs) exceeds the ${weightLimit}-lb limit. Goodwill will split this order into two separate shipments and charge a second base shipping fee ($15+).`);
+        warnings.push(`Combined weight (${totalWeight} lbs) exceeds ${policy.displayName}'s ${weightLimit}-lb box limit and will split into separate shipments.`);
     }
     if (isOverItemLimit) {
-        warnings.push(`Combined order has ${totalItemCount} items, exceeding the ${itemLimit}-item maximum. Extra items will be split into a separate shipment.`);
+        warnings.push(`Combined order has ${totalItemCount} items, exceeding ${policy.displayName}'s ${itemLimit}-item maximum.`);
     }
     if (!isWithinDateWindow) {
-        warnings.push(`Auctions close ${dateSpreadDays} days apart, exceeding ShopGoodwill's ${policy.combineWindowDays}-day closing window (${earliestDate} - ${latestDate}).`);
+        warnings.push(`Listings close ${dateSpreadDays} days apart, exceeding ${policy.displayName}'s ${policy.combineWindowDays}-day combine window (${earliestDate} - ${latestDate}).`);
     }
     if (isFormatConflict) {
-        warnings.push("ShopGoodwill does not permit combining 'Buy It Now' (fixed-price) listings with auction items.");
+        warnings.push(`${policy.displayName} does not permit combining 'Buy It Now' (fixed-price) listings with auction items.`);
     }
     if (pennyNotice) {
         warnings.push(pennyNotice);
@@ -410,7 +463,7 @@ export function evaluateCombinedShipping(candidateItem: any, existingTrackerItem
     if (!isEligible) {
         noticeBadge = {
             type: 'error',
-            title: isOverWeightLimit ? '20-lb Weight Cap Exceeded!' : (isOverItemLimit ? '20-Item Limit Exceeded!' : 'Ineligible for Combined Shipping'),
+            title: isOverWeightLimit ? `${weightLimit}-lb Weight Cap Exceeded!` : (isOverItemLimit ? `${itemLimit}-Item Limit Exceeded!` : 'Ineligible for Combined Shipping'),
             message: warnings[0] || 'Items cannot be combined under platform rules.',
             badgeClass: 'badge-error text-error-content'
         };
@@ -418,14 +471,14 @@ export function evaluateCombinedShipping(candidateItem: any, existingTrackerItem
         noticeBadge = {
             type: 'success',
             title: '1¢ Penny Bundle Synergy!',
-            message: `All items qualify for 1¢ base freight from ${sellerName}!`,
+            message: `All items qualify for 1¢ base freight from ${sellerName || policy.displayName}!`,
             badgeClass: 'badge-accent text-accent-content'
         };
     } else {
         noticeBadge = {
             type: 'success',
             title: 'Combined Shipping Match!',
-            message: `Estimated base shipping savings: ~$${estimatedSavings.toFixed(2)} from ${sellerName}.`,
+            message: `Estimated base shipping savings: ~$${estimatedSavings.toFixed(2)} from ${sellerName || policy.displayName}.`,
             badgeClass: 'badge-success text-success-content'
         };
     }
@@ -434,7 +487,7 @@ export function evaluateCombinedShipping(candidateItem: any, existingTrackerItem
         platform,
         policy,
         sellerId: sellerId ?? null,
-        sellerName: sellerName || matches[0]?.sellerName || 'Regional Goodwill Seller',
+        sellerName: sellerName || matches[0]?.sellerName || `${policy.displayName} Seller`,
         matchingCount: matches.length,
         isEligible,
         isSellerCombinable,
@@ -465,28 +518,53 @@ export function evaluateCombinedShipping(candidateItem: any, existingTrackerItem
 }
 
 /**
- * Cluster evaluator for Buy Tracker Tray manifest
+ * Cluster evaluator for Buy Tracker Tray manifest (scoped per combinable SourcingDomainKey)
  */
-export function evaluateSellerClusters(items: any[]): SellerCluster[] {
-    const map = new Map<string, any[]>();
+export function evaluateSellerClusters(
+    items: any[],
+    domainProfilesOverride?: Partial<Record<SourcingDomainKey, Partial<SourcingDomainProfile>>> | null
+): SellerCluster[] {
+    const map = new Map<string, { domainKey: SourcingDomainKey; domainProfile: SourcingDomainProfile; items: any[] }>();
     for (const item of items || []) {
         if (!item) continue;
-        const key = item.sellerId ? String(item.sellerId) : (item.sellerName ? item.sellerName.trim().toLowerCase() : null);
-        if (key) {
-            if (!map.has(key)) map.set(key, []);
-            map.get(key)!.push(item);
+        const domainKey = resolveItemDomainKey(item);
+        const domainProfile = getDomainProfile(domainKey, domainProfilesOverride);
+        if (!domainProfile.allowsCombinedShipping) continue;
+
+        const cleanSeller = isPlaceholderSellerName(item.sellerName) ? '' : String(item.sellerName || '').trim().toLowerCase();
+        const rawSellerKey = item.sellerId ? String(item.sellerId) : (cleanSeller || null);
+        if (!rawSellerKey) continue;
+
+        const compositeKey = `${domainKey}::${rawSellerKey}`;
+        if (!map.has(compositeKey)) {
+            map.set(compositeKey, { domainKey, domainProfile, items: [] });
         }
+        map.get(compositeKey)!.items.push(item);
     }
 
     const clusters: SellerCluster[] = [];
-    for (const [key, clusterItems] of map.entries()) {
+    for (const [key, entry] of map.entries()) {
+        const { domainKey, domainProfile, items: clusterItems } = entry;
         const platform = detectPlatform(clusterItems[0]);
-        const policy = MARKETPLACE_POLICIES[platform] || MARKETPLACE_POLICIES.shopgoodwill;
-        const namedItem = clusterItems.find((i) => i.sellerName && !/^seller\s*#?\d+$/i.test(String(i.sellerName).trim()));
+        const basePolicy = MARKETPLACE_POLICIES[platform] || MARKETPLACE_POLICIES.generic;
+        const policy: MarketplaceShippingPolicy = {
+            ...basePolicy,
+            allowsCombinedShipping: domainProfile.allowsCombinedShipping,
+            maxWeightLbs: domainProfile.maxWeightLbs || basePolicy.maxWeightLbs || 20.0,
+            maxItemCount: domainProfile.maxItemCount || basePolicy.maxItemCount || 20,
+            combineWindowDays: domainProfile.combineWindowDays || basePolicy.combineWindowDays || 7,
+            baseCarrierSavingsPerItem:
+                basePolicy.baseCarrierSavingsPerItem > 0
+                    ? basePolicy.baseCarrierSavingsPerItem
+                    : (domainKey === 'shopgoodwill' ? 12.0 : 6.0),
+        };
+        const namedItem = clusterItems.find(
+            (i) => i.sellerName && !isPlaceholderSellerName(i.sellerName) && !/^seller\s*#?\d+$/i.test(String(i.sellerName).trim())
+        );
         const displayName = formatReadableSellerLabel({
             sellerName: namedItem?.sellerName || clusterItems[0].sellerName,
             sourcingLocation: clusterItems[0].sourcingLocation,
-            sellerId: clusterItems[0].sellerId || key,
+            sellerId: clusterItems[0].sellerId || key.split('::')[1],
             platform,
         });
         
@@ -513,7 +591,7 @@ export function evaluateSellerClusters(items: any[]): SellerCluster[] {
             }
         }
 
-        const pennyCount = clusterItems.filter(isPennyShippingItem).length;
+        const pennyCount = policy.supportsPennyShipping ? clusterItems.filter(isPennyShippingItem).length : 0;
         const allPennyShipping = pennyCount === clusterItems.length && pennyCount > 0;
         const hasPennyShipping = pennyCount > 0;
         const canCombine = !clusterItems.some(i => i.canCombineShipping === false) && !isOverWeightLimit && !isOverItemLimit && isWithinDateWindow;
@@ -521,13 +599,13 @@ export function evaluateSellerClusters(items: any[]): SellerCluster[] {
 
         const warnings: string[] = [];
         if (isOverWeightLimit) {
-            warnings.push(`Weight (${totalWeight} lbs) exceeds 20-lb limit. Goodwill will split into 2 shipments!`);
+            warnings.push(`Weight (${totalWeight} lbs) exceeds ${policy.displayName}'s ${weightLimit}-lb limit and will split into 2 shipments!`);
         }
         if (isOverItemLimit) {
-            warnings.push(`Item count (${totalItemCount}) exceeds 20-item cap.`);
+            warnings.push(`Item count (${totalItemCount}) exceeds ${itemLimit}-item cap.`);
         }
         if (!isWithinDateWindow) {
-            warnings.push(`Auctions close ${dateSpreadDays} days apart (> 7 days).`);
+            warnings.push(`Listings close ${dateSpreadDays} days apart (> ${policy.combineWindowDays} days).`);
         }
         if (hasPennyShipping && !allPennyShipping) {
             warnings.push("Contains both 1¢ and regular items — 1¢ rate will be voided for standard freight.");

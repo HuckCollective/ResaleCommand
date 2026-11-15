@@ -27,7 +27,8 @@
   const RC_REPORT_ENDPOINTS = RC_ORIGINS.map((o) => o + '/api/md-verify-report');
   const RC_SALES_SYNC_ENDPOINTS = RC_ORIGINS.map((o) => o + '/api/sales/ricochet-sync');
 
-  const RC_SCRIPT_VERSION = 'v5.0';
+  const RC_SCRIPT_VERSION =
+    (typeof window !== 'undefined' && window.__RC_SCRIPT_VERSION__) || 'v5.0';
 
   // State (100% driven by central Location Settings injected by /scripts/rico-bookmarklet.js)
   const activeLocMeta = window.__RC_ACTIVE_LOCATION_META__ || {};
@@ -36,6 +37,18 @@
   const activeLocationName = String(activeLocMeta.name || activeLocMeta.fullName || 'Ricochet Booth');
   const activeBmlIcon = String(activeBmlTool.icon || '⚡').trim() || '⚡';
   const activeHudTitle = String(activeBmlTool.hudTitle || `${activeLocationName} Barcode Sync & Verifier`).trim();
+
+  // Unified BML Shell Live-Handle Guard: toggle Drawer ⇄ Pill on 2nd Bookmarks Bar click without wiping catalogProducts!
+  if (
+    typeof window !== 'undefined' &&
+    window.__RC_RICO_LIVE__ &&
+    window.__RC_RICO_LIVE__.version === RC_SCRIPT_VERSION &&
+    window.__RC_RICO_LIVE__.locationCode === activeLocationCode &&
+    typeof window.__RC_RICO_LIVE__.onBookmarkletClick === 'function'
+  ) {
+    window.__RC_RICO_LIVE__.onBookmarkletClick();
+    return;
+  }
   const getBmlMemberSession = () => {
     try {
       return window.__RC_BML_AUTH__ && typeof window.__RC_BML_AUTH__.getSession === 'function'
@@ -873,7 +886,8 @@
 
     const root = document.createElement('div');
     root.id = 'rc-ricochet-sync-root';
-    root.style.cssText = 'position:fixed;bottom:20px;right:20px;z-index:999999;font-family:system-ui,-apple-system,sans-serif;';
+    root.setAttribute('data-rc-bml-shell', 'ricochet_sync');
+    root.style.cssText = 'position:fixed;bottom:16px;right:16px;z-index:2147483647;font-family:system-ui,-apple-system,sans-serif;';
 
     const styleEl = document.getElementById('rc-ricochet-sync-keyframes') || document.createElement('style');
     styleEl.id = 'rc-ricochet-sync-keyframes';
@@ -882,17 +896,21 @@
       (document.head || document.body).appendChild(styleEl);
     }
 
+    const primaryOrigin = RC_ORIGINS[0] || 'https://works.thehc.llc';
+    const syncHubHref = `${primaryOrigin}/warehouse/sync/${encodeURIComponent(activeLocationCode || 'MD')}`;
+    const salesHubHref = `${primaryOrigin}/sales/import/${encodeURIComponent(activeLocationCode || 'MD')}`;
+
     root.innerHTML = `
-      <div id="rc-fab-bar" style="
+      <div id="rc-fab-bar" class="rc-bml-pill-bar" data-rc-bml-shell="ricochet_sync" data-drawer-open="false" style="
         display: inline-flex;
         align-items: center;
         gap: 6px;
-        background: linear-gradient(135deg, #312e81, #4f46e5, #6d28d9);
+        background: linear-gradient(135deg, #1e1b4b, #4338ca, #6d28d9);
         color: #fff;
-        border: 1px solid rgba(167, 139, 250, 0.45);
+        border: 1.5px solid rgba(167, 139, 250, 0.55);
         border-radius: 9999px;
         padding: 6px 10px 6px 14px;
-        box-shadow: 0 12px 28px rgba(15, 23, 42, 0.65);
+        box-shadow: 0 12px 30px rgba(2, 6, 23, 0.72);
       ">
         <button id="rc-sync-fab" type="button" style="
           background: transparent;
@@ -907,7 +925,7 @@
           gap: 7px;
           white-space: nowrap;
         ">
-          <span>${rcDropEsc(activeBmlIcon)} ${rcDropEsc(activeLocationName)} Sync</span>
+          <span>${rcDropEsc(activeBmlIcon)} ${rcDropEsc(activeLocationName)} Sync ▴</span>
           <span id="rc-fab-auth" style="background:rgba(245,158,11,0.28);border:1px solid rgba(251,191,36,0.65);color:#fef08a;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:800;">🔐 Sign In</span>
           <span id="rc-fab-badge" style="background:rgba(15,23,42,0.45);border:1px solid rgba(255,255,255,0.2);padding:2px 8px;border-radius:999px;font-size:11px;font-family:monospace;">Ready</span>
         </button>
@@ -925,35 +943,41 @@
         ">🚪 Log Out</button>
       </div>
 
-      <div id="rc-sync-panel" style="
+      <div id="rc-sync-panel" class="rc-bml-drawer" data-rc-bml-shell="ricochet_sync" data-drawer-open="false" style="
         display: none;
         position: fixed;
-        bottom: 76px;
-        right: 20px;
-        width: 440px;
-        max-height: 86vh;
+        top: 0;
+        right: 0;
+        bottom: 0;
+        height: 100dvh;
+        width: 456px;
+        max-width: 96vw;
+        z-index: 2147483646;
         background: #0f172a;
         color: #f8fafc;
-        border: 1px solid #334155;
-        border-radius: 16px;
-        box-shadow: 0 20px 45px rgba(0,0,0,0.65);
+        border-left: 2px solid #818cf8;
+        border-radius: 0;
+        box-shadow: -14px 0 42px rgba(2, 6, 23, 0.72);
         flex-direction: column;
         overflow: hidden;
       ">
-        <!-- Header -->
-        <div style="padding: 11px 14px; background: #1e293b; border-bottom: 1px solid #334155; display: flex; flex-direction: column; gap: 6px;">
-          <div style="display: flex; justify-content: space-between; align-items: center; gap: 8px;">
-            <div style="font-weight: 800; font-size: 13.5px; color: #f8fafc; display: flex; align-items: center; gap: 6px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+        <!-- Frozen Top Command Header (100% of Pill Bar items integrated & frozen at top while Drawer is open) -->
+        <div class="rc-bml-drawer-header" style="flex-shrink: 0; padding: 10px 14px; background: linear-gradient(135deg, #1e1b4b, #312e81); border-bottom: 1px solid #334155; display: flex; flex-direction: column; gap: 7px;">
+          <div style="display: flex; justify-content: space-between; align-items: center; gap: 6px;">
+            <div style="font-weight: 800; font-size: 13px; color: #f8fafc; display: flex; align-items: center; gap: 6px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
               <span style="overflow:hidden;text-overflow:ellipsis;">${rcDropEsc(activeBmlIcon)} ${rcDropEsc(activeHudTitle)}</span>
             </div>
-            <div style="display:flex;align-items:center;gap:6px;flex-shrink:0;">
-              <button id="rc-refresh-cloud-btn" type="button" title="Refresh booth catalog & cloud tags" style="background:#334155;border:1px solid #475569;color:#f8fafc;font-size:11px;font-weight:800;padding:4px 9px;border-radius:7px;cursor:pointer;white-space:nowrap;">🔄 Refresh</button>
-              <button id="rc-sync-close" type="button" title="Minimize to bottom pill" style="background:transparent;border:none;color:#94a3b8;font-size:18px;cursor:pointer;line-height:1;padding:2px 4px;">✕</button>
+            <div style="display:flex;align-items:center;gap:5px;flex-shrink:0;">
+              <button id="rc-refresh-cloud-btn" type="button" title="Refresh booth catalog & cloud tags" style="background:#334155;border:1px solid #475569;color:#f8fafc;font-size:10.5px;font-weight:800;padding:4px 8px;border-radius:7px;cursor:pointer;white-space:nowrap;">🔄 Refresh</button>
+              <a href="${rcDropEsc(syncHubHref)}" target="_blank" rel="noopener noreferrer" title="Open Location Sync Hub" style="background:rgba(56,189,248,0.16);border:1px solid rgba(56,189,248,0.45);color:#bae6fd;font-size:10.5px;font-weight:800;padding:4px 7px;border-radius:7px;text-decoration:none;white-space:nowrap;">📊 Sync ↗</a>
+              <a href="${rcDropEsc(salesHubHref)}" target="_blank" rel="noopener noreferrer" title="Open Sales Reconciler" style="background:rgba(16,185,129,0.16);border:1px solid rgba(52,211,153,0.45);color:#a7f3d0;font-size:10.5px;font-weight:800;padding:4px 7px;border-radius:7px;text-decoration:none;white-space:nowrap;">💰 Sales ↗</a>
+              <button id="rc-sync-close" type="button" title="Minimize Drawer to bottom-right Pill Bar" style="background:rgba(15,23,42,0.55);border:1px solid #475569;color:#e2e8f0;font-size:11px;font-weight:800;border-radius:7px;cursor:pointer;line-height:1;padding:5px 8px;white-space:nowrap;">▾ Pill</button>
             </div>
           </div>
           <div style="font-size: 11px; color: #94a3b8; display: flex; align-items: center; justify-content: space-between; gap: 6px; flex-wrap: wrap;">
             <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
               <span id="rc-cloud-badge" style="font-size: 10px; background: #065f46; color: #6ee7b7; padding: 2px 7px; border-radius: 999px; font-weight: 800; white-space: nowrap;">✅ ${RC_SCRIPT_VERSION} Ready</span>
+              <span id="rc-drawer-pill-badge" style="font-size: 10px; background: rgba(15,23,42,0.55); border: 1px solid rgba(255,255,255,0.2); color: #f8fafc; padding: 2px 7px; border-radius: 999px; font-family: monospace; white-space: nowrap;">Ready</span>
               <span id="rc-catalog-status" style="font-size:10.5px;color:#cbd5e1;font-weight:600;">Scanning booth catalog...</span>
             </div>
             <div style="display:flex;align-items:center;gap:4px;">
@@ -963,8 +987,8 @@
           </div>
         </div>
 
-        <!-- 3-Tab Mode Switcher (🏷️ Booth Tags | 🚚 New Drops | 💰 Sales) -->
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px; padding: 8px 14px; background: #0f172a; border-bottom: 1px solid #334155;">
+        <!-- 3-Tab Mode Switcher (🏷️ Booth Tags | 🚚 New Drops | 💰 Sales) — frozen beneath header -->
+        <div style="flex-shrink: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 6px; padding: 8px 14px; background: #0f172a; border-bottom: 1px solid #334155;">
           <button id="rc-tab-btn-inventory" type="button" style="
             padding: 7px 8px;
             border-radius: 8px;
@@ -1429,9 +1453,7 @@
       const ta = document.getElementById('rc-sync-textarea');
       if (ta) ta.value = '';
       if (isOpen) {
-        isOpen = false;
-        const panel = document.getElementById('rc-sync-panel');
-        if (panel) panel.style.display = 'none';
+        setDrawerOpenState(false);
       }
       refreshMemberBtnState();
       updateUI();
@@ -1491,9 +1513,32 @@
       });
     });
 
-    // Keep modal CLOSED on passive page load; auto-open when explicitly clicked from the bookmarklet bar!
+    // URL-Driven 1st-Click Mode Auto-Detection: keep Drawer closed on passive Tampermonkey page load;
+    // auto-open the 100dvh Right-Side Drawer immediately when clicked from the Chrome Bookmarks Bar!
     const clickedFromBookmarklet = Boolean(window.__RC_BOOKMARKLET_CLICKED__);
     window.__RC_BOOKMARKLET_CLICKED__ = false;
+    if (clickedFromBookmarklet && !getBmlMemberSession()) {
+      window.__RC_OPEN_PANEL_AFTER_AUTH__ = true;
+    }
+    const liveHandle = {
+      version: RC_SCRIPT_VERSION,
+      locationCode: activeLocationCode,
+      onBookmarkletClick: () => {
+        const sess = getBmlMemberSession();
+        if (!sess) {
+          window.__RC_OPEN_PANEL_AFTER_AUTH__ = true;
+          if (window.__RC_BML_AUTH__ && typeof window.__RC_BML_AUTH__.openConnectFlow === 'function') {
+            window.__RC_BML_AUTH__.openConnectFlow();
+          }
+          return;
+        }
+        togglePanel();
+      },
+    };
+    window.__RC_RICO_LIVE__ = liveHandle;
+    if (window.__RC_BML_CORE__ && typeof window.__RC_BML_CORE__.registerLive === 'function') {
+      window.__RC_BML_CORE__.registerLive('ricochet_sync', liveHandle);
+    }
     hydratePreloadedBarcodes(clickedFromBookmarklet && Boolean(getBmlMemberSession()));
     setupLiveTabConnection();
   }
@@ -1837,12 +1882,24 @@
     return tabName === 'Payout' || tabName === 'Payout History';
   }
 
-  function togglePanel() {
-    isOpen = !isOpen;
+  function setDrawerOpenState(nextOpen) {
+    isOpen = Boolean(nextOpen);
     const panel = document.getElementById('rc-sync-panel');
+    const fabBar = document.getElementById('rc-fab-bar');
     if (panel) {
       panel.style.display = isOpen ? 'flex' : 'none';
+      panel.setAttribute('data-drawer-open', isOpen ? 'true' : 'false');
     }
+    if (fabBar) {
+      // Mutually-Exclusive Shell: hide bottom-right Pill Bar while 100dvh Drawer is open,
+      // keeping DOM node mounted so clientCore.ts renderAuthBanner never spawns a duplicate bar!
+      fabBar.style.display = isOpen ? 'none' : 'inline-flex';
+      fabBar.setAttribute('data-drawer-open', isOpen ? 'true' : 'false');
+    }
+  }
+
+  function togglePanel() {
+    setDrawerOpenState(!isOpen);
     if (isOpen) {
       if (isUserOnRicochetPayoutTab()) {
         switchModalTab('sales');
@@ -2377,20 +2434,24 @@
     if (fabLogout) {
       fabLogout.style.display = sess ? 'inline-block' : 'none';
     }
-    if (fabBadge) {
+    const drawerPillBadge = document.getElementById('rc-drawer-pill-badge');
+    if (fabBadge || drawerPillBadge) {
+      let badgeText = '';
       if (!sess) {
-        fabBadge.textContent =
+        badgeText =
           catalogProducts.length > 0 ? `${catalogProducts.length} Booth Items` : 'Click to Sign In';
       } else if (isFetchingCloudPayload && totalMapped === 0) {
-        fabBadge.textContent =
+        badgeText =
           catalogProducts.length > 0 ? `⏳ Auditing ${catalogProducts.length}...` : '⏳ Syncing...';
       } else {
         const fixHint = mismatchUpc > 0 ? ` • 🟠 ${mismatchUpc} Fix` : '';
-        fabBadge.textContent =
+        badgeText =
           catalogProducts.length > 0
             ? `${verifiedMatch}/${totalCatalog} Matched${fixHint}`
             : `${totalMapped} Ready`;
       }
+      if (fabBadge) fabBadge.textContent = badgeText;
+      if (drawerPillBadge) drawerPillBadge.textContent = badgeText;
     }
 
     updateSalesSyncTabUI();
