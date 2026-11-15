@@ -718,6 +718,12 @@ const transportContracts = [
             { pattern: /authoritativeUserNotes:\s*`[^`]*calibrationBlock/, label: 'Interpolating calibrationBlock into authoritativeUserNotes (Law 2.G violation)' },
         ],
     },
+    {
+        file: 'public/auction-scout-sync.user.js',
+        mustNotContain: [
+            { pattern: /var\s+unitLandedInline\s*=\s*\(Number\(rep\./, label: 'Undefined rep reference inside renderItemTrayBody (must use state.scoutReport / repObj)' },
+        ],
+    },
 ];
 // The master shared skill is the single source of truth for the 7 laws — no standalone rule files
 if (fs.existsSync(path.resolve('.agents/rules/master-architecture-laws.md'))) {

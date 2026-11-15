@@ -891,7 +891,9 @@
     var seller = '';
     var sellerMatch = bodyText.match(/Seller\s*:?\s*(Goodwill[^\n\r|]{3,65}|[^\n\r|]{3,50}?Goodwill[^\n\r|]{0,30})/i);
     if (sellerMatch) {
-      seller = cleanText(sellerMatch[1]).replace(/\s+(?:Print Page|Share|Location| Seller).*$/i, '');
+      seller = cleanText(sellerMatch[1])
+        .replace(/\s+(?:Report\s+Ad|Item\s+Description|Item\s+Info|Shipping|Seller\s+Info|Bid\s+History|Print\s+Page|Share|Location|Seller).*$/i, '')
+        .trim();
     }
 
     var weightMatch = bodyText.match(/(?:Shipping Weight|Weight)\s*:?\s*([0-9.]+)\s*(?:lbs?|pounds?)/i);
@@ -982,7 +984,7 @@
       if (!currentPrice && apiHit.currentPrice) currentPrice = apiHit.currentPrice;
       if (apiHit.shippingWeight && !weightMatch) shippingWeight = apiHit.shippingWeight;
       if (!h1 && apiHit.title) h1 = apiHit.title;
-      if (!seller && apiHit.seller) seller = apiHit.seller;
+      if (apiHit.seller) seller = apiHit.seller;
     }
 
     return {
@@ -2629,8 +2631,9 @@
         : acbThin
         ? ('⚠️ +$' + acbNet + ' Thin (<1.7x Floor)')
         : ('+$' + acbNet + ' Net');
-      var unitLandedInline = (Number(rep.declared_unit_count) >= 2 && Number(rep.landed_cost_per_unit) > 0)
-        ? (' ($' + Number(rep.landed_cost_per_unit).toFixed(2) + '/unit × ' + Number(rep.declared_unit_count) + ')')
+      var repObj = state.scoutReport || {};
+      var unitLandedInline = (Number(repObj.declared_unit_count) >= 2 && Number(repObj.landed_cost_per_unit) > 0)
+        ? (' ($' + Number(repObj.landed_cost_per_unit).toFixed(2) + '/unit × ' + Number(repObj.declared_unit_count) + ')')
         : '';
       html +=
         '<div style="background:' + acbBg + ';border:1px solid ' + acbBorder + ';border-radius:8px;padding:6px 9px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;gap:6px;font-size:10.5px;">' +
