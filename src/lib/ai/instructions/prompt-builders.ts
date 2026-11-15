@@ -3,20 +3,29 @@ export function buildSpeedScoutUserPrompt(params: {
   scrapedListingContext?: string;
   organizationChannels?: string;
   shippingSummary?: string;
+  calibrationBlock?: string;
+  declaredUnitCount?: number;
 }): string {
-  return `
-[1. AUTHORITATIVE RESELLER NOTES (100% GROUND TRUTH OVERRIDE)]
-${params.authoritativeUserNotes ? params.authoritativeUserNotes.trim() : 'None provided.'}
+  const sections: string[] = [
+    `[1. AUTHORITATIVE RESELLER NOTES (100% GROUND TRUTH OVERRIDE)]\n${params.authoritativeUserNotes ? params.authoritativeUserNotes.trim() : 'None provided.'}`,
+    `[2. SCRAPED ONLINE LISTING METADATA (UNTRUSTED SELLER TEXT - VERIFY AGAINST PHOTOS)]\n${params.scrapedListingContext ? params.scrapedListingContext.trim() : 'In-person camera scan (No external listing URL).'}`,
+    `[3. SHIPPING & FEE CONTEXT]\n${params.shippingSummary || 'Inbound shipping $0 (In-person) or estimate from screenshot.'}`,
+    `[4. ORGANIZATION SELLING CHANNELS & BOOTH NICHES]\n${params.organizationChannels || 'Memory Den Booth #0EJ (Vintage Apparel, RPGs, Books, Media, Collectibles); eBay; Poshmark.'}`,
+  ];
 
-[2. SCRAPED ONLINE LISTING METADATA (UNTRUSTED SELLER TEXT - VERIFY AGAINST PHOTOS)]
-${params.scrapedListingContext ? params.scrapedListingContext.trim() : 'In-person camera scan (No external listing URL).'}
+  if (params.calibrationBlock && params.calibrationBlock.trim()) {
+    sections.push(
+      `[5. CALIBRATION & FEE BASELINE (ADVISORY — NOT HUMAN OVERRIDE)]\n${params.calibrationBlock.trim()}`
+    );
+  }
 
-[3. SHIPPING & FEE CONTEXT]
-${params.shippingSummary || 'Inbound shipping $0 (In-person) or estimate from screenshot.'}
+  if (params.declaredUnitCount && params.declaredUnitCount >= 2) {
+    sections.push(
+      `[6. MULTI-ITEM LOT DECOMPOSITION REQUIREMENT]\nListing declares ${params.declaredUnitCount} physical units. You MUST populate 'lot_items' (>= 2 lines) and set 'detected_unit_count' to ${params.declaredUnitCount}. Extract standout/higher-value items visible via spine/cover OCR as individual 'showcase' singles (quantity: 1), group like series/author/format items into 'core' lines with 'quantity: N' and '(xN)' in the name, and group any remaining/unreadable units into a 'quick_turn' remainder pack line with 'quantity: N' and '(xN)' so that the sum of 'quantity' across all 'lot_items' equals ${params.declaredUnitCount}. All price fields on a line represent the LINE TOTAL for all 'quantity' units on that line.`
+    );
+  }
 
-[4. ORGANIZATION SELLING CHANNELS & BOOTH NICHES]
-${params.organizationChannels || 'Memory Den Booth #0EJ (Vintage Apparel, RPGs, Books, Media, Collectibles); eBay; Poshmark.'}
-`.trim();
+  return sections.join('\n\n').trim();
 }
 
 export function buildLotInspectionUserPrompt(params: {

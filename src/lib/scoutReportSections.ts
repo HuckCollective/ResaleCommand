@@ -258,6 +258,47 @@ export function sanitizeBestVenue(
 // (b) Single-item valuation sanity — hierarchy + boutique/fair cap
 // ---------------------------------------------------------------------------
 
+export function extractDeclaredUnitCount(textOrItem: any): number {
+    if (!textOrItem) return 1;
+    if (typeof textOrItem === 'object') {
+        const explicit = Number(textOrItem.declared_unit_count || textOrItem.detected_unit_count || 0);
+        if (Number.isFinite(explicit) && explicit >= 2 && explicit <= 150) return Math.round(explicit);
+    }
+    const rawText =
+        typeof textOrItem === 'string'
+            ? textOrItem
+            : `${textOrItem.title || ''} ${textOrItem.identity || ''}`;
+    const text = String(rawText || '').trim();
+    if (!text) return 1;
+
+    // 1. Explicit "Lot of 25", "Bundle of 8", "Set of 4", "Collection of 12"
+    const lotOfMatch = text.match(/\b(?:lot|bundle|set|collection|group|pack)\s+of\s+(\d{1,3})\b/i);
+    if (lotOfMatch) {
+        const n = parseInt(lotOfMatch[1], 10);
+        if (n >= 2 && n <= 150) return n;
+    }
+
+    // 2. Parenthetical "(x6)", "[x10]", "(Lot of 12)"
+    const parenMatch = text.match(/[\(\[]\s*(?:x\s*(\d{1,3})|(\d{1,3})\s*x|(?:lot|set|pack|bundle)\s+of\s+(\d{1,3}))\s*[\)\]]/i);
+    if (parenMatch) {
+        const n = parseInt(parenMatch[1] || parenMatch[2] || parenMatch[3] || '1', 10);
+        if (n >= 2 && n <= 150) return n;
+    }
+
+    // 3. "25 Vintage Star Trek ... Paperback Novels", "14 Hardcover Books", "8 Comic Books" (excluding LEGO/jigsaw piece counts)
+    if (!/\b(?:lego|duplo|mega\s*bloks|jigsaw|puzzle)\b/i.test(text)) {
+        const nounMatch = text.match(
+            /\b(\d{1,3})\s+(?:[a-z0-9&'-]+\s+){0,5}?(?:books|paperbacks|novels|hardcovers|comics|magazines|zines|manuals|sourcebooks|modules|figures|action\s+figures|dolls|vinyl\s+records|records|lps|cassettes|cds|dvds|vhs|cartridges|video\s+games)\b/i
+        );
+        if (nounMatch) {
+            const n = parseInt(nounMatch[1], 10);
+            if (n >= 2 && n <= 150) return n;
+        }
+    }
+
+    return 1;
+}
+
 export function enforceSingleItemValuationSanity(
     item: any,
     shippingTotal: number
@@ -265,6 +306,7 @@ export function enforceSingleItemValuationSanity(
     const notes: string[] = [];
     if (!item || typeof item !== 'object') return { adjusted: false, notes, boutiqueToFairCap: 0 };
     if (Array.isArray(item.lot_items) && item.lot_items.length > 1) return { adjusted: false, notes, boutiqueToFairCap: 0 };
+    if (extractDeclaredUnitCount(item) >= 2) return { adjusted: false, notes, boutiqueToFairCap: 0 };
 
     const pb = item.price_breakdown && typeof item.price_breakdown === 'object' ? item.price_breakdown : (item.price_breakdown = {});
     const pp = item.pricing_potential && typeof item.pricing_potential === 'object' ? item.pricing_potential : (item.pricing_potential = {});
@@ -523,6 +565,22 @@ export function applyScoutReportGuardrails(item: any, ctx: GuardrailContext): vo
             item.purchase_strategy.max_bid = result.tiers.balanced.maxBid;
             item.maxBid = result.tiers.balanced.maxBid;
         }
+
+        const itemLotUnits =
+            Array.isArray(item.lot_items) && item.lot_items.length > 0
+                ? item.lot_items.reduce((s: number, li: any) => s + extractLotItemQty(li), 0)
+                : 0;
+        const declaredUnits = Math.max(extractDeclaredUnitCount(item), itemLotUnits);
+        if (declaredUnits >= 2) {
+            item.declared_unit_count = declaredUnits;
+            const refLanded =
+                result.atCurrentBid?.landed ||
+                (result.tiers.balanced.status === 'active' ? result.tiers.balanced.estLanded : 0) ||
+                Number(item.purchase_strategy?.max_landed_cost || 0);
+            if (refLanded > 0) {
+                item.landed_cost_per_unit = r2(refLanded / declaredUnits);
+            }
+        }
     }
 
     // 5) Vision proof
@@ -588,6 +646,9 @@ export const SCOUT_SECTION_BUILDERS: Record<string, SectionBuilder> = {
                       : `${moneyWhole(acb.netProfit)} net`;
             s += `- **At Current Bid:** landed $${acb.landed.toFixed(2)} → ${acbTxt}\n`;
         }
+        if (t.declared_unit_count >= 2 && Number(t.landed_cost_per_unit) > 0) {
+            s += `- **Landed Cost / Unit:** $${Number(t.landed_cost_per_unit).toFixed(2)}/unit across ${t.declared_unit_count} units\n`;
+        }
         if (t.is_freight_trap) s += `- **🚚 Freight Killer:** S&H is ${t.canonical_tiers?.freightPctOfResale ?? '?'}% of resale value\n`;
         if (ps.advice) s += `- **Advice:** ${ps.advice}\n`;
         return s + `\n`;
@@ -613,8 +674,15 @@ export const SCOUT_SECTION_BUILDERS: Record<string, SectionBuilder> = {
         return s + `\n`;
     },
     lot: (t) => {
+        if (t.lot_breakdown_unavailable && !(t.lot_items && t.lot_items.length > 1)) {
+            return `**⚠️ Lot Not Itemized:** Valued as unbroken bulk (low confidence — re-scan with spine/detail photos selected).\n\n`;
+        }
         if (!(t.lot_items && t.lot_items.length > 0)) return '';
-        let s = `**📦 Lot Items (${t.lot_items.length}):**\n`;
+        const totalUnits = t.lot_items.reduce((sum: number, li: any) => sum + extractLotItemQty(li), 0);
+        const mismatchNote = t.lot_quantity_mismatch
+            ? ` *(⚠️ Itemized ${t.lot_quantity_mismatch.itemized} of ${t.lot_quantity_mismatch.declared} declared units)*`
+            : '';
+        let s = `**📦 Lot Items (${t.lot_items.length} Lines • ${totalUnits} Total Units):**${mismatchNote}\n`;
         t.lot_items.forEach((li: any, idx: number) => {
             const qty = extractLotItemQty(li);
             const splitCost = Number(li.split_cost_basis || 0);

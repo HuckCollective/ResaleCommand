@@ -76,9 +76,15 @@ export const speedScoutResponseSchema: ResponseSchema = {
             required: ['is_auction', 'urgency', 'platform', 'buyers_premium_pct', 'is_local_pickup_only']
           },
           market_report: marketReportSchema,
+          detected_unit_count: {
+            type: SchemaType.INTEGER,
+            nullable: true,
+            description: 'Total number of physical units in this listing (1 for a single item; >= 2 for a multi-item lot)'
+          },
           lot_items: {
             type: SchemaType.ARRAY,
             nullable: true,
+            description: 'REQUIRED (>= 2 entries) whenever the listing or photos contain 2 or more sellable items; line quantities must sum to detected_unit_count. Leave null/empty ONLY for a single item.',
             items: componentItemSchema
           }
         },

@@ -50,7 +50,7 @@ export const componentItemSchema: Schema = {
     quantity: {
       type: SchemaType.INTEGER,
       nullable: true,
-      description: 'Number of identical units rolled up in this line (default 1; e.g. 3 for "Sealed Blind Boxes (x3)")'
+      description: 'Number of physical units rolled up in this line (default 1; e.g. 5 for a grouped pack "(x5)"). Across all lot_items, quantities must sum to the total lot unit count.'
     },
     physical_substrate: {
       type: SchemaType.STRING,
@@ -60,7 +60,7 @@ export const componentItemSchema: Schema = {
     tier: { type: SchemaType.STRING, format: 'enum', enum: ['showcase', 'core', 'quick_turn'] },
     is_key_issue: { type: SchemaType.BOOLEAN },
     condition: { type: SchemaType.STRING },
-    estimated_value: { type: SchemaType.STRING, description: 'Fair market range (e.g. "$20 - $30")' },
+    estimated_value: { type: SchemaType.STRING, description: 'TOTAL fair market range for this entire line across all quantity units (not per-unit when quantity > 1)' },
     ocr_detected_text: { type: SchemaType.STRING, description: 'Verbatim text and copyright year read from item' },
     image_index: { type: SchemaType.INTEGER, description: '0-based index of photo showing this item' },
     bounding_box: {
@@ -87,9 +87,10 @@ export const componentItemSchema: Schema = {
     },
     pricing_potential: {
       type: SchemaType.OBJECT,
+      description: 'TOTAL price ranges for this entire line across all quantity units (not per-unit when quantity > 1)',
       properties: {
-        boutique: { type: SchemaType.STRING },
-        fair: { type: SchemaType.STRING }
+        boutique: { type: SchemaType.STRING, description: 'TOTAL boutique range for this line across all quantity units' },
+        fair: { type: SchemaType.STRING, description: 'TOTAL fair online range for this line across all quantity units' }
       },
       required: ['boutique', 'fair']
     },

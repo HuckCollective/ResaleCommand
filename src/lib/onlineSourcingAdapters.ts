@@ -398,7 +398,7 @@ export function buildDomainAcquisitionLens(envelope: OnlineListingEnvelope | nul
   switch (envelope.domainFamily) {
     case 'shopgoodwill':
       lens =
-        '[Sourcing Lens — ShopGoodwill]: 0% buyer premium, untested donated goods ("as-is"), high dimensional S&H + handling. Verify completeness strictly from visible photos; penalize untested electronics or heavy low-margin bulk.';
+        '[Sourcing Lens — ShopGoodwill]: 0% buyer premium, untested donated goods ("as-is"), high dimensional S&H + handling. Verify completeness and condition strictly from visible photos; factor inbound S&H into per-unit landed cost.';
       break;
     case 'buyers_premium_auction': {
       const bp = envelope.buyersPremiumPct || 15;

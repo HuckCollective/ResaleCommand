@@ -537,7 +537,7 @@ export function getDefaultAppraisalRules(): AppraisalRulesConfig {
         key: 'vintage_media_paper',
         label: 'Books, Zines & Media',
         keywords: ['book', 'magazine', 'comic', 'vinyl', 'cassette', 'vhs', 'dvd', 'zine', 'manual'],
-        note: 'Common issues belong in multi-pack bundles ($10-$15); only key first printings justify single-tag premiums.',
+        note: 'Value from sold comps per line; extract standout titles as singles (quantity 1) and group like series/author/format items with a quantity.',
       },
     ],
   };
@@ -652,8 +652,7 @@ export function compileRulesPrompt(
       ? cn.keywords.some((kw) => kw && hintLower.includes(kw.toLowerCase()))
       : false
   );
-  const notesToEmit =
-    matchedNotes.length > 0 ? matchedNotes.slice(0, 2) : (rules.categoryNotes || []).slice(0, 1);
+  const notesToEmit = matchedNotes.length > 0 ? matchedNotes.slice(0, 2) : [];
 
   const lines: string[] = [headerLine];
   for (const cn of notesToEmit) {
@@ -723,6 +722,15 @@ export async function loadAppraisalRules(forceRefresh = false): Promise<Appraisa
         const sanitized = sanitizeAppraisalRulesInput(parsed, {
           ...defaults,
           version: Math.max(0, (Number(parsed.version) || 1) - 1),
+        });
+        const cleanMediaNote =
+          defaults.categoryNotes.find((cn) => cn.key === 'vintage_media_paper')?.note ||
+          'Value from sold comps per line; extract standout titles as singles (quantity 1) and group like series/author/format items with a quantity.';
+        sanitized.categoryNotes = (sanitized.categoryNotes || []).map((cn) => {
+          if (/\$\s*10\s*[-–—]\s*\$?\s*15|common\s+issues\s+belong/i.test(String(cn.note || ''))) {
+            return { ...cn, note: cleanMediaNote };
+          }
+          return cn;
         });
         sanitized.updatedAt = String(parsed.updatedAt || doc.$updatedAt || defaults.updatedAt);
         cachedRules = { expiresAt: Date.now() + RULES_CACHE_TTL_MS, data: sanitized };

@@ -1,6 +1,6 @@
 import type { APIRoute } from 'astro';
 import { model, generateContentWithBackoff, DEFAULT_GEMINI_MODEL } from '../../lib/gemini';
-import { normalizeBundleComponents, parsePriceRange } from '../../lib/bundle-pricing';
+import { normalizeBundleComponents, parsePriceRange, extractSubItemQuantity } from '../../lib/bundle-pricing';
 import { speedScoutResponseSchema } from '../../lib/ai/schemas/speed-scout.schema';
 import { SPEED_SCOUT_SYSTEM_INSTRUCTION } from '../../lib/ai/instructions/system-instructions';
 import { buildSpeedScoutUserPrompt } from '../../lib/ai/instructions/prompt-builders';
@@ -11,7 +11,7 @@ import { verifyAppwriteJwtToMember, requireBookmarkletMember } from '../../lib/b
 import type { AiSurface } from '../../lib/aiTelemetry';
 import { loadAppraisalRules, compileRulesPrompt } from '../../lib/appraisalCalibration';
 import { getAllLocationSettingMetas } from '../../lib/warehouses';
-import { applyScoutReportGuardrails } from '../../lib/scoutReportSections';
+import { applyScoutReportGuardrails, extractDeclaredUnitCount } from '../../lib/scoutReportSections';
 import {
     fetchAndResolveOnlineListing,
     buildDomainAcquisitionLens,
@@ -887,11 +887,9 @@ export const ALL: APIRoute = async ({ request }) => {
             outerTargetLocations,
             `${userNotes} ${scrapedListingContext}`
         );
-        const notesWithCalibration = calibrationBlock
-            ? userNotes
-                ? `${userNotes}\n\n${calibrationBlock}`
-                : calibrationBlock
-            : userNotes;
+        const listingTitleHint =
+            outerResolvedEnvelope?.title || parsedListingData?.title || parsedListingData?.itemName || '';
+        const declaredUnitCount = extractDeclaredUnitCount(`${listingTitleHint} ${userNotes}`);
 
         const dynamicBoothChannels = getAllLocationSettingMetas(outerTargetLocations)
             .filter((m) => m.commissionRate > 0)
@@ -920,7 +918,7 @@ export const ALL: APIRoute = async ({ request }) => {
         }
 
         const promptText = buildSpeedScoutUserPrompt({
-            authoritativeUserNotes: notesWithCalibration,
+            authoritativeUserNotes: userNotes || undefined,
             scrapedListingContext: scrapedListingContext || undefined,
             shippingSummary:
                 shippingSummary ||
@@ -928,6 +926,8 @@ export const ALL: APIRoute = async ({ request }) => {
                     ? `Estimated Shipping: $${scrapedShipping.total} (${scrapedShipping.carrier}) to ZIP ${scrapedShipping.zipCode || 'Local'}`
                     : undefined),
             organizationChannels: organizationChannelsStr,
+            calibrationBlock: calibrationBlock || undefined,
+            declaredUnitCount: declaredUnitCount >= 2 ? declaredUnitCount : undefined,
         });
 
         const contentParts: any[] = [{ text: promptText }];
@@ -994,6 +994,54 @@ export const ALL: APIRoute = async ({ request }) => {
         }
 
         let cleanedResponse = taskResponse.replace(/```json|```/g, '').trim();
+
+        // Validated retry (max 1): If listing declares >= 2 units and Gemini omitted lot_items (< 2 entries),
+        // re-call once with a corrective instruction using the same photos.
+        if (declaredUnitCount >= 2 && cleanedResponse) {
+            try {
+                const initialParsed = JSON.parse(cleanedResponse);
+                const firstItem = Array.isArray(initialParsed?.items) ? initialParsed.items[0] : initialParsed;
+                if (!firstItem || !Array.isArray(firstItem.lot_items) || firstItem.lot_items.length < 2) {
+                    console.warn(
+                        `[identify-item] Multi-item lot (${declaredUnitCount} units) returned <2 lot_items on first pass — running 1 corrective retry.`
+                    );
+                    const retryPrompt =
+                        promptText +
+                        `\n\n[CORRECTIVE RETRY — LOT_ITEMS REQUIRED]: Your previous response returned fewer than 2 entries in 'lot_items' for a ${declaredUnitCount}-unit lot. You MUST return >= 2 entries in 'lot_items' (standout singles with quantity: 1 from visible spine/cover OCR + grouped series/author/format lines with quantity: N and '(xN)' + a remainder pack line with quantity: N and '(xN)') whose 'quantity' values sum to ${declaredUnitCount}. Price fields on each line are the LINE TOTAL for all units on that line.`;
+                    const retryParts: any[] = [{ text: retryPrompt }];
+                    if (imageParts.length > 0) {
+                        retryParts.push(...imageParts.slice(0, maxVisionPhotos));
+                    }
+                    const retryResult = await generateContentWithBackoff(
+                        {
+                            systemInstruction: SPEED_SCOUT_SYSTEM_INSTRUCTION,
+                            contents: [{ role: 'user', parts: retryParts }],
+                            generationConfig: {
+                                responseMimeType: 'application/json',
+                                responseSchema: speedScoutResponseSchema,
+                            },
+                            telemetryContext: {
+                                surface: detectedSurface,
+                                itemId: requestItemId,
+                                rulesVersion: appraisalRules.version,
+                            },
+                        },
+                        2,
+                        1500
+                    );
+                    const retryText = (await retryResult.response).text().replace(/```json|```/g, '').trim();
+                    if (retryText) {
+                        const retryParsed = JSON.parse(retryText);
+                        const retryFirst = Array.isArray(retryParsed?.items) ? retryParsed.items[0] : retryParsed;
+                        if (retryFirst && Array.isArray(retryFirst.lot_items) && retryFirst.lot_items.length >= 2) {
+                            cleanedResponse = retryText;
+                        }
+                    }
+                }
+            } catch (retryErr) {
+                console.warn('[identify-item] Corrective lot_items retry skipped/failed:', retryErr);
+            }
+        }
 
         // Inject fetched image URLs, shipping info, Buyer's Premium hammer-bid math, and auction metadata into response
         try {
@@ -1223,6 +1271,43 @@ export const ALL: APIRoute = async ({ request }) => {
                 // Canonical guardrails: valuation sanity, backstock-free Best Venue, oversized-freight combine flag,
                 // signed-P&L tiers + PASS override, and 📸 vision proof (photos actually sent to Gemini).
                 try {
+                    const effectiveDeclaredUnits = Math.max(
+                        declaredUnitCount,
+                        extractDeclaredUnitCount(target),
+                        Number(target.detected_unit_count || 0)
+                    );
+                    if (effectiveDeclaredUnits >= 2) {
+                        target.declared_unit_count = effectiveDeclaredUnits;
+                        if (Array.isArray(target.lot_items) && target.lot_items.length >= 2) {
+                            const itemizedQty = target.lot_items.reduce(
+                                (sum: number, li: any) => sum + extractSubItemQuantity(li),
+                                0
+                            );
+                            if (
+                                Math.abs(itemizedQty - effectiveDeclaredUnits) / effectiveDeclaredUnits >
+                                0.1
+                            ) {
+                                target.lot_quantity_mismatch = {
+                                    declared: effectiveDeclaredUnits,
+                                    itemized: itemizedQty,
+                                };
+                            }
+                        } else {
+                            // Honest fallback when even the retry could not itemize the lot (never fabricate OCR lines)
+                            target.lot_breakdown_unavailable = true;
+                            target.price_breakdown = target.price_breakdown || {};
+                            target.price_breakdown.confidence = 'Low';
+                            target.purchase_strategy = target.purchase_strategy || {};
+                            if (
+                                target.purchase_strategy.verdict === 'BUY_NOW' ||
+                                target.purchase_strategy.verdict === 'CHASE_AUCTION' ||
+                                target.purchase_strategy.verdict === 'NEGOTIATE'
+                            ) {
+                                target.purchase_strategy.verdict = 'WATCH';
+                            }
+                        }
+                    }
+
                     const guardMetas = getAllLocationSettingMetas(outerTargetLocations);
                     const primaryBooth = guardMetas.find((m) => m.commissionRate > 0);
                     const resolvedWeightLbs = Number(

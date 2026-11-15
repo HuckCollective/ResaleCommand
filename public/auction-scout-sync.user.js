@@ -2158,7 +2158,16 @@
 
   function renderLotBreakdownSection(fin, rep, activeLanded) {
     var lotItems = (fin && Array.isArray(fin.lotItems)) ? fin.lotItems : [];
-    if (lotItems.length <= 1) return '';
+    if (lotItems.length <= 1) {
+      if (rep && rep.lot_breakdown_unavailable) {
+        return (
+          '<div style="background:#451a03;border:1px solid #f59e0b;color:#fef3c7;border-radius:12px;padding:9px 11px;margin-bottom:10px;font-size:10.5px;font-weight:800;line-height:1.4;">' +
+            '⚠️ Lot Not Itemized — valued as unbroken bulk (low confidence). Select clear spine/detail photos above and tap 🔄 Re-Scan Selected.' +
+          '</div>'
+        );
+      }
+      return '';
+    }
 
     var maxBoutique = 0;
     lotItems.forEach(function (li) {
@@ -2208,6 +2217,14 @@
     var breakdownHeaderLabel = totalPhysicalUnits > sorted.length
       ? '🧩 Lot Breakdown (' + sorted.length + ' Lines • ' + totalPhysicalUnits + ' Total Units — 100% Shown)'
       : '🧩 Lot Breakdown (' + sorted.length + ' Pieces — 100% Shown)';
+    var avgUnitLandedStr = totalPhysicalUnits > 1 && landedRef > 0
+      ? (' ($' + (landedRef / totalPhysicalUnits).toFixed(2) + '/unit avg)')
+      : '';
+    var mismatchHtml = (rep && rep.lot_quantity_mismatch)
+      ? '<div style="background:#451a03;border:1px solid #f59e0b;color:#fde68a;border-radius:6px;padding:3px 7px;margin-bottom:6px;font-size:9.5px;font-weight:800;">' +
+          '⚠️ Itemized ' + escHtml(String(rep.lot_quantity_mismatch.itemized)) + ' of ' + escHtml(String(rep.lot_quantity_mismatch.declared)) + ' declared units' +
+        '</div>'
+      : '';
 
     var out =
       '<div style="background:#090d1f;border:1.5px solid #6366f1;border-radius:12px;padding:10px 11px;margin-bottom:10px;">' +
@@ -2215,8 +2232,9 @@
           '<span style="font-size:11.5px;font-weight:900;color:#e0e7ff;">' + escHtml(breakdownHeaderLabel) + '</span>' +
           strategyPill +
         '</div>' +
+        mismatchHtml +
         '<div style="display:flex;justify-content:space-between;align-items:center;gap:6px;flex-wrap:wrap;background:#1e1b4b;border:1px solid rgba(129,140,248,0.35);border-radius:8px;padding:6px 8px;margin-bottom:8px;font-size:10.5px;">' +
-          '<span style="color:#c7d2fe;font-weight:800;">Σ Boutique: <strong style="color:#34d399;font-family:monospace;">$' + sumBoutique.toFixed(0) + '</strong> vs Landed <strong style="color:#fbbf24;font-family:monospace;">$' + landedRef.toFixed(2) + '</strong></span>' +
+          '<span style="color:#c7d2fe;font-weight:800;">Σ Boutique: <strong style="color:#34d399;font-family:monospace;">$' + sumBoutique.toFixed(0) + '</strong> vs Landed <strong style="color:#fbbf24;font-family:monospace;">$' + landedRef.toFixed(2) + '</strong><span style="color:#a5b4fc;font-family:monospace;font-size:9.5px;">' + escHtml(avgUnitLandedStr) + '</span></span>' +
           (heroRecoupPct > 0
             ? '<span style="background:#065f46;color:#6ee7b7;padding:1px 6px;border-radius:999px;font-size:9.5px;font-weight:900;font-family:monospace;">👑 Hero Recoups ' + heroRecoupPct + '%</span>'
             : '') +
@@ -2611,9 +2629,12 @@
         : acbThin
         ? ('⚠️ +$' + acbNet + ' Thin (<1.7x Floor)')
         : ('+$' + acbNet + ' Net');
+      var unitLandedInline = (Number(rep.declared_unit_count) >= 2 && Number(rep.landed_cost_per_unit) > 0)
+        ? (' ($' + Number(rep.landed_cost_per_unit).toFixed(2) + '/unit × ' + Number(rep.declared_unit_count) + ')')
+        : '';
       html +=
         '<div style="background:' + acbBg + ';border:1px solid ' + acbBorder + ';border-radius:8px;padding:6px 9px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;gap:6px;font-size:10.5px;">' +
-          '<span style="color:' + acbTextCol + ';font-weight:800;">At Current Bid $' + fin.currentBid.toFixed(2) + ' + $' + fin.effectiveShip.toFixed(2) + ' S&amp;H = $' + fin.atCurrentBid.landed.toFixed(2) + ' landed</span>' +
+          '<span style="color:' + acbTextCol + ';font-weight:800;">At Current Bid $' + fin.currentBid.toFixed(2) + ' + $' + fin.effectiveShip.toFixed(2) + ' S&amp;H = $' + fin.atCurrentBid.landed.toFixed(2) + ' landed' + escHtml(unitLandedInline) + '</span>' +
           '<span style="font-family:monospace;font-weight:900;color:' + acbRightCol + ';white-space:nowrap;">' + acbRightLabel + '</span>' +
         '</div>';
     }

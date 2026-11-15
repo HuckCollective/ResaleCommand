@@ -708,6 +708,16 @@ const transportContracts = [
             { pattern: /\.getMonth\s*\(/, label: 'Date#getMonth() (0-indexed) month bucketing' },
         ],
     },
+    {
+        file: 'src/pages/api/identify-item.ts',
+        mustContain: [
+            { pattern: /calibrationBlock:\s*calibrationBlock/, label: 'Strict Context Separation (Law 2.G): pass calibrationBlock separately to buildSpeedScoutUserPrompt' },
+        ],
+        mustNotContain: [
+            { pattern: /notesWithCalibration/, label: 'Concatenating calibration rules into authoritativeUserNotes (Law 2.G violation)' },
+            { pattern: /authoritativeUserNotes:\s*`[^`]*calibrationBlock/, label: 'Interpolating calibrationBlock into authoritativeUserNotes (Law 2.G violation)' },
+        ],
+    },
 ];
 // The master shared skill is the single source of truth for the 7 laws — no standalone rule files
 if (fs.existsSync(path.resolve('.agents/rules/master-architecture-laws.md'))) {
