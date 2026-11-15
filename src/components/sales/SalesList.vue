@@ -34,20 +34,20 @@
           </label>
           <ul tabindex="0" class="dropdown-content menu p-2 shadow-xl bg-base-100 border border-base-300 rounded-2xl w-68 z-50 text-xs font-bold space-y-1 mt-1.5">
             <li>
-              <a href="/sales/import/MD" class="rounded-xl py-2.5 gap-2.5">
+              <a :href="`/sales/import/${activeRicochetVenueMeta.code}`" class="rounded-xl py-2.5 gap-2.5">
                 <Icon icon="solar:file-check-bold-duotone" class="w-4 h-4 text-primary shrink-0" />
                 <div>
                   <div class="font-black text-base-content">Import Payout CSV / Live Sync</div>
-                  <div class="text-[10px] font-normal opacity-65">Reconcile Memory Den checks &amp; live POS</div>
+                  <div class="text-[10px] font-normal opacity-65">Reconcile {{ activeRicochetVenueMeta.shortName }} checks &amp; live POS</div>
                 </div>
               </a>
             </li>
             <li>
-              <a href="/warehouse/sync/MD" class="rounded-xl py-2.5 gap-2.5">
+              <a :href="`/warehouse/sync/${activeRicochetVenueMeta.code}`" class="rounded-xl py-2.5 gap-2.5">
                 <Icon icon="solar:round-transfer-horizontal-bold-duotone" class="w-4 h-4 text-secondary shrink-0" />
                 <div>
                   <div class="font-black text-base-content">Booth Catalog &amp; Barcode Sync</div>
-                  <div class="text-[10px] font-normal opacity-65">Verify 0EJ SKUs &amp; HUCK- tags</div>
+                  <div class="text-[10px] font-normal opacity-65">Verify booth SKUs &amp; HUCK- tags</div>
                 </div>
               </a>
             </li>
@@ -87,6 +87,128 @@
 
     <!-- Main Content when loaded -->
     <div v-else class="space-y-5">
+      <!-- Post-Commit / Sync Feedback Toast Banner -->
+      <div
+        v-if="stagedSyncStatusToast"
+        class="alert shadow-sm rounded-2xl border"
+        :class="{
+          'alert-success border-success/40': stagedSyncStatusToast.type === 'success',
+          'alert-warning border-warning/40': stagedSyncStatusToast.type === 'warning',
+          'alert-error border-error/40': stagedSyncStatusToast.type === 'error',
+          'alert-info border-info/40': stagedSyncStatusToast.type === 'info',
+        }"
+      >
+        <span class="text-xs sm:text-sm font-bold">{{ stagedSyncStatusToast.message }}</span>
+        <button type="button" class="btn btn-xs btn-ghost ml-auto" @click="stagedSyncStatusToast = null">✕</button>
+      </div>
+
+      <!-- STAGED RICOCHET SALES COMMIT BANNER (Law 5.3 Dry-Run Preview + 1-Click Idempotent Ledger Commit) -->
+      <div
+        v-if="hasLoadedLiveSalesLedger && ricochetActionableNewCount > 0"
+        class="card bg-warning/10 border-2 border-warning/50 shadow-md rounded-2xl p-4 space-y-3"
+      >
+        <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+          <div class="space-y-1.5">
+            <div class="flex flex-wrap items-center gap-2">
+              <span class="badge badge-warning font-black text-xs py-2.5 px-2.5">
+                ⚡ {{ ricochetActionableNewCount }} New Staged {{ ricochetActionableNewCount === 1 ? 'Sale' : 'Sales' }}
+              </span>
+              <span class="text-sm sm:text-base font-black text-base-content">
+                {{ activeRicochetVenueMeta.shortName }} POS — ${{ ricochetNewBreakdown.gross.toFixed(2) }} gross / ${{ ricochetNewBreakdown.net.toFixed(2) }} net waiting to commit
+              </span>
+            </div>
+
+            <!-- Partner Attribution + Match + Month Breakdown Pills -->
+            <div class="flex flex-wrap items-center gap-1.5 text-xs font-bold">
+              <span v-if="ricochetNewBreakdown.byPartner.HUCK.count > 0" class="badge badge-neutral badge-sm sm:badge-md font-bold gap-1">
+                🫐 HUCK {{ ricochetNewBreakdown.byPartner.HUCK.count }} (${{ ricochetNewBreakdown.byPartner.HUCK.gross.toFixed(2) }})
+              </span>
+              <span v-if="ricochetNewBreakdown.byPartner.PDXGL.count > 0" class="badge badge-secondary badge-sm sm:badge-md font-bold gap-1">
+                🎲 PDXGL {{ ricochetNewBreakdown.byPartner.PDXGL.count }} (${{ ricochetNewBreakdown.byPartner.PDXGL.gross.toFixed(2) }})
+              </span>
+              <span v-if="ricochetNewBreakdown.byPartner.BB.count > 0" class="badge badge-accent badge-sm sm:badge-md font-bold gap-1">
+                👗 B&amp;B {{ ricochetNewBreakdown.byPartner.BB.count }} (${{ ricochetNewBreakdown.byPartner.BB.gross.toFixed(2) }})
+              </span>
+              <span class="badge badge-outline badge-success badge-sm sm:badge-md font-bold">
+                🔗 {{ ricochetNewBreakdown.matchedCount }} Matched
+              </span>
+              <span v-if="ricochetNewBreakdown.unmatchedCount > 0" class="badge badge-outline badge-warning badge-sm sm:badge-md font-bold">
+                ⚠️ {{ ricochetNewBreakdown.unmatchedCount }} Unmatched (still recorded)
+              </span>
+              <span
+                v-for="mKey in ricochetNewBreakdown.monthKeys"
+                :key="mKey"
+                class="badge badge-ghost badge-sm sm:badge-md font-mono font-bold"
+              >
+                📅 {{ mKey === 'unknown' ? 'Unknown Month' : monthKeyToLabel(mKey) }}: {{ ricochetNewBreakdown.byMonth[mKey].count }} (${{ ricochetNewBreakdown.byMonth[mKey].net.toFixed(2) }} net)
+              </span>
+            </div>
+          </div>
+
+          <!-- Primary Commit + Review + Refresh Actions -->
+          <div class="flex flex-wrap items-center gap-2 shrink-0">
+            <button
+              type="button"
+              class="btn btn-sm sm:btn-md btn-success font-black rounded-xl shadow-sm gap-1.5"
+              :disabled="isCommittingRicochetSync"
+              @click="handleCommitStagedBannerClick"
+            >
+              <span v-if="isCommittingRicochetSync" class="loading loading-spinner loading-xs"></span>
+              <span v-if="isCommittingRicochetSync && ricochetCommitProgress">
+                Writing {{ ricochetCommitProgress.done }} / {{ ricochetCommitProgress.total }}...
+              </span>
+              <span v-else>
+                ✅ Commit {{ ricochetActionableNewCount }} New {{ ricochetActionableNewCount === 1 ? 'Sale' : 'Sales' }}
+              </span>
+            </button>
+            <a
+              :href="`/sales/import/${activeRicochetVenueMeta.code}`"
+              class="btn btn-sm sm:btn-md btn-outline font-bold rounded-xl"
+            >
+              🔍 Review Staged Rows
+            </a>
+            <button
+              type="button"
+              class="btn btn-sm sm:btn-md btn-ghost font-bold rounded-xl"
+              :disabled="isLoadingRicochetSync || isCommittingRicochetSync"
+              title="Re-check staged sales manifest"
+              @click="fetchStagedRicochetSales(true)"
+            >
+              <span v-if="isLoadingRicochetSync" class="loading loading-spinner loading-xs"></span>
+              <span v-else>🔄</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Collapsible Dry-Run Preview of Exact New Ticket Lines -->
+        <details class="bg-base-100/90 border border-base-300 rounded-xl px-3 py-2 text-xs">
+          <summary class="cursor-pointer font-extrabold text-base-content/85 select-none">
+            📋 Preview {{ ricochetActionableNewCount }} New Ticket {{ ricochetActionableNewCount === 1 ? 'Line' : 'Lines' }} Before Writing to Ledger
+          </summary>
+          <div class="mt-2 max-h-56 overflow-y-auto divide-y divide-base-200">
+            <div
+              v-for="(row, rIdx) in ricochetActionableNewRows"
+              :key="`${row.payoutId || row.saleNumber}-${row.sku}-${rIdx}`"
+              class="py-1.5 flex flex-wrap items-center justify-between gap-2"
+            >
+              <div class="flex flex-wrap items-center gap-1.5 min-w-0">
+                <span class="font-mono font-black text-primary">#{{ String(row.payoutId || row.saleNumber || '').replace(/^#/, '') }}</span>
+                <span class="font-mono text-base-content/70">{{ row.soldDate }}</span>
+                <span class="badge badge-xs font-bold" :class="row.partnerBucket === 'PDXGL' ? 'badge-secondary' : row.partnerBucket === 'BB' ? 'badge-accent' : 'badge-neutral'">
+                  {{ row.partnerBucket || 'HUCK' }}
+                </span>
+                <span v-if="row.sku" class="font-mono font-bold text-warning">{{ row.sku }}</span>
+                <span v-if="row.matchedItemUpc || row.upc" class="font-mono text-info font-bold">{{ row.matchedItemUpc || row.upc }}</span>
+                <span class="font-semibold truncate max-w-md">{{ row.matchedItemTitle || row.title }}</span>
+              </div>
+              <div class="font-mono font-bold shrink-0">
+                ${{ Number(row.grossPrice || 0).toFixed(2) }} <span class="opacity-60">→</span> <span class="text-success">${{ Number(row.ricoNetPayout ?? row.expectedNetPayout ?? 0).toFixed(2) }} net</span>
+              </div>
+            </div>
+          </div>
+        </details>
+      </div>
+
       <!-- UNIFIED GLOBAL SCOPE BAR (CONTROLS BOTH TABS IN LOCKSTEP — ZERO SPLIT-BRAIN) -->
       <div class="card bg-base-100/95 shadow-sm border border-base-200 rounded-2xl p-3 space-y-3">
         <!-- Top Row: View Switcher + Month + Venue Pills -->
@@ -649,6 +771,7 @@ import ItemDrawer from '../common/ItemDrawer.vue';
 import { useAuth } from '../../composables/useAuth';
 import { useMemberCapabilities } from '../../lib/memberAccess';
 import { useInventory } from '../../composables/useInventory';
+import { useRicochetSalesSync } from '../../composables/useRicochetSalesSync';
 import { resolveMultiQtyCost } from '../../composables/useItemDrawerForm';
 import { client } from '../../lib/appwrite';
 import { salesApi } from '../../lib/sales';
@@ -779,10 +902,80 @@ const handleSaleLinkedOrReassigned = async ({ saleId, updatedSale }: { saleId: s
 };
 
 // Booth rent for Co-op Settlements: resolved from the live Appwrite warehouse document (Ricochet booth), never hardcoded
-const boothMonthlyRent = computed(() => Number(resolveDefaultRicochetLocationMeta(warehouses.value).monthlyRent || 0));
+const activeRicochetVenueMeta = computed(() => resolveDefaultRicochetLocationMeta(warehouses.value));
+const boothMonthlyRent = computed(() => Number(activeRicochetVenueMeta.value.monthlyRent || 0));
 const boothLocationMetas = computed(() =>
   getAllLocationSettingMetas(warehouses.value).filter((m) => m.monthlyRent > 0 || m.commissionRate > 0)
 );
+
+const stagedSyncStatusToast = ref<{ type: 'success' | 'error' | 'warning' | 'info'; message: string } | null>(null);
+
+const {
+  hasLoadedLiveSalesLedger,
+  isLoadingRicochetSync,
+  isCommittingRicochetSync,
+  ricochetCommitProgress,
+  isRicochetLiveCommitUnlocked,
+  ricochetActionableNewRows,
+  ricochetActionableNewCount,
+  ricochetNewBreakdown,
+  fetchStagedRicochetSales,
+  commitLiveSales,
+} = useRicochetSalesSync({
+  activeCanonicalLocationMeta: activeRicochetVenueMeta,
+  inventoryItems,
+  externalSales: sales,
+  addToast: (toast) => {
+    stagedSyncStatusToast.value = toast;
+  },
+  onCsvFallbackPaste: () => {},
+  onAfterLiveCommit: () => {
+    void fetchData();
+  },
+  getTenantId: () => currentTeam.value?.$id || '',
+});
+
+const handleCommitStagedBannerClick = async () => {
+  if (isCommittingRicochetSync.value || ricochetActionableNewCount.value === 0) return;
+  const bd = ricochetNewBreakdown.value;
+  const monthSummary = bd.monthKeys
+    .map((m) => `${m === 'unknown' ? 'Unknown' : monthKeyToLabel(m)}: ${bd.byMonth[m].count} ($${bd.byMonth[m].gross.toFixed(2)} gross / $${bd.byMonth[m].net.toFixed(2)} net)`)
+    .join('\n  • ');
+  const partnerSummary = [
+    bd.byPartner.HUCK.count > 0 ? `HUCK: ${bd.byPartner.HUCK.count} ($${bd.byPartner.HUCK.gross.toFixed(2)})` : '',
+    bd.byPartner.PDXGL.count > 0 ? `PDXGL: ${bd.byPartner.PDXGL.count} ($${bd.byPartner.PDXGL.gross.toFixed(2)})` : '',
+    bd.byPartner.BB.count > 0 ? `B&B: ${bd.byPartner.BB.count} ($${bd.byPartner.BB.gross.toFixed(2)})` : '',
+  ]
+    .filter(Boolean)
+    .join(' · ');
+
+  const okFirst =
+    typeof window === 'undefined' ||
+    window.confirm(
+      `Commit ${bd.count} new ${activeRicochetVenueMeta.value.shortName} sales to the ledger?\n\n` +
+        `Gross: $${bd.gross.toFixed(2)}  |  Net Payout: $${bd.net.toFixed(2)}\n` +
+        `Partners: ${partnerSummary || 'HUCK'}\n` +
+        `Matched: ${bd.matchedCount}  |  Unmatched: ${bd.unmatchedCount}\n` +
+        `By Month:\n  • ${monthSummary}`
+    );
+  if (!okFirst) return;
+
+  // Preflight safety guard: require a second explicit confirmation when new rows span >1 calendar month OR exceed 25 rows
+  if (bd.exceedsGuardThreshold && typeof window !== 'undefined') {
+    const guardReasons: string[] = [];
+    if (bd.spansMultipleMonths) guardReasons.push(`spans ${bd.monthKeys.length} calendar months (${bd.monthKeys.join(', ')})`);
+    if (bd.count > 25) guardReasons.push(`contains ${bd.count} rows (> 25 threshold)`);
+    const okSecond = window.confirm(
+      `⚠️ PREFLIGHT SAFETY GUARD:\n\n` +
+        `This commit ${guardReasons.join(' and ')}.\n\n` +
+        `Confirm a second time ONLY if you verified these ${bd.count} sales are genuinely missing from the ledger:`
+    );
+    if (!okSecond) return;
+  }
+
+  isRicochetLiveCommitUnlocked.value = true;
+  await commitLiveSales();
+};
 
 // Sorting state (PO treatment)
 type SortKey = 'date' | 'so' | 'net' | 'gross' | 'location' | 'status' | 'cost' | 'profit';

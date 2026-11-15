@@ -34,21 +34,48 @@ const withTimeout = <T>(promise: Promise<T>, ms: number, message: string): Promi
     );
   });
 
-/** Ledger key for one CSV line: POS ticket # + gross + net (multiset counted, so multi-line tickets are never collapsed). */
-const ticketLineKey = (ticket: string, gross: any, net: any): string =>
-  `${ticket}|${Number(gross || 0).toFixed(2)}|${Number(net || 0).toFixed(2)}`;
+const COMMIT_LOCK_STORAGE_KEY = 'rc_ricochet_commit_lock';
+const COMMIT_LOCK_TTL_MS = 5 * 60 * 1000;
+const TAB_COMMIT_INSTANCE_ID = `${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 
-/**
- * POS ticket number of a staged Ricochet row. Accepts `226164`, `#226164`, `Ticket #226164` and repeat-line forms such as
- * `225931 #2` (the 2nd identical line on the same ticket). Returns '' only when the row truly has no 4-8 digit ticket.
- */
-const posTicketOfRow = (row: any): string => {
-  for (const v of [row?.ticket, row?.payoutId, row?.saleNumber, row?.ticketNumber]) {
-    const m = String(v ?? '').trim().match(/(?<!\d)(\d{4,8})(?!\d)/);
-    if (m) return m[1];
+function acquireRicochetCommitLease(): { ok: true } | { ok: false; reason: string } {
+  if (typeof window === 'undefined' || typeof localStorage === 'undefined') return { ok: true };
+  try {
+    const raw = localStorage.getItem(COMMIT_LOCK_STORAGE_KEY);
+    const now = Date.now();
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (parsed && parsed.expiresAt > now && parsed.tabId && parsed.tabId !== TAB_COMMIT_INSTANCE_ID) {
+        const secsLeft = Math.max(1, Math.ceil((parsed.expiresAt - now) / 1000));
+        return {
+          ok: false,
+          reason: `Another browser tab is currently committing Ricochet sales (lock expires in ~${secsLeft}s). Please wait for it to finish.`,
+        };
+      }
+    }
+    localStorage.setItem(
+      COMMIT_LOCK_STORAGE_KEY,
+      JSON.stringify({ tabId: TAB_COMMIT_INSTANCE_ID, startedAt: now, expiresAt: now + COMMIT_LOCK_TTL_MS })
+    );
+  } catch {
+    // Proceed if storage is unavailable
   }
-  return '';
-};
+  return { ok: true };
+}
+
+function releaseRicochetCommitLease() {
+  if (typeof window === 'undefined' || typeof localStorage === 'undefined') return;
+  try {
+    const raw = localStorage.getItem(COMMIT_LOCK_STORAGE_KEY);
+    if (!raw) return;
+    const parsed = JSON.parse(raw);
+    if (!parsed?.tabId || parsed.tabId === TAB_COMMIT_INSTANCE_ID) {
+      localStorage.removeItem(COMMIT_LOCK_STORAGE_KEY);
+    }
+  } catch {
+    // Ignore storage cleanup errors
+  }
+}
 
 /** Stable identity of a staged Ricochet row (used to flag rows as synced locally right after a client commit). */
 const rowKeyOf = (r: any): string =>
@@ -57,26 +84,40 @@ const rowKeyOf = (r: any): string =>
   ).toFixed(2)}|${r?.ticketOccurrence || r?.occurrenceIndex || 1}`;
 
 /** Creates a `sales` document with the browser session (like Inventory Sync); drops an optional attribute the schema rejects and retries. */
-const createSaleDocClient = async (inputSaleDoc: Record<string, any>, tenantId: string): Promise<any> => {
+const createSaleDocClient = async (
+  inputSaleDoc: Record<string, any>,
+  tenantId: string,
+  customDocId?: string
+): Promise<any> => {
   const saleDoc: Record<string, any> = { ...inputSaleDoc };
-  let permissions: string[] | undefined = tenantId
-    ? [Permission.read(Role.team(tenantId)), Permission.update(Role.team(tenantId)), Permission.delete(Role.team(tenantId))]
-    : undefined;
+  let permissions: string[] | undefined =
+    tenantId && tenantId !== 'system'
+      ? [Permission.read(Role.team(tenantId)), Permission.update(Role.team(tenantId)), Permission.delete(Role.team(tenantId))]
+      : undefined;
   let lastErr: any = null;
   for (let attempt = 0; attempt < 6; attempt++) {
     try {
+      if (customDocId) {
+        return permissions
+          ? await databases.createDocument(DATABASE_ID, COLLECTION_SALES, customDocId, saleDoc, permissions)
+          : await databases.createDocument(DATABASE_ID, COLLECTION_SALES, customDocId, saleDoc);
+      }
       return permissions
         ? await databases.createDocument(DATABASE_ID, COLLECTION_SALES, ID.unique(), saleDoc, permissions)
         : await databases.createDocument(DATABASE_ID, COLLECTION_SALES, ID.unique(), saleDoc);
     } catch (err: any) {
       lastErr = err;
+      const code = Number(err?.code || 0);
       const msg = String(err?.message || '');
+      if (code === 409 || /document.*already exists/i.test(msg)) {
+        throw err;
+      }
       const unknownAttr = msg.match(/Unknown attribute:?\s*"?([A-Za-z0-9_]+)"?/i)?.[1];
       if (unknownAttr && OPTIONAL_SALE_ATTRIBUTES.has(unknownAttr) && unknownAttr in saleDoc) {
         delete saleDoc[unknownAttr];
         continue;
       }
-      if (permissions && [400, 401, 403].includes(Number(err?.code)) && /permission|role|team/i.test(msg)) {
+      if (permissions && [400, 401, 403].includes(code) && /permission|role|team/i.test(msg)) {
         permissions = undefined;
         continue;
       }
@@ -89,15 +130,17 @@ import {
   PREVERIFIED_MD_MULTI_QTY_BINS,
   PREVERIFIED_MD_SKU_TO_UPC_OR_ID,
   buildLockedMultiBinMap,
-  canonicalTicketNumber,
   cleanCatalogSku,
-  flagAlreadyRecordedRows,
+  deterministicSaleId,
   isLeakedInventoryDomRow,
   isPayoutSummaryRow,
   matchMemoryDenInventoryItem,
+  pacificMonthKey,
+  posTicketOfRow,
   resolveMemoryDenSkuFromPayoutRow,
   resolvePartnerBucketForSaleRow,
   splitTrailingBoothSku,
+  ticketLineKey,
 } from '../lib/salesBucketing';
 import { getLocationManifestDocIds, type LocationSettingMeta } from '../lib/warehouses';
 
@@ -130,6 +173,7 @@ function toPacificDateKey(rawDate: any): string {
 export interface UseRicochetSalesSyncOptions {
   activeCanonicalLocationMeta: ComputedRef<LocationSettingMeta>;
   inventoryItems?: ComputedRef<any[]> | Ref<any[]>;
+  externalSales?: ComputedRef<any[]> | Ref<any[]>;
   addToast: (toast: { type: 'success' | 'error' | 'warning' | 'info'; message: string }) => void;
   onCsvFallbackPaste: (rawCsvText: string) => void;
   onAfterLiveCommit?: () => void;
@@ -147,7 +191,7 @@ function hasRealPaidDate(rawPaidDate: any): boolean {
 }
 
 export function useRicochetSalesSync(options: UseRicochetSalesSyncOptions) {
-  const { activeCanonicalLocationMeta, inventoryItems, addToast, onCsvFallbackPaste, onAfterLiveCommit, getTenantId } = options;
+  const { activeCanonicalLocationMeta, inventoryItems, externalSales, addToast, onCsvFallbackPaste, onAfterLiveCommit, getTenantId } = options;
 
   const ricochetSyncPayload = ref<any | null>(null);
   /** RAW Ricochet Export CSV text (Payout + Payout History) staged by the bookmarklet via POST /api/sales/ricochet-sync. */
@@ -168,6 +212,7 @@ export function useRicochetSalesSync(options: UseRicochetSalesSyncOptions) {
   const locallyCommittedRowKeys = ref<Set<string>>(new Set());
   const dynamicAppwriteItems = ref<any[]>([]);
   const dynamicAppwriteSales = ref<any[]>([]);
+  const hasCompletedSalesFetch = ref(false);
   const isLoadingRicochetSync = ref(false);
   const isSimulatingRicochetSync = ref(false);
   const isCommittingRicochetSync = ref(false);
@@ -205,7 +250,7 @@ export function useRicochetSalesSync(options: UseRicochetSalesSyncOptions) {
     try {
       const collected: any[] = [];
       let cursor: string | null = null;
-      for (let page = 0; page < 60; page++) {
+      for (let page = 0; page < 100; page++) {
         const queries: string[] = [Query.limit(100), Query.orderDesc('$id')];
         if (cursor) queries.push(Query.cursorAfter(cursor));
         const res = await databases.listDocuments(DATABASE_ID, COLLECTION_SALES, queries);
@@ -223,6 +268,8 @@ export function useRicochetSalesSync(options: UseRicochetSalesSyncOptions) {
       }
     } catch {
       // Non-fatal if client sales pre-fetch fails on mount
+    } finally {
+      hasCompletedSalesFetch.value = true;
     }
   };
 
@@ -363,15 +410,21 @@ export function useRicochetSalesSync(options: UseRicochetSalesSyncOptions) {
     }
 
     // Re-run client-side ledger deduplication against live Appwrite sales (covers serverless staging when API key is absent)
-    const liveSales = dynamicAppwriteSales.value;
+    const liveSales =
+      Array.isArray(externalSales?.value) && externalSales!.value.length > 0
+        ? externalSales!.value
+        : dynamicAppwriteSales.value;
     // Multiset ledger: one existing sale "uses up" exactly one CSV line with the same ticket # + gross + net,
     // so a ticket with several lines (e.g. 4x the same $15 book) is never collapsed into one.
     const liveTicketLineCounts = new Map<string, number>();
     if (liveSales.length > 0) {
       for (const sale of liveSales) {
-        const ticket = canonicalTicketNumber(sale.ticket || sale.orderId || sale.sale || sale.ticketNumber);
+        if (String(sale?.status || '').toLowerCase() === 'cancelled') continue;
+        const ticket = posTicketOfRow(sale);
         if (!/^\d{4,8}$/.test(ticket)) continue;
-        const key = ticketLineKey(ticket, sale?.grossAmount ?? sale?.amount, sale?.netPayout);
+        const gross = Number(sale?.grossAmount ?? sale?.amount ?? 0);
+        const net = Number(sale?.netPayout ?? (gross - Number(sale?.commissionFee ?? 0)));
+        const key = ticketLineKey(ticket, gross, net);
         liveTicketLineCounts.set(key, (liveTicketLineCounts.get(key) || 0) + 1);
       }
     }
@@ -492,58 +545,156 @@ export function useRicochetSalesSync(options: UseRicochetSalesSyncOptions) {
     };
   });
 
-  const ricochetActionableNewCount = computed(() => {
+  const hasLoadedLiveSalesLedger = computed(() => {
+    return (
+      (Array.isArray(externalSales?.value) && externalSales!.value.length > 0) ||
+      dynamicAppwriteSales.value.length > 0 ||
+      hasCompletedSalesFetch.value
+    );
+  });
+
+  /** Only ticketed Ricochet rows with an explicit Sold date that are NOT yet in `resale_db.sales` are actionable for commit. */
+  const ricochetActionableNewRows = computed<any[]>(() => {
     return ricochetStagedRows.value.filter(
       (r: any) =>
         !r.alreadySynced &&
         !r.alreadyRecorded &&
-        (r.matchStatus === 'matched' ||
-          r.matchedItemId ||
-          (r.matchTier && r.matchTier !== 'unmatched') ||
-          Number(r.grossPrice || 0) > 0)
-    ).length;
+        r.skipReason !== 'no_ticket' &&
+        Boolean(posTicketOfRow(r)) &&
+        Boolean(r.soldDate)
+    );
+  });
+
+  const ricochetActionableNewCount = computed(() => ricochetActionableNewRows.value.length);
+
+  const ricochetNewBreakdown = computed(() => {
+    const rows = ricochetActionableNewRows.value;
+    let gross = 0;
+    let net = 0;
+    let matchedCount = 0;
+    let unmatchedCount = 0;
+    const byMonth: Record<string, { count: number; gross: number; net: number }> = {};
+    const byPartner: Record<'HUCK' | 'PDXGL' | 'BB', { count: number; gross: number; net: number }> = {
+      HUCK: { count: 0, gross: 0, net: 0 },
+      PDXGL: { count: 0, gross: 0, net: 0 },
+      BB: { count: 0, gross: 0, net: 0 },
+    };
+
+    for (const r of rows) {
+      const g = Number(r.grossPrice || 0);
+      const n = Number(r.ricoNetPayout ?? r.expectedNetPayout ?? 0);
+      gross += g;
+      net += n;
+      const isMatched = Boolean(r.matchedItemId || r.matchStatus === 'matched' || (r.matchTier && r.matchTier !== 'unmatched'));
+      if (isMatched) matchedCount++;
+      else unmatchedCount++;
+
+      const mKey = pacificMonthKey(r.soldDate) || 'unknown';
+      if (!byMonth[mKey]) byMonth[mKey] = { count: 0, gross: 0, net: 0 };
+      byMonth[mKey].count++;
+      byMonth[mKey].gross = Number((byMonth[mKey].gross + g).toFixed(2));
+      byMonth[mKey].net = Number((byMonth[mKey].net + n).toFixed(2));
+
+      const pKey: 'HUCK' | 'PDXGL' | 'BB' =
+        r.partnerBucket === 'PDXGL' || r.partnerBucket === 'BB' ? r.partnerBucket : 'HUCK';
+      byPartner[pKey].count++;
+      byPartner[pKey].gross = Number((byPartner[pKey].gross + g).toFixed(2));
+      byPartner[pKey].net = Number((byPartner[pKey].net + n).toFixed(2));
+    }
+
+    const monthKeys = Object.keys(byMonth).sort((a, b) => b.localeCompare(a));
+    return {
+      count: rows.length,
+      gross: Number(gross.toFixed(2)),
+      net: Number(net.toFixed(2)),
+      matchedCount,
+      unmatchedCount,
+      byMonth,
+      monthKeys,
+      byPartner,
+      spansMultipleMonths: monthKeys.length > 1,
+      exceedsGuardThreshold: monthKeys.length > 1 || rows.length > 25,
+    };
   });
 
   const fetchStagedRicochetSales = async (manualTrigger: boolean = false) => {
     if (!activeCanonicalLocationMeta.value.usesRicochet) return;
+    const hadPriorPayload = Boolean(ricochetSyncPayload.value);
+    const prevCommittedAt = String(ricochetRawCsv.value?.committed_at || '');
     isLoadingRicochetSync.value = true;
     try {
-      const code = encodeURIComponent(activeCanonicalLocationMeta.value.code);
-      const res = await fetch(`/api/sales/ricochet-sync?location=${code}&t=${Date.now()}`);
-      const data = await res.json().catch(() => null);
-      if (res.ok && data?.ok && data?.payload) {
-        ricochetSyncPayload.value = data.payload;
-        ricochetRawCsv.value = data?.rawCsv || null;
-        // Ingest the staged RAW Export CSVs (from the API payload — never cross-origin localStorage) when no rows were staged yet
-        const stagedRowCount = Array.isArray(data.payload?.rows) ? data.payload.rows.length : 0;
-        if (stagedRowCount === 0 && (data?.rawCsv?.payout || data?.rawCsv?.payoutHistory)) {
-          const parsedStagedCsv = parseRicochetExportCsv(
-            [data.rawCsv.payout, data.rawCsv.payoutHistory].filter(Boolean).join('\n')
-          );
-          if (parsedStagedCsv.rows.length > 0) {
-            const stageRes = await fetch('/api/sales/ricochet-sync', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                mode: 'stage',
-                dryRun: true,
-                locationCode: activeCanonicalLocationMeta.value.code,
-                rows: [],
-                rawCsv: { payout: data.rawCsv.payout, payoutHistory: data.rawCsv.payoutHistory },
-              }),
-            });
-            const stageData = await stageRes.json().catch(() => null);
-            if (stageRes.ok && stageData?.ok && stageData?.payload) {
-              ricochetSyncPayload.value = stageData.payload;
+      const locCode = activeCanonicalLocationMeta.value.code;
+      const code = encodeURIComponent(locCode);
+      let loadedFromServer = false;
+      try {
+        const res = await fetch(`/api/sales/ricochet-sync?location=${code}&t=${Date.now()}`);
+        const data = await res.json().catch(() => null);
+        if (res.ok && data?.ok && data?.payload) {
+          ricochetSyncPayload.value = data.payload;
+          ricochetRawCsv.value = data?.rawCsv || null;
+          loadedFromServer = true;
+          const stagedRowCount = Array.isArray(data.payload?.rows) ? data.payload.rows.length : 0;
+          if (stagedRowCount === 0 && (data?.rawCsv?.payout || data?.rawCsv?.payoutHistory)) {
+            const parsedStagedCsv = parseRicochetExportCsv(
+              [data.rawCsv.payout, data.rawCsv.payoutHistory].filter(Boolean).join('\n')
+            );
+            if (parsedStagedCsv.rows.length > 0) {
+              const stageRes = await fetch('/api/sales/ricochet-sync', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  mode: 'stage',
+                  dryRun: true,
+                  locationCode: locCode,
+                  rows: [],
+                  rawCsv: { payout: data.rawCsv.payout, payoutHistory: data.rawCsv.payoutHistory },
+                }),
+              });
+              const stageData = await stageRes.json().catch(() => null);
+              if (stageRes.ok && stageData?.ok && stageData?.payload) {
+                ricochetSyncPayload.value = stageData.payload;
+              }
             }
           }
         }
-        if (manualTrigger) {
-          addToast({
-            type: 'success',
-            message: `🔄 Loaded ${ricochetStagedRows.value.length} staged Ricochet sales for ${activeCanonicalLocationMeta.value.shortName} (Dry-Run Preview)!`,
-          });
+      } catch {
+        // Fall through to direct Appwrite browser-session manifest read below
+      }
+
+      if (!loadedFromServer) {
+        const { salesSyncDocId, rawCsvDocId } = getLocationManifestDocIds(locCode);
+        const [syncDoc, rawDoc] = await Promise.all([
+          databases.getDocument(DATABASE_ID, MANIFESTS_COLLECTION_ID, salesSyncDocId).catch(() => null),
+          databases.getDocument(DATABASE_ID, MANIFESTS_COLLECTION_ID, rawCsvDocId).catch(() => null),
+        ]);
+        const rawSnap = (syncDoc as any)?.itemsSnapshot || (syncDoc as any)?.notes_raw;
+        if (rawSnap) {
+          const parsed = typeof rawSnap === 'string' ? JSON.parse(rawSnap) : rawSnap;
+          if (parsed && Array.isArray(parsed.rows)) {
+            ricochetSyncPayload.value = parsed;
+            loadedFromServer = true;
+          }
         }
+        const rawCsvSnap = (rawDoc as any)?.itemsSnapshot;
+        if (rawCsvSnap) {
+          const parsedCsv = typeof rawCsvSnap === 'string' ? JSON.parse(rawCsvSnap) : rawCsvSnap;
+          if (parsedCsv && typeof parsedCsv === 'object') {
+            ricochetRawCsv.value = parsedCsv;
+          }
+        }
+      }
+
+      const nextCommittedAt = String(ricochetRawCsv.value?.committed_at || '');
+      if (hadPriorPayload && nextCommittedAt && nextCommittedAt !== prevCommittedAt && !isCommittingRicochetSync.value) {
+        void fetchDynamicAppwriteSales();
+        onAfterLiveCommit?.();
+      }
+
+      if (loadedFromServer && manualTrigger) {
+        addToast({
+          type: 'success',
+          message: `🔄 Loaded ${ricochetStagedRows.value.length} staged Ricochet sales for ${activeCanonicalLocationMeta.value.shortName} (${ricochetActionableNewCount.value} new)!`,
+        });
       }
     } catch (err: any) {
       if (manualTrigger) {
@@ -716,6 +867,11 @@ export function useRicochetSalesSync(options: UseRicochetSalesSyncOptions) {
     ) {
       return;
     }
+    const lease = acquireRicochetCommitLease();
+    if (!lease.ok) {
+      addToast({ type: 'warning', message: lease.reason });
+      return;
+    }
     // Layer 1: lock the UI synchronously so a double-click can never start a second commit
     isCommittingRicochetSync.value = true;
     const rowsToCommit = ricochetStagedRows.value;
@@ -726,6 +882,7 @@ export function useRicochetSalesSync(options: UseRicochetSalesSyncOptions) {
     // Multiset ledger of what Appwrite already holds: ticket # + gross + net -> number of existing sale docs
     const existingTicketLineCounts = new Map<string, number>();
     const existingSalesByLineKey = new Map<string, any[]>();
+    const seenCommitOccurrences = new Map<string, number>();
     const committedRowKeys = new Set<string>();
     // Booth Bin detection (data-driven): an item that appears on more than one staged ticket line, or that Appwrite already holds with qty > 1
     const lineCountByItem = new Map<string, number>();
@@ -747,19 +904,25 @@ export function useRicochetSalesSync(options: UseRicochetSalesSyncOptions) {
     try {
       // Layer 3 preflight: load existing sales from Appwrite directly via the browser session cookie
       const existingSalesDocs: any[] = [];
+      let inferredTenantId = tenantId;
       try {
         let cursor: string | null = null;
-        for (let page = 0; page < 60; page++) {
+        for (let page = 0; page < 100; page++) {
           const queries: string[] = [Query.limit(100), Query.orderDesc('$id')];
           if (cursor) queries.push(Query.cursorAfter(cursor));
           const res = await databases.listDocuments(DATABASE_ID, COLLECTION_SALES, queries);
           const docs = res.documents || [];
           for (const sale of docs as any[]) {
+            if (!inferredTenantId && sale?.tenantId && sale.tenantId !== 'system') {
+              inferredTenantId = String(sale.tenantId).trim();
+            }
             if (String(sale?.status || '').toLowerCase() === 'cancelled') continue;
             existingSalesDocs.push(sale);
-            const ticket = canonicalTicketNumber(sale.ticket || sale.orderId || sale.sale || sale.ticketNumber);
+            const ticket = posTicketOfRow(sale);
             if (/^\d{4,8}$/.test(ticket)) {
-              const key = ticketLineKey(ticket, sale?.grossAmount ?? sale?.amount, sale?.netPayout);
+              const grossVal = Number(sale?.grossAmount ?? sale?.amount ?? 0);
+              const netVal = Number(sale?.netPayout ?? (grossVal - Number(sale?.commissionFee ?? 0)));
+              const key = ticketLineKey(ticket, grossVal, netVal);
               existingTicketLineCounts.set(key, (existingTicketLineCounts.get(key) || 0) + 1);
               if (!existingSalesByLineKey.has(key)) existingSalesByLineKey.set(key, []);
               existingSalesByLineKey.get(key)!.push(sale);
@@ -776,6 +939,8 @@ export function useRicochetSalesSync(options: UseRicochetSalesSyncOptions) {
         throw new Error(`Could not read existing sales before committing (${preflightErr?.message || preflightErr}). Nothing was written.`);
       }
 
+      const effectiveTenantId = inferredTenantId || 'system';
+
       for (let start = 0; start < totalRows; start += COMMIT_BATCH_SIZE) {
         const chunk = rowsToCommit.slice(start, start + COMMIT_BATCH_SIZE);
         const batchNo = Math.floor(start / COMMIT_BATCH_SIZE) + 1;
@@ -789,7 +954,7 @@ export function useRicochetSalesSync(options: UseRicochetSalesSyncOptions) {
           const { saleIso, orderRef, soNumber } = buildSaleOrderReference(row, locMeta.code);
           const normRowTicket = posTicketOfRow(row);
           // A sale is only ever created from a real Ricochet ticket row (Payouts / Payout History). Catalog "Sold" items never create sales.
-          if (!/^\d{4,8}$/.test(normRowTicket) || !row.soldDate) {
+          if (!/^\d{4,8}$/.test(normRowTicket) || !row.soldDate || !saleIso) {
             skippedNoTicket++;
             skippedTotal++;
             if (noTicketExamples.length < 4) {
@@ -803,6 +968,9 @@ export function useRicochetSalesSync(options: UseRicochetSalesSyncOptions) {
           const net = Number(row.ricoNetPayout ?? row.expectedNetPayout ?? 0);
 
           const lineKey = ticketLineKey(normRowTicket, gross, net);
+          const occ = (seenCommitOccurrences.get(lineKey) || 0) + 1;
+          seenCommitOccurrences.set(lineKey, occ);
+
           const alreadyHeld = existingTicketLineCounts.get(lineKey) || 0;
           if (alreadyHeld > 0) {
             existingTicketLineCounts.set(lineKey, alreadyHeld - 1);
@@ -845,8 +1013,7 @@ export function useRicochetSalesSync(options: UseRicochetSalesSyncOptions) {
             committedRowKeys.add(rowKeyOf(row));
             continue;
           }
-          const shieldKey = lineKey;
-          void shieldKey;
+
           const fee = Number(row.expectedFee ?? row.expectedCommission ?? row.ricoCommission ?? 0);
           // 📦 Booth Bin (multi-qty): one SKU sells many times. A bin sale only records the sale — it must NEVER flip the bin item to
           // "sold / qty 1" (stock is managed by the Booth Bin / Restock flows and the Products sync).
@@ -855,6 +1022,7 @@ export function useRicochetSalesSync(options: UseRicochetSalesSyncOptions) {
             Boolean(rowBinSku && PREVERIFIED_MD_MULTI_QTY_BINS[rowBinSku]) ||
             (lineCountByItem.get(String(row.matchedItemId || '')) || 0) > 1 ||
             multiQtyItemIds.has(String(row.matchedItemId || ''));
+          const deterministicId = deterministicSaleId(locMeta.id, normRowTicket, gross, net, occ);
           const saleDoc: Record<string, any> = {
             warehouseId: locMeta.id,
             soNumber,
@@ -866,22 +1034,21 @@ export function useRicochetSalesSync(options: UseRicochetSalesSyncOptions) {
             shippingCharged: 0,
             shippingCost: 0,
             status: 'Sold',
-            tenantId: tenantId || 'system',
+            tenantId: effectiveTenantId,
           };
 
           pendingWrites.push(
             (async () => {
               try {
-                const createdSale = await createSaleDocClient(saleDoc, tenantId);
+                const createdSale = await createSaleDocClient(saleDoc, effectiveTenantId, deterministicId);
                 if (row.matchedItemId && !isBinSale) {
                   try {
                     const cleanSku = String(row.sku || row.ricoSku || '').trim().toUpperCase();
-                    const binConfig = cleanSku ? PREVERIFIED_MD_MULTI_QTY_BINS[cleanSku] : undefined;
                     await databases.updateDocument(DATABASE_ID, ITEMS_COLLECTION_ID, row.matchedItemId, {
-                      status: binConfig ? 'placed' : 'sold',
+                      status: 'sold',
                       storageLocation: locMeta.code,
                       warehouseId: locMeta.id,
-                      quantity: binConfig ? Math.max(1, binConfig.expectedRemainingQty) : 1,
+                      quantity: 1,
                       resalePrice: gross,
                       soldPrice: net,
                       saleId: createdSale.$id,
@@ -895,10 +1062,27 @@ export function useRicochetSalesSync(options: UseRicochetSalesSyncOptions) {
                 committedTotal++;
                 committedRowKeys.add(rowKeyOf(row));
               } catch (err: any) {
-                batchFailed++;
-                failedTotal++;
-                const msg = String(err?.message || err || 'Unknown Appwrite error');
-                if (!batchErrors.includes(msg)) batchErrors.push(msg);
+                const errCode = Number(err?.code || 0);
+                const errMsg = String(err?.message || err || 'Unknown Appwrite error');
+                if (errCode === 409 || /document.*already exists/i.test(errMsg)) {
+                  const existingConflictDoc: any = await databases
+                    .getDocument(DATABASE_ID, COLLECTION_SALES, deterministicId)
+                    .catch(() => null);
+                  if (existingConflictDoc && String(existingConflictDoc.status || '').toLowerCase() === 'cancelled') {
+                    batchFailed++;
+                    failedTotal++;
+                    const cMsg = `Cancelled sale exists for Ticket #${normRowTicket} ($${gross.toFixed(2)})`;
+                    if (!batchErrors.includes(cMsg)) batchErrors.push(cMsg);
+                  } else {
+                    skippedDuplicateTickets++;
+                    skippedTotal++;
+                    committedRowKeys.add(rowKeyOf(row));
+                  }
+                } else {
+                  batchFailed++;
+                  failedTotal++;
+                  if (!batchErrors.includes(errMsg)) batchErrors.push(errMsg);
+                }
               }
             })()
           );
@@ -927,7 +1111,7 @@ export function useRicochetSalesSync(options: UseRicochetSalesSyncOptions) {
         locallyCommittedRowKeys.value = nextSet;
       }
 
-      // Layer 2: stamp the staging manifest as committed directly via client Appwrite SDK
+      // Layer 2: stamp the staging manifest as committed directly via client Appwrite SDK + finalize server manifest
       if (failedTotal === 0) {
         const committedAtIso = new Date().toISOString();
         const totalCommittedCount = committedTotal + skippedTotal;
@@ -977,12 +1161,23 @@ export function useRicochetSalesSync(options: UseRicochetSalesSyncOptions) {
         } catch {
           // Local reactive manifest state still locks the UI below
         }
+        // Re-hydrate staged payload from GET so server-enriched counts reflect newly committed Appwrite sales
+        void fetchStagedRicochetSales(false);
+
         ricochetRawCsv.value = {
           ...(ricochetRawCsv.value || {}),
           status: 'committed',
           committed_at: committedAtIso,
           committed_count: totalCommittedCount,
         };
+
+        try {
+          if (typeof BroadcastChannel !== 'undefined') {
+            const bc = new BroadcastChannel('resale_command_sync');
+            bc.postMessage({ type: 'RC_RICOCHET_SALES_SYNCED', committedCount: committedTotal, timestamp: Date.now() });
+            bc.close();
+          }
+        } catch {}
       }
 
       ricochetDryRunResult.value = null;
@@ -1004,9 +1199,12 @@ export function useRicochetSalesSync(options: UseRicochetSalesSyncOptions) {
     } finally {
       isCommittingRicochetSync.value = false;
       ricochetCommitProgress.value = null;
+      releaseRicochetCommitLease();
     }
   };
   const commitStagedRicochetSales = commitLiveSales;
+
+  let syncBroadcastChannel: BroadcastChannel | null = null;
 
   const handleTabWakeOrFocus = () => {
     if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
@@ -1022,9 +1220,25 @@ export function useRicochetSalesSync(options: UseRicochetSalesSyncOptions) {
       if (!Array.isArray(inventoryItems?.value) || inventoryItems!.value.length === 0) {
         void fetchDynamicAppwriteInventoryItems();
       }
-      void fetchDynamicAppwriteSales();
+      if (!Array.isArray(externalSales?.value) || externalSales!.value.length === 0) {
+        void fetchDynamicAppwriteSales();
+      }
+      void fetchStagedRicochetSales(false);
       window.addEventListener('focus', handleTabWakeOrFocus);
       document.addEventListener('visibilitychange', handleTabWakeOrFocus);
+      try {
+        if (typeof BroadcastChannel !== 'undefined') {
+          syncBroadcastChannel = new BroadcastChannel('resale_command_sync');
+          syncBroadcastChannel.onmessage = (ev: MessageEvent) => {
+            const msgType = String(ev?.data?.type || '');
+            if (msgType === 'RC_RICOCHET_SALES_SYNCED' || msgType === 'RC_BML_SYNC_COMPLETED') {
+              void fetchDynamicAppwriteSales();
+              void fetchStagedRicochetSales(false);
+              onAfterLiveCommit?.();
+            }
+          };
+        }
+      } catch {}
     }
   });
 
@@ -1032,6 +1246,10 @@ export function useRicochetSalesSync(options: UseRicochetSalesSyncOptions) {
     if (typeof window !== 'undefined') {
       window.removeEventListener('focus', handleTabWakeOrFocus);
       document.removeEventListener('visibilitychange', handleTabWakeOrFocus);
+      try {
+        syncBroadcastChannel?.close();
+        syncBroadcastChannel = null;
+      } catch {}
     }
   });
 
@@ -1042,6 +1260,7 @@ export function useRicochetSalesSync(options: UseRicochetSalesSyncOptions) {
     ricochetManifestStatus,
     ricochetManifestCommittedCount,
     ricochetManifestCommittedAt,
+    hasLoadedLiveSalesLedger,
     isLoadingRicochetSync,
     isSimulatingRicochetSync,
     isCommittingRicochetSync,
@@ -1056,7 +1275,9 @@ export function useRicochetSalesSync(options: UseRicochetSalesSyncOptions) {
     ricochetPaidRowsCount,
     filteredRicochetStagedRows,
     ricochetSummary,
+    ricochetActionableNewRows,
     ricochetActionableNewCount,
+    ricochetNewBreakdown,
     fetchStagedRicochetSales,
     applyPastedRicochetSyncPayload,
     simulateStagedRicochetSales,

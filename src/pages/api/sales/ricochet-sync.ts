@@ -7,7 +7,15 @@ import {
   Role as NodeRole,
   Query as NodeQuery,
 } from 'node-appwrite';
-import { PREVERIFIED_MD_MULTI_QTY_BINS, canonicalTicketNumber, cleanCatalogSku } from '../../../lib/salesBucketing';
+import {
+  PREVERIFIED_MD_MULTI_QTY_BINS,
+  buildTicketLineLedger,
+  cleanCatalogSku,
+  consumeTicketLine,
+  deterministicSaleId,
+  posTicketOfRow,
+  ticketLineKey,
+} from '../../../lib/salesBucketing';
 import {
   type RicochetSalesSyncPayload,
   type RicochetSyncSaleLine,
@@ -304,7 +312,7 @@ async function fetchAllItemsAndSales(opts?: { salesOnly?: boolean }) {
     if (databases) {
       try {
         let cursor: string | null = null;
-        for (let page = 0; page < 25; page++) {
+        for (let page = 0; page < 100; page++) {
           const queries: string[] = [NodeQuery.limit(100), NodeQuery.orderDesc('$id')];
           if (cursor) queries.push(NodeQuery.cursorAfter(cursor));
           const res = await databases.listDocuments(dbId, col, queries);
@@ -323,7 +331,7 @@ async function fetchAllItemsAndSales(opts?: { salesOnly?: boolean }) {
         };
         if (apiKey) headers['X-Appwrite-Key'] = apiKey;
         let offset = 0;
-        for (let page = 0; page < 25; page++) {
+        for (let page = 0; page < 100; page++) {
           const qLimit = encodeURIComponent(JSON.stringify({ method: 'limit', values: [100] }));
           const qOffset = encodeURIComponent(JSON.stringify({ method: 'offset', values: [offset] }));
           const qOrder = encodeURIComponent(JSON.stringify({ method: 'orderDesc', attribute: '$id' }));
@@ -364,15 +372,22 @@ async function fetchLocationVerifyCatalogRows(locCode: string): Promise<any[]> {
 async function enrichAndMatchSalesRows(
   rawRows: any[],
   locCode: string,
-  extraOptions?: { spaceRentalAdjustments?: SpaceRentalAdjustment[]; dryRun?: boolean; salesSink?: any[] }
+  extraOptions?: {
+    spaceRentalAdjustments?: SpaceRentalAdjustment[];
+    dryRun?: boolean;
+    salesSink?: any[];
+    itemsSink?: any[];
+    preserveTicketOccurrence?: boolean;
+  }
 ): Promise<RicochetSalesSyncPayload> {
   const [{ allItems, allSales }, catalogReportRows, liveWarehouses] = await Promise.all([
     fetchAllItemsAndSales(),
     fetchLocationVerifyCatalogRows(locCode),
     loadLiveWarehouseDocs(),
   ]);
-  // Hand the already-fetched sales to the caller (commit shield) so they are not downloaded a second time
+  // Hand the already-fetched sales & items to the caller (commit shield + Booth Bin guard) so they are not downloaded twice
   if (extraOptions?.salesSink) extraOptions.salesSink.push(...allSales);
+  if (extraOptions?.itemsSink) extraOptions.itemsSink.push(...allItems);
   return buildEnrichedRicochetSalesPayload({
     rawRows,
     locCode,
@@ -382,12 +397,14 @@ async function enrichAndMatchSalesRows(
     liveWarehouses,
     spaceRentalAdjustments: extraOptions?.spaceRentalAdjustments,
     dryRun: extraOptions?.dryRun,
+    preserveTicketOccurrence: extraOptions?.preserveTicketOccurrence,
   });
 }
 
 /**
  * Creates a `sales` document and survives schema drift: if Appwrite rejects the request because an OPTIONAL attribute is not in the
  * collection schema ("Unknown attribute: tenantId" → 400), that attribute is dropped and the write is retried instead of failing the batch.
+ * Supports a deterministic `customDocId` so concurrent duplicate commits receive HTTP 409 (`document_already_exists`).
  */
 const OPTIONAL_SALE_ATTRIBUTES = new Set(['tenantId', 'shippingCharged', 'shippingCost', 'orderId', 'commissionFee']);
 
@@ -395,20 +412,33 @@ async function createSaleDocSchemaSafe(
   databases: NodeDatabases,
   dbId: string,
   salesCol: string,
-  doc: Record<string, any>
+  doc: Record<string, any>,
+  options?: { customDocId?: string; permissions?: string[] }
 ): Promise<any> {
   const payload: Record<string, any> = { ...doc };
+  const targetDocId = options?.customDocId || NodeID.unique();
+  let perms: string[] | undefined = options?.permissions && options.permissions.length > 0 ? options.permissions : undefined;
   let lastErr: any = null;
-  for (let attempt = 0; attempt < 5; attempt++) {
+  for (let attempt = 0; attempt < 6; attempt++) {
     try {
-      return await databases.createDocument(dbId, salesCol, NodeID.unique(), payload);
+      return perms
+        ? await databases.createDocument(dbId, salesCol, targetDocId, payload, perms)
+        : await databases.createDocument(dbId, salesCol, targetDocId, payload);
     } catch (err: any) {
       lastErr = err;
+      const code = Number(err?.code || 0);
       const msg = String(err?.message || '');
+      if (code === 409 || /document.*already exists/i.test(msg)) {
+        throw err;
+      }
       const m = msg.match(/Unknown attribute:?\s*"?([A-Za-z0-9_]+)"?/i);
       const attr = m?.[1];
       if (attr && OPTIONAL_SALE_ATTRIBUTES.has(attr) && attr in payload) {
         delete payload[attr];
+        continue;
+      }
+      if (perms && [400, 401, 403].includes(code) && /permission|role|team/i.test(msg)) {
+        perms = undefined;
         continue;
       }
       throw err;
@@ -417,10 +447,49 @@ async function createSaleDocSchemaSafe(
   throw lastErr;
 }
 
+function resolveEffectiveTenantId(
+  explicitTenantId: string | undefined,
+  memberTeamId: string | undefined,
+  existingSales: any[],
+  existingItems: any[]
+): string {
+  const isRealTenant = (val: any): val is string => {
+    const s = String(val || '').trim();
+    return Boolean(s && s !== 'system' && s !== 'huck_collective' && s !== 'same_origin_member');
+  };
+  if (isRealTenant(explicitTenantId)) return String(explicitTenantId).trim();
+  if (isRealTenant(memberTeamId)) return String(memberTeamId).trim();
+
+  const freq = new Map<string, number>();
+  for (const doc of existingSales || []) {
+    if (isRealTenant(doc?.tenantId)) {
+      const t = String(doc.tenantId).trim();
+      freq.set(t, (freq.get(t) || 0) + 1);
+    }
+  }
+  if (freq.size === 0) {
+    for (const doc of existingItems || []) {
+      if (isRealTenant(doc?.tenantId)) {
+        const t = String(doc.tenantId).trim();
+        freq.set(t, (freq.get(t) || 0) + 1);
+      }
+    }
+  }
+  let bestTenant = '';
+  let bestCount = 0;
+  for (const [t, count] of freq.entries()) {
+    if (count > bestCount) {
+      bestTenant = t;
+      bestCount = count;
+    }
+  }
+  return bestTenant || 'system';
+}
+
 export const OPTIONS: APIRoute = async () => new Response(null, { status: 204, headers: CORS_HEADERS });
 
 export const GET: APIRoute = async ({ request, url }) => {
-  const auth = await requireBookmarkletMember(request);
+  const auth = await requireBookmarkletMember(request, { allowSameOriginCookieFallback: true });
   if (!auth.ok) return auth.response;
 
   try {
@@ -477,6 +546,7 @@ export const GET: APIRoute = async ({ request, url }) => {
           commissionRate: locMeta.commissionRate,
           monthlyRent: locMeta.monthlyRent,
         },
+        summary: payload?.summary || null,
         rawCsv: stagedRawCsv || null,
         payload: payload || null,
       }),
@@ -491,7 +561,7 @@ export const GET: APIRoute = async ({ request, url }) => {
 };
 
 export const POST: APIRoute = async ({ request, url }) => {
-  const auth = await requireBookmarkletMember(request);
+  const auth = await requireBookmarkletMember(request, { allowSameOriginCookieFallback: true });
   if (!auth.ok) return auth.response;
 
   try {
@@ -546,12 +616,15 @@ export const POST: APIRoute = async ({ request, url }) => {
             ? persisted.rows
             : [];
       const preloadedSales: any[] = [];
+      const preloadedItems: any[] = [];
       const currentPayload =
         sourceRows.length > 0
           ? await enrichAndMatchSalesRows(sourceRows, locMeta.code, {
               spaceRentalAdjustments: body?.spaceRentalAdjustments || persisted?.spaceRentalAdjustments,
               dryRun: isDryRunRequest,
               salesSink: preloadedSales,
+              itemsSink: preloadedItems,
+              preserveTicketOccurrence: isBatchedCommit,
             })
           : persisted;
 
@@ -565,11 +638,17 @@ export const POST: APIRoute = async ({ request, url }) => {
       if (isDryRunRequest) {
         let wouldCommitCount = 0;
         let skippedAlreadySynced = 0;
+        let skippedNoTicket = 0;
         let wouldGross = 0;
         let wouldNet = 0;
         for (const row of currentPayload.rows) {
           if (row.alreadySynced || row.alreadyRecorded) {
             skippedAlreadySynced++;
+            continue;
+          }
+          const ticket = posTicketOfRow(row);
+          if (!ticket || !row.soldDate || row.skipReason === 'no_ticket') {
+            skippedNoTicket++;
             continue;
           }
           if (!row.matchedItemId && !row.sku && !row.title) continue;
@@ -586,9 +665,11 @@ export const POST: APIRoute = async ({ request, url }) => {
             dryRun: true,
             wouldCommitCount,
             skippedAlreadySynced,
+            skippedNoTicket,
             alreadySyncedCount: skippedAlreadySynced,
             wouldGross: Number(wouldGross.toFixed(2)),
             wouldNet: Number(wouldNet.toFixed(2)),
+            summary: currentPayload.summary,
             payload: currentPayload,
           }),
           { status: 200, headers: CORS_HEADERS }
@@ -598,87 +679,201 @@ export const POST: APIRoute = async ({ request, url }) => {
       let committedCount = 0;
       let skippedAlreadySynced = 0;
       let skippedDuplicateTickets = 0;
+      let skippedNoTicket = 0;
       let failedCount = 0;
       const commitErrors: string[] = [];
       const recordCommitError = (msg: string) => {
         const clean = String(msg || '').trim();
         if (clean && !commitErrors.includes(clean) && commitErrors.length < 5) commitErrors.push(clean);
       };
-      const tenantId = String(body?.tenantId || '').trim();
 
-      // Layer 3 (Database Idempotency Shield): ticket number + sale date + location must be unique in `sales`
-      const saleShieldKey = (warehouseId: string, orderRef: string, saleIso: string) =>
-        `${String(warehouseId || '').trim()}|${String(orderRef || '').trim().toUpperCase()}|${String(saleIso || '').slice(0, 10)}`;
-      const existingSaleKeys = new Set<string>();
-      if (databases) {
-        const existingSales = preloadedSales.length > 0 ? preloadedSales : (await fetchAllItemsAndSales({ salesOnly: true })).allSales;
-        for (const s of existingSales) {
-          if (s?.status === 'Cancelled') continue;
-          existingSaleKeys.add(saleShieldKey(s?.warehouseId, s?.orderId, s?.saleDate));
+      const existingSales =
+        preloadedSales.length > 0 || !databases
+          ? preloadedSales
+          : (await fetchAllItemsAndSales({ salesOnly: true })).allSales;
+
+      const effectiveTenantId = resolveEffectiveTenantId(
+        body?.tenantId,
+        auth.member?.teamId,
+        existingSales,
+        preloadedItems
+      );
+      const salePermissions: string[] | undefined =
+        effectiveTenantId && effectiveTenantId !== 'system'
+          ? [
+              NodePermission.read(NodeRole.team(effectiveTenantId)),
+              NodePermission.update(NodeRole.team(effectiveTenantId)),
+              NodePermission.delete(NodeRole.team(effectiveTenantId)),
+            ]
+          : undefined;
+
+      // Build Booth Bin detection maps across full staged manifest + live inventory (Law 15 LOCKED Booth Bin rule)
+      const multiQtyItemIds = new Set<string>();
+      for (const it of preloadedItems) {
+        if (it?.isMultiQty || Number(it?.quantity ?? 1) > 1) {
+          multiQtyItemIds.add(String(it.$id));
+        }
+      }
+      const lineCountByItem = new Map<string, number>();
+      const rowsForBinCount =
+        Array.isArray(persisted?.rows) && persisted.rows.length > currentPayload.rows.length
+          ? persisted.rows
+          : currentPayload.rows;
+      for (const r of rowsForBinCount) {
+        if (r?.matchedItemId) {
+          const idStr = String(r.matchedItemId);
+          lineCountByItem.set(idStr, (lineCountByItem.get(idStr) || 0) + 1);
         }
       }
 
+      // Layer 3 (Canonical Law 15 Ticket-Line Multiset + Deterministic Primary-Key `$id`)
+      const commitLedger = buildTicketLineLedger(existingSales);
+      const batchSeenOccurrences = new Map<string, number>();
+
       if (databases) {
         for (const row of currentPayload.rows) {
-          if (row.alreadySynced) {
-            skippedAlreadySynced++;
+          if (!row.matchedItemId && !row.sku && !row.title) continue;
+
+          const ticket = posTicketOfRow(row);
+          const { saleIso, orderRef, soNumber } = buildSaleOrderReference(row, locMeta.code);
+          // Law 7 & Law 15: Never create a sale without a real 4-8 digit POS ticket and an explicit Ricochet Sold date
+          if (!ticket || !row.soldDate || !saleIso || row.skipReason === 'no_ticket') {
+            skippedNoTicket++;
             continue;
           }
-          if (!row.matchedItemId && !row.sku && !row.title) continue;
 
           const gross = Number(row.grossPrice || 0);
           const fee = Number(row.expectedFee ?? row.ricoCommission ?? 0);
           const net = Number(row.ricoNetPayout ?? row.expectedNetPayout ?? 0);
-          const { saleIso, orderRef, soNumber } = buildSaleOrderReference(row, locMeta.code);
-          const hasRealTicket = Boolean(canonicalTicketNumber(row.payoutId || row.saleNumber));
-          const shieldKey = saleShieldKey(locMeta.id, orderRef, saleIso);
-          if (hasRealTicket && existingSaleKeys.has(shieldKey)) {
-            skippedDuplicateTickets++;
+          const lineKey = ticketLineKey(ticket, gross, net);
+
+          const nextSeenOcc = (batchSeenOccurrences.get(lineKey) || 0) + 1;
+          batchSeenOccurrences.set(lineKey, nextSeenOcc);
+          const occ =
+            isBatchedCommit && Number(row.ticketOccurrence || 0) >= 1
+              ? Number(row.ticketOccurrence)
+              : nextSeenOcc;
+
+          const rowBinSku = cleanCatalogSku(row.sku || row.ricoSku).toUpperCase();
+          const isBinSale =
+            Boolean(rowBinSku && PREVERIFIED_MD_MULTI_QTY_BINS[rowBinSku]) ||
+            (row.matchedItemId ? (lineCountByItem.get(String(row.matchedItemId)) || 0) > 1 : false) ||
+            (row.matchedItemId ? multiQtyItemIds.has(String(row.matchedItemId)) : false);
+
+          let matchedExistingSale: any = null;
+          let alreadyInLedger = false;
+          if (isBatchedCommit) {
+            if ((commitLedger.initialCounts.get(lineKey) || 0) >= occ) {
+              alreadyInLedger = true;
+              matchedExistingSale = commitLedger.docsByKey.get(lineKey)?.[occ - 1] || null;
+            }
+          } else {
+            const consumed = consumeTicketLine(commitLedger, row);
+            if (consumed.matched) {
+              alreadyInLedger = true;
+              matchedExistingSale = consumed.existingSale || null;
+            }
+          }
+
+          if (alreadyInLedger) {
+            // Best-effort self-heal of partner-prefixed `soNumber`, `orderId`, and non-bin `items.saleId`
+            if (matchedExistingSale?.$id) {
+              const existingSo = String(matchedExistingSale.soNumber || '').trim();
+              const existingOrd = String(matchedExistingSale.orderId || '').trim();
+              const isExistingUnlinkedSo = !existingSo || /^(?:SO-|Ticket\s*#|RICO-)/i.test(existingSo);
+              const isIncomingRealSkuOrUpc = Boolean(soNumber && !/^(?:SO-|Ticket\s*#|RICO-)/i.test(soNumber));
+              const needsOrderTitleEnrich = !existingOrd.includes('•') && orderRef.includes('•');
+              const salePatch: Record<string, any> = {};
+              if (isExistingUnlinkedSo && isIncomingRealSkuOrUpc) salePatch.soNumber = soNumber;
+              if (needsOrderTitleEnrich) salePatch.orderId = orderRef;
+              try {
+                if (Object.keys(salePatch).length > 0) {
+                  await databases.updateDocument(dbId, salesCol, matchedExistingSale.$id, salePatch);
+                }
+                if (row.matchedItemId && !isBinSale) {
+                  await databases.updateDocument(dbId, itemsCol, row.matchedItemId, {
+                    saleId: matchedExistingSale.$id,
+                  });
+                }
+              } catch {
+                // Self-heal of existing sale metadata is best-effort
+              }
+            }
+            skippedAlreadySynced++;
             row.alreadySynced = true;
+            row.alreadyRecorded = true;
             continue;
           }
 
+          const deterministicId = deterministicSaleId(locMeta.id, ticket, gross, net, occ);
+
           try {
-            const createdSale = await createSaleDocSchemaSafe(databases, dbId, salesCol, {
-              warehouseId: locMeta.id,
-              soNumber,
-              orderId: orderRef,
-              saleDate: saleIso,
-              grossAmount: gross,
-              commissionFee: fee,
-              netPayout: net,
-              shippingCharged: 0,
-              shippingCost: 0,
-              status: 'Sold',
-              tenantId: tenantId || 'system',
-            });
+            const createdSale = await createSaleDocSchemaSafe(
+              databases,
+              dbId,
+              salesCol,
+              {
+                warehouseId: locMeta.id,
+                soNumber,
+                orderId: orderRef,
+                saleDate: saleIso,
+                grossAmount: gross,
+                commissionFee: fee,
+                netPayout: net,
+                shippingCharged: 0,
+                shippingCost: 0,
+                status: 'Sold',
+                tenantId: effectiveTenantId,
+              },
+              {
+                customDocId: deterministicId,
+                permissions: salePermissions,
+              }
+            );
 
-            // The sale is written; an item-update failure must not hide it (the ticket shield skips it on retry)
+            // Advance in-memory ledger counts so accidental duplicate lines inside the same request cannot collide
+            commitLedger.initialCounts.set(lineKey, Math.max(commitLedger.initialCounts.get(lineKey) || 0, occ));
             row.alreadySynced = true;
+            row.alreadyRecorded = true;
             committedCount++;
-            if (hasRealTicket) existingSaleKeys.add(shieldKey);
 
-            if (row.matchedItemId) {
+            // Law 15 LOCKED Booth Bin rule: Sales Commit writes ONLY the `sales` doc for bin sales — NEVER mutate `items` for a Booth Bin!
+            if (row.matchedItemId && !isBinSale) {
               try {
-                const binConfig = row.sku ? PREVERIFIED_MD_MULTI_QTY_BINS[row.sku.toUpperCase()] : undefined;
                 const itemUpdate: Record<string, any> = {
-                  status: binConfig ? 'placed' : 'sold',
+                  status: 'sold',
                   storageLocation: locMeta.code,
                   warehouseId: locMeta.id,
-                  quantity: binConfig ? Math.max(1, binConfig.expectedRemainingQty) : 1,
+                  quantity: 1,
                   resalePrice: gross,
                   soldPrice: net,
                   saleId: createdSale.$id,
                 };
-                if (row.sku) itemUpdate.locationSku = row.sku;
+                if (rowBinSku) itemUpdate.locationSku = rowBinSku;
                 await databases.updateDocument(dbId, itemsCol, row.matchedItemId, itemUpdate);
               } catch (itemErr: any) {
                 recordCommitError(`Sale ${orderRef} saved but item update failed: ${itemErr?.message || itemErr}`);
               }
             }
           } catch (saleErr: any) {
-            failedCount++;
-            recordCommitError(String(saleErr?.message || saleErr || 'Appwrite rejected the sale document'));
+            const errCode = Number(saleErr?.code || 0);
+            const errMsg = String(saleErr?.message || saleErr || '');
+            if (errCode === 409 || /document.*already exists/i.test(errMsg)) {
+              const existingConflictDoc: any = await databases
+                .getDocument(dbId, salesCol, deterministicId)
+                .catch(() => null);
+              if (existingConflictDoc && String(existingConflictDoc.status || '').toLowerCase() === 'cancelled') {
+                failedCount++;
+                recordCommitError(`Cancelled sale exists for Ticket #${ticket} ($${gross.toFixed(2)}) — skipped instead of overwriting.`);
+              } else {
+                skippedDuplicateTickets++;
+                row.alreadySynced = true;
+                row.alreadyRecorded = true;
+              }
+            } else {
+              failedCount++;
+              recordCommitError(errMsg || 'Appwrite rejected the sale document');
+            }
           }
         }
       }
@@ -694,6 +889,7 @@ export const POST: APIRoute = async ({ request, url }) => {
             committedCount,
             skippedAlreadySynced,
             skippedDuplicateTickets,
+            skippedNoTicket,
             failedCount,
             errors: commitErrors,
           }),
@@ -717,7 +913,9 @@ export const POST: APIRoute = async ({ request, url }) => {
           committedCount,
           skippedAlreadySynced,
           skippedDuplicateTickets,
+          skippedNoTicket,
           failedCount,
+          errors: commitErrors,
           payload: refreshed,
         }),
         { status: 200, headers: CORS_HEADERS }

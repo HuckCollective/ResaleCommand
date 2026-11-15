@@ -250,6 +250,7 @@ Normalise tickets (`T-217301 • Title`, `Ticket #217301`, `217301` → `217301`
 | 2026-11-04 | Bookmarklet dropped identical lines | De-duplicated rows by content; a ticket can hold identical lines |
 | 2026-11-04 | Repeat bin sales never committed | Server `alreadySynced` flag (SKU+price) was trusted |
 | 2026-11-04 | ~49 items left with dangling `saleId` | Duplicate sales deleted before re-linking items (violated "Duplicate Sale Cleanup") |
+| 2026-11-15 | 8 Nov sales (incl. `11-14` `PDXGL`/`HUCK`) never reached `sales` | Bookmarklet only staged dry-run (`mode:'stage'`), `/sales` had no visible Commit banner, and persisted `alreadySynced: true` + catalog `Sold` status hid repeat Booth Bin sales (`0EJ0M8`, `0EJ0FQ`) |
 
 ### Bookmarklet / paste path
 - `🔄 Harvest` then `Stage Sales to Resale Core`. It must not click Ricochet's `[Export]` (browser download dialog).

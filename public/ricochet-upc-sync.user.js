@@ -597,6 +597,9 @@
   let capturedRawPayoutHistoryCsv = ''; // RAW Export CSV text captured in memory from the Payout History tab
   let harvestedPaidHistoryPages = []; // [{ page, rows }] one entry per traversed "N out of M" Payout History page
   let alreadySyncedRicoKeys = new Set();
+  let hasHydratedLedgerSyncKeys = false;
+  let isCommittingSales = false;
+  let lastServerSalesPayload = null;
   let salesPushSuccessUrl = '';
   let isOpen = false;
   let isRunning = false;
@@ -1308,7 +1311,18 @@
               </div>
             </div>
 
-            <!-- Primary Sales Sync Action Buttons (Default Dry-Run Stage) -->
+            <!-- Direct 1-Click Ledger Commit + Dry-Run Stage Action Buttons -->
+            <button id="rc-commit-sales-btn" type="button" disabled style="
+              width: 100%;
+              background: #334155;
+              color: #94a3b8;
+              border: 1px solid #475569;
+              border-radius: 8px;
+              padding: 10px;
+              font-weight: 900;
+              font-size: 12px;
+              cursor: not-allowed;
+            ">⏳ Checking Resale Command Ledger...</button>
             <div style="display: flex; gap: 8px;">
               <button id="rc-push-sales-btn" type="button" style="
                 flex: 2;
@@ -1316,9 +1330,9 @@
                 color: #022c22;
                 border: none;
                 border-radius: 8px;
-                padding: 10px;
+                padding: 9px;
                 font-weight: 800;
-                font-size: 12px;
+                font-size: 11.5px;
                 cursor: pointer;
               ">🧪 Stage Sales to Resale Core (Dry-Run)</button>
               <button id="rc-copy-sales-json-btn" type="button" style="
@@ -1327,9 +1341,9 @@
                 color: #f8fafc;
                 border: 1px solid #475569;
                 border-radius: 8px;
-                padding: 10px;
+                padding: 9px;
                 font-weight: 700;
-                font-size: 11.5px;
+                font-size: 11px;
                 cursor: pointer;
               ">📋 Copy Sales Sync JSON</button>
             </div>
@@ -1441,6 +1455,7 @@
     refreshMemberBtnState();
     document.getElementById('rc-tab-btn-inventory').addEventListener('click', () => switchModalTab('inventory'));
     document.getElementById('rc-tab-btn-sales').addEventListener('click', () => switchModalTab('sales'));
+    document.getElementById('rc-commit-sales-btn').addEventListener('click', () => commitNewSalesFromBookmarklet());
     document.getElementById('rc-push-sales-btn').addEventListener('click', () => pushSalesToResaleCore({ silent: false }));
     document.getElementById('rc-copy-sales-json-btn').addEventListener('click', copySalesSyncJson);
     const harvestBtn = document.getElementById('rc-harvest-payouts-btn');
@@ -1474,8 +1489,10 @@
       });
     });
 
-    // Keep modal CLOSED by default on load — bottom-right pill shows Login Status + Counts until clicked!
-    hydratePreloadedBarcodes(false);
+    // Keep modal CLOSED on passive page load; auto-open when explicitly clicked from the bookmarklet bar!
+    const clickedFromBookmarklet = Boolean(window.__RC_BOOKMARKLET_CLICKED__);
+    window.__RC_BOOKMARKLET_CLICKED__ = false;
+    hydratePreloadedBarcodes(clickedFromBookmarklet && Boolean(getBmlMemberSession()));
     setupLiveTabConnection();
   }
 
@@ -1778,6 +1795,46 @@
     }
   };
 
+  function detectActiveRicochetSpaTabName() {
+    try {
+      const pathAndHash = `${window.location.pathname || ''} ${window.location.hash || ''}`.toLowerCase();
+      if (/payout[_-]?history/.test(pathAndHash)) return 'Payout History';
+      if (/payout/.test(pathAndHash)) return 'Payout';
+
+      const anchors = Array.from(document.querySelectorAll('a[href="#"], nav a, nav button'));
+      for (const el of anchors) {
+        if (!el || (el.closest && el.closest('#rc-ricochet-sync-root'))) continue;
+        const txt = cleanStr(el.textContent).toLowerCase();
+        if (txt !== 'payout' && txt !== 'payout history' && txt !== 'inventory') continue;
+        const parentCls = (el.parentElement && el.parentElement.className) || '';
+        const clsBlob = `${el.className || ''} ${parentCls} ${el.getAttribute('aria-current') || ''} ${el.getAttribute('aria-selected') || ''}`.toLowerCase();
+        let hasActiveBg = false;
+        try {
+          const cs = window.getComputedStyle(el);
+          const bg = String(cs.backgroundColor || '');
+          if (bg && bg !== 'rgba(0, 0, 0, 0)' && bg !== 'transparent' && bg !== 'rgb(255, 255, 255)') {
+            hasActiveBg = true;
+          }
+        } catch (e) {}
+        if (/\b(?:active|selected|current|true)\b/.test(clsBlob) || hasActiveBg) {
+          if (txt === 'payout history') return 'Payout History';
+          if (txt === 'payout') return 'Payout';
+          if (txt === 'inventory') return 'Inventory';
+        }
+      }
+
+      const bodyText = String(document.body && document.body.innerText ? document.body.innerText : '');
+      if (/Total\s+Paid\s*:/i.test(bodyText)) return 'Payout History';
+      if (/Total\s+Payout\s*:/i.test(bodyText)) return 'Payout';
+    } catch (e) {}
+    return 'Inventory';
+  }
+
+  function isUserOnRicochetPayoutTab() {
+    const tabName = detectActiveRicochetSpaTabName();
+    return tabName === 'Payout' || tabName === 'Payout History';
+  }
+
   function togglePanel() {
     isOpen = !isOpen;
     const panel = document.getElementById('rc-sync-panel');
@@ -1785,6 +1842,9 @@
       panel.style.display = isOpen ? 'flex' : 'none';
     }
     if (isOpen) {
+      if (isUserOnRicochetPayoutTab()) {
+        switchModalTab('sales');
+      }
       showModalLoader(`⏳ Auditing ${activeLocationName} Catalog...`);
       fetchLivePayloadFromCloud(false, true);
       if (catalogProducts.length === 0 && !isLoadingCatalog) {
@@ -3202,6 +3262,7 @@
         return (finalPass.rows || []).length >= (bestParsed.rows || []).length ? finalPass : bestParsed;
       };
 
+      const originalSpaTab = detectActiveRicochetSpaTabName();
       const payoutLink = findSafeSpaNavLink('Payout');
       const payoutHistoryLink = findSafeSpaNavLink('Payout History');
       const inventoryLink = findSafeSpaNavLink('Inventory');
@@ -3247,8 +3308,14 @@
         } catch (e) {}
       }
 
-      // 3. Safely restore `<a href="#">Inventory</a>` tab ONLY after both waits finish
-      safeClickSpaTab(inventoryLink);
+      // 3. Safely restore whichever SPA tab the user was viewing before harvesting
+      const restoreTargetLink =
+        originalSpaTab === 'Payout'
+          ? payoutLink || inventoryLink
+          : originalSpaTab === 'Payout History'
+          ? payoutHistoryLink || inventoryLink
+          : inventoryLink;
+      safeClickSpaTab(restoreTargetLink);
 
       if (mergedAdjustments.length > 0) {
         spaceRentalAdjustments = mergedAdjustments;
@@ -3559,13 +3626,8 @@
         candidateSku ||
         'Booth Sale Item';
 
-      const inheritedSoldDate = cleanStr(
-        rawRow.soldDate ||
-          rawRow.paidDate ||
-          (tab1Row && (tab1Row.soldDate || tab1Row.paidDate)) ||
-          (candidateSku && skuMetaMap[candidateSku] && skuMetaMap[candidateSku].soldDate) ||
-          ''
-      );
+      // Law 7: Sold date comes strictly from the Ricochet Sold column — never paidDate or catalog in_stock!
+      const inheritedSoldDate = cleanStr(rawRow.soldDate || '');
 
       return {
         ricoSku: candidateSku,
@@ -3581,6 +3643,7 @@
 
     const soldRows = [];
     const seenPayoutSignatureCounts = new Map();
+    const seenTicketLineOccurrences = new Map();
     const seenPayoutSkuCounts = new Map();
     const seenPayoutTitlePriceCounts = new Map();
 
@@ -3592,8 +3655,10 @@
       const ricoSku = linked.ricoSku || '';
       const saleNumber = cleanStr(raw.saleNumber || raw.payoutId || '');
       const cleanTicket = saleNumber.replace(/^#/, '').trim();
+      const ticketDigits = (cleanTicket.match(/^\d{4,8}$/) || [''])[0];
       const paidDate = raw.paidDate ? cleanStr(raw.paidDate) : null;
-      const soldDate = cleanStr(raw.soldDate || linked.soldDate || paidDate || '');
+      // Law 7: Sold date is strictly the POS Sold column — never paidDate or catalog timestamps.
+      const soldDate = cleanStr(raw.soldDate || '');
       const agreedPrice = Number(Number(raw.agreedPrice ?? raw.grossPrice ?? 0).toFixed(2));
       const agedPrice = Number(Number(raw.agedPrice ?? agreedPrice).toFixed(2));
       const grossPrice = Number(Number(raw.grossPrice ?? (agedPrice > 0 ? agedPrice : agreedPrice)).toFixed(2));
@@ -3607,6 +3672,12 @@
       const baseSig = `${cleanTicket.toUpperCase()}|${ricoSku.toUpperCase()}|${normTitle}|${soldDate}|${ricoNetPayout.toFixed(2)}`;
       const occIdx = (seenPayoutSignatureCounts.get(baseSig) || 0) + 1;
       seenPayoutSignatureCounts.set(baseSig, occIdx);
+
+      const ticketLineKeyStr = `${ticketDigits}|${grossPrice.toFixed(2)}|${ricoNetPayout.toFixed(2)}`;
+      const ticketOcc = ticketDigits ? (seenTicketLineOccurrences.get(ticketLineKeyStr) || 0) + 1 : 1;
+      if (ticketDigits) {
+        seenTicketLineOccurrences.set(ticketLineKeyStr, ticketOcc);
+      }
 
       // Multiset 1-for-1 counters for `/api/product` fallback deduplication (never collapse repeat sales!)
       if (isFromPayoutTable) {
@@ -3627,10 +3698,10 @@
         }
       }
 
-      const syncLookupKey = `${cleanTicket.toUpperCase()}|${ricoSku.toUpperCase()}|${soldDate}|${ricoNetPayout.toFixed(2)}`;
+      const syncLookupKey = `${ticketDigits}|${grossPrice.toFixed(2)}|${ricoNetPayout.toFixed(2)}#${ticketOcc}`;
+      // Law 15: Judge ONLY by server ticket-line multiset (`ticket|gross|net#occ`) — NEVER catalog `status === 'sold'`!
       const isAlreadySynced = Boolean(
-        alreadySyncedRicoKeys.has(syncLookupKey) ||
-          (ricoSku && String(skuMetaMap[ricoSku]?.status || '').toLowerCase() === 'sold')
+        hasHydratedLedgerSyncKeys && ticketDigits && alreadySyncedRicoKeys.has(syncLookupKey)
       );
 
       const partnerBucket = resolvePartnerBucket(ricoSku, linked.upc, '', linked.title || raw.title);
@@ -3649,6 +3720,7 @@
         saleNumber: saleNumber || (cleanTicket ? `#${cleanTicket}` : ''),
         payoutId: cleanTicket || saleNumber,
         occurrenceIndex: occIdx,
+        ticketOccurrence: ticketOcc,
         agreedPrice,
         splitPct: cleanStr(raw.splitPct || `${100 - activeCommissionRate}%`),
         agedPrice,
@@ -3876,6 +3948,7 @@
     const previewCountEl = document.getElementById('rc-sales-preview-count');
     const previewListEl = document.getElementById('rc-sales-preview-list');
     const pushBtn = document.getElementById('rc-push-sales-btn');
+    const commitBtn = document.getElementById('rc-commit-sales-btn');
 
     if (pendingEl) pendingEl.textContent = `$${pendingNetSum.toFixed(2)}`;
     if (rentEl) rentEl.textContent = `${rentCreditsSum < 0 ? '-' : ''}$${Math.abs(rentCreditsSum).toFixed(2)}`;
@@ -3888,6 +3961,35 @@
     if (syncedEl) syncedEl.textContent = String(syncedCount);
     if (pushBtn && !isPushingSales) {
       pushBtn.textContent = `🧪 Stage Sales to Resale Core (${allRows.length} Dry-Run)`;
+    }
+
+    if (commitBtn && !isCommittingSales) {
+      const actionable = getActionableNewSalesRows();
+      if (!hasHydratedLedgerSyncKeys) {
+        commitBtn.disabled = true;
+        commitBtn.style.background = '#334155';
+        commitBtn.style.color = '#94a3b8';
+        commitBtn.style.border = '1px solid #475569';
+        commitBtn.style.cursor = 'not-allowed';
+        commitBtn.textContent =
+          isPushingSales || isHarvestingPayoutPages
+            ? '⏳ Checking Resale Command Ledger...'
+            : '🧪 Click Stage Dry-Run Below to Check Ledger';
+      } else if (actionable.count > 0) {
+        commitBtn.disabled = false;
+        commitBtn.style.background = 'linear-gradient(135deg, #38bdf8, #0284c7)';
+        commitBtn.style.color = '#082f49';
+        commitBtn.style.border = 'none';
+        commitBtn.style.cursor = 'pointer';
+        commitBtn.textContent = `⚡ Commit ${actionable.count} New ${actionable.count === 1 ? 'Sale' : 'Sales'} to Ledger ($${actionable.net.toFixed(2)} net)`;
+      } else {
+        commitBtn.disabled = true;
+        commitBtn.style.background = 'rgba(16,185,129,0.14)';
+        commitBtn.style.color = '#6ee7b7';
+        commitBtn.style.border = '1px solid rgba(16,185,129,0.4)';
+        commitBtn.style.cursor = 'default';
+        commitBtn.textContent = `✅ All ${syncedCount} Ticketed Sales in Ledger`;
+      }
     }
 
     if (!previewListEl) return;
@@ -3943,6 +4045,15 @@
             r.payoutStatus === 'pending_payout'
               ? `<span style="color:#fbbf24;">⏳ Pending</span>`
               : `<span style="color:#34d399;">✅ Paid ${r.paidDate || ''}</span>`;
+          const hasTicketAndDate =
+            /^\d{4,8}$/.test(cleanStr(r.payoutId || r.saleNumber).replace(/^#/, '').trim()) && Boolean(cleanStr(r.soldDate));
+          const ledgerPill = !hasHydratedLedgerSyncKeys
+            ? ''
+            : r.alreadySynced
+            ? `<span style="color:#6ee7b7;font-weight:800;font-size:9.5px;">✅ In Ledger</span>`
+            : hasTicketAndDate
+            ? `<span style="background:rgba(56,189,248,0.22);color:#7dd3fc;padding:1px 5px;border-radius:4px;font-weight:900;font-size:9.5px;">🆕 New</span>`
+            : `<span style="color:#94a3b8;font-size:9.5px;">⚠️ No Ticket</span>`;
           const matchBadge = r.isMatchedInBooth
             ? `<span style="color:#34d399;font-weight:800;" title="Matched via ${r.matchTier}">🔗 ${r.matchTier.toUpperCase()}</span>`
             : `<span style="color:#fbbf24;font-weight:800;">⚪ Unmatched</span>`;
@@ -3952,7 +4063,11 @@
               : (r.partnerBucket || r.partner) === 'BB'
               ? '💛 B&amp;B'
               : '⭐ HUCK';
-          return `<div style="padding:5px 7px;border-radius:6px;background:#0f172a;border:1px solid #334155;display:flex;justify-content:space-between;align-items:center;gap:6px;">
+          const rowBorder =
+            hasHydratedLedgerSyncKeys && !r.alreadySynced && hasTicketAndDate
+              ? '1px solid rgba(56,189,248,0.55)'
+              : '1px solid #334155';
+          return `<div style="padding:5px 7px;border-radius:6px;background:#0f172a;border:${rowBorder};display:flex;justify-content:space-between;align-items:center;gap:6px;">
             <div style="min-width:0;flex:1;">
               <div style="color:#f8fafc;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
                 <span style="color:#a5b4fc;font-size:9.5px;">${partnerBadge}</span> <span style="color:#fbbf24;">${skuDisplay}</span> ${upcDisplay} — ${r.title}
@@ -3961,10 +4076,330 @@
                 ${saleDisplay}Sold ${r.soldDate || '—'} • ${statusPill} • Agreed $${Number(r.agreedPrice || r.grossPrice || 0).toFixed(2)} ➔ Net <b>$${Number(r.ricoNetPayout || 0).toFixed(2)}</b>
               </div>
             </div>
-            <div>${matchBadge}</div>
+            <div style="display:flex;flex-direction:column;align-items:flex-end;gap:2px;flex-shrink:0;">
+              ${ledgerPill}
+              ${matchBadge}
+            </div>
           </div>`;
         })
         .join('');
+    }
+  }
+
+  function monthKeyFromSoldDateStr(rawSold) {
+    const s = cleanStr(rawSold);
+    if (!s) return 'unknown';
+    const mdy = s.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})/);
+    if (mdy) return `${mdy[3]}-${String(mdy[1]).padStart(2, '0')}`;
+    const ymd = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (ymd) return `${ymd[1]}-${ymd[2]}`;
+    return 'unknown';
+  }
+
+  function syncLedgerStateFromServerPayload(serverPayload) {
+    if (!serverPayload || !Array.isArray(serverPayload.rows)) return;
+    lastServerSalesPayload = serverPayload;
+    alreadySyncedRicoKeys.clear();
+    hasHydratedLedgerSyncKeys = true;
+    const fallbackOccByLine = new Map();
+    for (const pr of serverPayload.rows) {
+      const tktMatch = cleanStr(pr.payoutId || pr.saleNumber || '').replace(/^#/, '').trim().match(/^\d{4,8}$/);
+      const tkt = tktMatch ? tktMatch[0] : '';
+      if (!tkt) continue;
+      const g = Number(pr.grossPrice || 0).toFixed(2);
+      const n = Number(pr.ricoNetPayout ?? pr.expectedNetPayout ?? 0).toFixed(2);
+      const lineKey = `${tkt}|${g}|${n}`;
+      const computedOcc = (fallbackOccByLine.get(lineKey) || 0) + 1;
+      fallbackOccByLine.set(lineKey, computedOcc);
+      const occ = Math.max(1, Number(pr.ticketOccurrence || computedOcc));
+      if (pr.alreadySynced) {
+        alreadySyncedRicoKeys.add(`${lineKey}#${occ}`);
+      }
+    }
+  }
+
+  function getActionableNewSalesRows() {
+    const sourceRows =
+      hasHydratedLedgerSyncKeys && lastServerSalesPayload && Array.isArray(lastServerSalesPayload.rows)
+        ? getPartnerScopedSalesRows(lastServerSalesPayload.rows)
+        : getPartnerScopedSalesRows(extractRicochetSoldLines());
+    const rows = sourceRows.filter((r) => {
+      if (!hasHydratedLedgerSyncKeys) return false;
+      if (r.alreadySynced || r.skipReason) return false;
+      const tkt = cleanStr(r.payoutId || r.saleNumber || '').replace(/^#/, '').trim();
+      return /^\d{4,8}$/.test(tkt) && Boolean(cleanStr(r.soldDate));
+    });
+
+    let gross = 0;
+    let net = 0;
+    const byMonth = {};
+    const byPartner = { HUCK: 0, PDXGL: 0, BB: 0 };
+    for (const r of rows) {
+      const g = Number(r.grossPrice || 0);
+      const n = Number(r.ricoNetPayout ?? r.expectedNetPayout ?? 0);
+      gross += g;
+      net += n;
+      const mKey = monthKeyFromSoldDateStr(r.soldDate);
+      byMonth[mKey] = (byMonth[mKey] || 0) + 1;
+      const pKey = (r.partnerBucket || r.partner) === 'PDXGL' ? 'PDXGL' : (r.partnerBucket || r.partner) === 'BB' ? 'BB' : 'HUCK';
+      byPartner[pKey] = (byPartner[pKey] || 0) + 1;
+    }
+    const monthKeys = Object.keys(byMonth).sort().reverse();
+    return {
+      rows,
+      count: rows.length,
+      gross: Number(gross.toFixed(2)),
+      net: Number(net.toFixed(2)),
+      byMonth,
+      monthKeys,
+      byPartner,
+    };
+  }
+
+  function renderSalesSyncBanner(targetOrigin, resolvedCode) {
+    const syncBanner = document.getElementById('rc-sales-sync-banner');
+    if (!syncBanner) return;
+    const baseOrigin = targetOrigin || RC_ORIGINS[0] || '';
+    const salesUrl = `${baseOrigin}/sales`;
+    const reconcilerUrl = `${baseOrigin}/sales/import/${encodeURIComponent(resolvedCode || activeLocationCode)}`;
+    const actionable = getActionableNewSalesRows();
+    const totalRows = lastServerSalesPayload && Array.isArray(lastServerSalesPayload.rows) ? lastServerSalesPayload.rows.length : 0;
+    const syncedCount = lastServerSalesPayload && Array.isArray(lastServerSalesPayload.rows)
+      ? lastServerSalesPayload.rows.filter((r) => r.alreadySynced).length
+      : alreadySyncedRicoKeys.size;
+
+    syncBanner.style.display = 'block';
+    if (actionable.count > 0) {
+      syncBanner.style.background = 'rgba(56,189,248,0.16)';
+      syncBanner.style.border = '1px solid #38bdf8';
+      syncBanner.innerHTML = `
+        <div style="font-weight:900;color:#7dd3fc;margin-bottom:4px;">
+          🆕 <b>${actionable.count} new ${actionable.count === 1 ? 'sale' : 'sales'}</b> ($${actionable.gross.toFixed(2)} gross / $${actionable.net.toFixed(2)} net) · ✅ <b>${syncedCount}</b> already in ledger
+        </div>
+        <div style="font-size:10.5px;color:#cbd5e1;margin-bottom:6px;">
+          ⭐ HUCK ${actionable.byPartner.HUCK} · 🎲 PDXGL ${actionable.byPartner.PDXGL} · 💛 B&amp;B ${actionable.byPartner.BB} &nbsp;|&nbsp; Months: <b>${actionable.monthKeys.join(', ')}</b>
+        </div>
+        <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+          <button type="button" id="rc-banner-commit-sales-btn" style="background:linear-gradient(135deg,#38bdf8,#0284c7);color:#082f49;border:none;font-weight:900;padding:5px 10px;border-radius:6px;cursor:pointer;font-size:11px;">
+            ⚡ Commit ${actionable.count} New ${actionable.count === 1 ? 'Sale' : 'Sales'}
+          </button>
+          <a href="${salesUrl}" target="_blank" rel="noopener noreferrer" style="background:#10b981;color:#022c22;font-weight:800;padding:5px 9px;border-radius:6px;text-decoration:none;font-size:11px;">
+            ↗ Open /sales
+          </a>
+          <a href="${reconcilerUrl}" target="_blank" rel="noopener noreferrer" style="background:#334155;color:#f8fafc;font-weight:700;padding:5px 9px;border-radius:6px;text-decoration:none;font-size:10.5px;">
+            ↗ Reconciler (${totalRows})
+          </a>
+        </div>
+      `;
+      const bannerBtn = document.getElementById('rc-banner-commit-sales-btn');
+      if (bannerBtn) {
+        bannerBtn.addEventListener('click', () => commitNewSalesFromBookmarklet());
+      }
+    } else {
+      syncBanner.style.background = 'rgba(16,185,129,0.18)';
+      syncBanner.style.border = '1px solid #10b981';
+      syncBanner.innerHTML = `
+        <div style="font-weight:800;color:#6ee7b7;margin-bottom:4px;">
+          ✅ 0 new sales waiting · All <b>${syncedCount}</b> ticketed ${activeLocationName} sales are in the ledger!
+        </div>
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;">
+          <span>Staged Lines: <b>${totalRows}</b></span>
+          <div style="display:flex;gap:6px;">
+            <a href="${salesUrl}" target="_blank" rel="noopener noreferrer" style="background:#10b981;color:#022c22;font-weight:800;padding:4px 10px;border-radius:6px;text-decoration:none;">
+              ↗ Open /sales
+            </a>
+            <a href="${reconcilerUrl}" target="_blank" rel="noopener noreferrer" style="background:#334155;color:#f8fafc;font-weight:700;padding:4px 9px;border-radius:6px;text-decoration:none;">
+              ↗ Reconciler
+            </a>
+          </div>
+        </div>
+      `;
+    }
+  }
+
+  async function commitNewSalesFromBookmarklet() {
+    if (isCommittingSales || isPushingSales) return;
+    if (!hasHydratedLedgerSyncKeys || !lastServerSalesPayload) {
+      await pushSalesToResaleCore({ silent: false });
+    }
+    const actionable = getActionableNewSalesRows();
+    if (actionable.count === 0) {
+      setStatusBanner('success', `✅ All ticketed ${activeLocationName} sales are already recorded in Resale Command!`);
+      updateSalesSyncTabUI();
+      return;
+    }
+
+    const monthSummary = actionable.monthKeys
+      .map((m) => `${m} (${actionable.byMonth[m]})`)
+      .join(', ');
+    const previewLines = actionable.rows
+      .slice(0, 6)
+      .map(
+        (r) =>
+          `• #${cleanStr(r.payoutId || r.saleNumber).replace(/^#/, '')} (${r.soldDate}) ${r.sku || ''} ${r.matchedItemUpc || r.upc || ''} — $${Number(r.grossPrice || 0).toFixed(2)}`
+      )
+      .join('\n');
+
+    const ok1 = window.confirm(
+      `Commit ${actionable.count} NEW ${activeLocationName} ${actionable.count === 1 ? 'sale' : 'sales'} to Resale Command Ledger?\n\n` +
+        `• Gross: $${actionable.gross.toFixed(2)}  |  Net Payout: $${actionable.net.toFixed(2)}\n` +
+        `• Partners: HUCK ${actionable.byPartner.HUCK} · PDXGL ${actionable.byPartner.PDXGL} · B&B ${actionable.byPartner.BB}\n` +
+        `• Month(s): ${monthSummary}\n\n` +
+        `${previewLines}${actionable.count > 6 ? `\n...and ${actionable.count - 6} more` : ''}`
+    );
+    if (!ok1) return;
+
+    if (actionable.monthKeys.length > 1 || actionable.count > 25) {
+      const ok2 = window.confirm(
+        `⚠️ SAFETY CHECK: This commit spans ${actionable.monthKeys.length} calendar month(s) (${monthSummary}) and ${actionable.count} rows.\n\n` +
+          `Expected normal daily sync is a single month and <= 25 rows. Are you 100% sure you want to write all ${actionable.count} rows to resale_db.sales?`
+      );
+      if (!ok2) return;
+    }
+
+    isCommittingSales = true;
+    const commitBtn = document.getElementById('rc-commit-sales-btn');
+    const bannerCommitBtn = document.getElementById('rc-banner-commit-sales-btn');
+    if (commitBtn) commitBtn.disabled = true;
+    if (bannerCommitBtn) bannerCommitBtn.disabled = true;
+
+    const BATCH_SIZE = 25;
+    const totalBatches = Math.ceil(actionable.rows.length / BATCH_SIZE);
+    let totalCommitted = 0;
+    let totalSkipped = 0;
+    let totalFailed = 0;
+    let totalCommittedNet = 0;
+    const commitErrors = [];
+    let activeEndpoint = RC_SALES_SYNC_ENDPOINTS[0] || '';
+    let targetOrigin = RC_ORIGINS[0] || '';
+
+    try {
+      for (let bIdx = 0; bIdx < totalBatches; bIdx++) {
+        const chunk = actionable.rows.slice(bIdx * BATCH_SIZE, (bIdx + 1) * BATCH_SIZE);
+        const progressLabel = `⏳ Committing Batch ${bIdx + 1}/${totalBatches} (${Math.min(actionable.rows.length, (bIdx + 1) * BATCH_SIZE)}/${actionable.rows.length})...`;
+        if (commitBtn) commitBtn.textContent = progressLabel;
+        if (bannerCommitBtn) bannerCommitBtn.textContent = progressLabel;
+
+        let batchResp = null;
+        const candidateEndpoints = activeEndpoint
+          ? [activeEndpoint, ...RC_SALES_SYNC_ENDPOINTS.filter((e) => e !== activeEndpoint)]
+          : RC_SALES_SYNC_ENDPOINTS;
+
+        for (const ep of candidateEndpoints) {
+          try {
+            const res = await fetch(ep, {
+              method: 'POST',
+              mode: 'cors',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                mode: 'commit',
+                locationCode: activeLocationCode,
+                batch: { index: bIdx + 1, total: totalBatches },
+                rows: chunk,
+              }),
+            });
+            const data = await res.json().catch(() => null);
+            if (res.ok && data && data.ok) {
+              batchResp = data;
+              activeEndpoint = ep;
+              try {
+                targetOrigin = new URL(ep).origin;
+              } catch (e) {}
+              break;
+            }
+            if (res.status === 401 || res.status === 403) {
+              throw new Error((data && (data.message || data.error)) || 'Sign in as a Founder or Curator first.');
+            }
+            if (data && data.error) {
+              commitErrors.push(data.error);
+            }
+          } catch (netErr) {
+            if (/Sign in|401|403/i.test(String(netErr && netErr.message))) throw netErr;
+          }
+        }
+
+        if (!batchResp) {
+          totalFailed += chunk.length;
+          break;
+        }
+        totalCommitted += Number(batchResp.committedCount || 0);
+        totalSkipped += Number(batchResp.skippedCount || 0);
+        totalFailed += Number(batchResp.failedCount || 0);
+        totalCommittedNet += Number(batchResp.committedNet || 0);
+        if (Array.isArray(batchResp.commitErrors)) {
+          for (const ce of batchResp.commitErrors) {
+            if (ce && !commitErrors.includes(ce)) commitErrors.push(ce);
+          }
+        }
+      }
+
+      // Finalize manifest & refresh server-side ticket-line ledger flags
+      if (activeEndpoint && totalFailed === 0) {
+        try {
+          const finRes = await fetch(activeEndpoint, {
+            method: 'POST',
+            mode: 'cors',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              mode: 'finalize',
+              locationCode: activeLocationCode,
+              committedCount: totalCommitted,
+              failedCount: totalFailed,
+            }),
+          });
+          const finData = await finRes.json().catch(() => null);
+          if (finRes.ok && finData && finData.payload) {
+            syncLedgerStateFromServerPayload(finData.payload);
+          }
+        } catch (e) {}
+      } else if (activeEndpoint) {
+        try {
+          const getRes = await fetch(`${activeEndpoint}?location=${encodeURIComponent(activeLocationCode)}&t=${Date.now()}`, {
+            method: 'GET',
+            mode: 'cors',
+          });
+          const getData = await getRes.json().catch(() => null);
+          if (getRes.ok && getData && getData.payload) {
+            syncLedgerStateFromServerPayload(getData.payload);
+          }
+        } catch (e) {}
+      }
+
+      if (rcBroadcastChannel) {
+        try {
+          rcBroadcastChannel.postMessage({
+            type: 'RC_RICOCHET_SALES_SYNCED',
+            locationCode: activeLocationCode,
+            committedCount: totalCommitted,
+            timestamp: Date.now(),
+          });
+        } catch (e) {}
+      }
+      if (window.__RC_BML_CORE__ && typeof window.__RC_BML_CORE__.notifyTabsUpdated === 'function') {
+        window.__RC_BML_CORE__.notifyTabsUpdated('RC_RICOCHET_SALES_SYNCED', {
+          locationCode: activeLocationCode,
+          committedCount: totalCommitted,
+        });
+      }
+
+      addLog(
+        `✅ Committed ${totalCommitted} new sales ($${totalCommittedNet.toFixed(2)} net), ${totalSkipped} skipped, ${totalFailed} failed.`,
+        totalFailed > 0 ? '#f59e0b' : '#10b981'
+      );
+      setStatusBanner(
+        totalFailed > 0 ? 'warning' : 'success',
+        totalFailed > 0
+          ? `⚠️ Committed ${totalCommitted} sales, ${totalFailed} failed${commitErrors[0] ? ` (${commitErrors[0]})` : ''}. Click Commit again to retry.`
+          : `🎉 Committed ${totalCommitted} new ${activeLocationName} sales ($${totalCommittedNet.toFixed(2)} net) to Resale Command Ledger!`
+      );
+    } catch (err) {
+      const msg = (err && err.message) || 'Commit failed';
+      addLog(`❌ Sales commit error: ${msg}`, '#ef4444');
+      setStatusBanner('error', `❌ ${msg}`);
+    } finally {
+      isCommittingSales = false;
+      updateSalesSyncTabUI();
+      renderSalesSyncBanner(targetOrigin, activeLocationCode);
     }
   }
 
@@ -4038,16 +4473,7 @@
     salesPushSuccessUrl = reconcilerUrl;
 
     if (pushedData) {
-      if (Array.isArray(pushedData.rows)) {
-        for (const pr of pushedData.rows) {
-          if (pr.alreadySynced) {
-            const cleanTkt = cleanStr(pr.saleNumber || pr.payoutId || '').replace(/^#/, '');
-            alreadySyncedRicoKeys.add(
-              `${cleanTkt.toUpperCase()}|${cleanStr(pr.ricoSku || pr.sku).toUpperCase()}|${pr.soldDate}|${Number(pr.ricoNetPayout || 0).toFixed(2)}`
-            );
-          }
-        }
-      }
+      syncLedgerStateFromServerPayload(pushedData);
       if (rcBroadcastChannel) {
         try {
           rcBroadcastChannel.postMessage({
@@ -4059,21 +4485,12 @@
         } catch (e) {}
       }
       updateSalesSyncTabUI();
-      if (syncBanner) {
-        syncBanner.style.display = 'block';
-        syncBanner.innerHTML = `
-          <div style="font-weight:800;color:#6ee7b7;margin-bottom:4px;">
-            🧪 Dry-Run Staged ${rows.length} sold lines to ${activeLocationName} Sales Reconciler (Zero DB writes until you approve)!
-          </div>
-          <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;">
-            <span>Matched: <b>${pushedData.summary?.matchedCount ?? pushedData.summary?.matchedInBooth ?? rows.length}</b> • Net Payout: <b>$${Number(pushedData.summary?.expectedNetPayout ?? pushedData.summary?.netPayout ?? 0).toFixed(2)}</b></span>
-            <a href="${reconcilerUrl}" target="_blank" rel="noopener noreferrer" style="background:#10b981;color:#022c22;font-weight:800;padding:4px 10px;border-radius:6px;text-decoration:none;display:inline-flex;align-items:center;gap:4px;">
-              ↗ Open Sales Reconciler
-            </a>
-          </div>
-        `;
-      }
-      addLog(`🧪 Dry-Run Staged ${rows.length} sold lines to ${reconcilerUrl}`, '#10b981');
+      renderSalesSyncBanner(targetOrigin, resolvedCode);
+      const actionable = getActionableNewSalesRows();
+      addLog(
+        `🧪 Dry-Run Staged ${rows.length} sold lines (${actionable.count} new, ${alreadySyncedRicoKeys.size} already in ledger) to ${reconcilerUrl}`,
+        '#10b981'
+      );
     } else {
       if (syncBanner) {
         syncBanner.style.display = 'block';

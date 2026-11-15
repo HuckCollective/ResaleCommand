@@ -303,12 +303,145 @@ export function cleanCatalogSku(raw: any): string {
     return String(raw ?? '').replace(/^'+/, '').trim();
 }
 
-/** Extracts the numeric POS sale/ticket number from `Ticket #224185`, `T-224185 • Title`, or `224185`. */
+/** Extracts the numeric POS sale/ticket number from `Ticket #224185`, `#228915`, `228799 #2`, `T-224185 • Title`, or `224185`. */
 export function extractSaleNumber(raw: any): string {
     const s = String(raw ?? '').trim();
     if (!s) return '';
-    const m = s.match(/(?:ticket\s*#|sale\s*#|T-)\s*(\d{4,8})/i) || s.match(/^(\d{4,8})$/);
+    const m =
+        s.match(/(?:ticket\s*#|sale\s*#|T-|MD-PAYOUT-|RICO-)\s*(\d{4,8})/i) ||
+        s.match(/^#?\s*(\d{4,8})(?:\s*#\d+)?$/);
     return m ? m[1] : '';
+}
+
+/** Ledger key for one POS receipt line: `ticket|gross.toFixed(2)|net.toFixed(2)` (multiset counted so multi-line tickets never collapse). */
+export function ticketLineKey(ticket: string, gross: any, net: any): string {
+    return `${String(ticket || '').trim()}|${Number(gross || 0).toFixed(2)}|${Number(net || 0).toFixed(2)}`;
+}
+
+/**
+ * Extracts the 4-8 digit POS ticket number from a staged Ricochet row or Appwrite `sales` doc.
+ * Returns `''` when the row truly has no 4-8 digit POS ticket (e.g. catalog `Sold` rows).
+ */
+export function posTicketOfRow(row: any): string {
+    for (const v of [
+        row?.ticket,
+        row?.payoutId,
+        row?.saleNumber,
+        row?.ticketNumber,
+        row?.orderId,
+        row?.sale,
+        row?.soNumber,
+        row?.ricochetSaleId,
+    ]) {
+        const t = extractSaleNumber(v);
+        if (t && /^\d{4,8}$/.test(t)) return t;
+    }
+    return '';
+}
+
+/** 128-bit avalanche hash (4×32-bit lanes) rendered as 32 lowercase hex characters — cross-runtime (Browser + Node SSR). */
+function hash128Hex(str: string): string {
+    let h1 = 1779033703,
+        h2 = 3144134277,
+        h3 = 1013904242,
+        h4 = 2773480762;
+    for (let i = 0; i < str.length; i++) {
+        const k = str.charCodeAt(i);
+        h1 = h2 ^ Math.imul(h1 ^ k, 597399067);
+        h2 = h3 ^ Math.imul(h2 ^ k, 2869860233);
+        h3 = h4 ^ Math.imul(h3 ^ k, 951274213);
+        h4 = h1 ^ Math.imul(h4 ^ k, 2716044179);
+    }
+    h1 = Math.imul(h3 ^ (h1 >>> 18), 597399067);
+    h2 = Math.imul(h4 ^ (h2 >>> 22), 2869860233);
+    h3 = Math.imul(h1 ^ (h3 >>> 17), 951274213);
+    h4 = Math.imul(h2 ^ (h4 >>> 19), 2716044179);
+    return (
+        ((h1 ^ h2 ^ h3 ^ h4) >>> 0).toString(16).padStart(8, '0') +
+        ((h2 ^ h1) >>> 0).toString(16).padStart(8, '0') +
+        ((h3 ^ h1) >>> 0).toString(16).padStart(8, '0') +
+        ((h4 ^ h1) >>> 0).toString(16).padStart(8, '0')
+    );
+}
+
+/**
+ * Deterministic 34-char Appwrite Document `$id` (`rs` + 32-hex hash of `warehouseId|ticket|gross|net|occurrence`).
+ * Acts as a DB-level primary-key concurrency lock: concurrent duplicate commits receive HTTP 409 (`document_already_exists`).
+ */
+export function deterministicSaleId(
+    warehouseId: string,
+    ticket: string,
+    gross: any,
+    net: any,
+    occurrence: number = 1
+): string {
+    const occ = Math.max(1, Math.floor(Number(occurrence) || 1));
+    const seed = `${String(warehouseId || '').trim()}|${String(ticket || '').trim()}|${Number(gross || 0).toFixed(2)}|${Number(net || 0).toFixed(2)}|${occ}`;
+    return `rs${hash128Hex(seed)}`;
+}
+
+export interface TicketLineLedger {
+    counts: Map<string, number>;
+    initialCounts: Map<string, number>;
+    docsByKey: Map<string, any[]>;
+    cancelledByKey: Map<string, any[]>;
+}
+
+/**
+ * Builds the canonical Law 15 ticket-line multiset (`ticket|gross|net`) from Appwrite `sales` documents.
+ * Active (`status !== 'Cancelled'`) sales populate `counts`, `initialCounts`, and `docsByKey`;
+ * cancelled sales populate `cancelledByKey` so callers can detect explicit cancellations on 409 conflicts.
+ */
+export function buildTicketLineLedger(allSales: any[]): TicketLineLedger {
+    const counts = new Map<string, number>();
+    const initialCounts = new Map<string, number>();
+    const docsByKey = new Map<string, any[]>();
+    const cancelledByKey = new Map<string, any[]>();
+
+    for (const sale of allSales || []) {
+        if (!sale) continue;
+        const ticket = posTicketOfRow(sale);
+        if (!ticket) continue;
+        const gross = Number(sale?.grossAmount ?? sale?.amount ?? 0);
+        const net = Number(sale?.netPayout ?? (gross - Number(sale?.commissionFee ?? 0)));
+        const key = ticketLineKey(ticket, gross, net);
+        if (String(sale?.status || '').toLowerCase() === 'cancelled') {
+            if (!cancelledByKey.has(key)) cancelledByKey.set(key, []);
+            cancelledByKey.get(key)!.push(sale);
+            continue;
+        }
+        const next = (counts.get(key) || 0) + 1;
+        counts.set(key, next);
+        initialCounts.set(key, next);
+        if (!docsByKey.has(key)) docsByKey.set(key, []);
+        docsByKey.get(key)!.push(sale);
+    }
+
+    return { counts, initialCounts, docsByKey, cancelledByKey };
+}
+
+/**
+ * Consumes one matching active sale line from a `TicketLineLedger` if present.
+ * Returns `{ matched: true, key, ticket, existingSale }` when already recorded in `sales`, or `{ matched: false, key, ticket }` when new.
+ */
+export function consumeTicketLine(
+    ledger: TicketLineLedger,
+    row: { grossPrice?: any; grossAmount?: any; ricoNetPayout?: any; expectedNetPayout?: any; netPayout?: any; [k: string]: any }
+): { matched: boolean; key: string; ticket: string; existingSale?: any } {
+    const ticket = posTicketOfRow(row);
+    const gross = Number(row?.grossPrice ?? row?.grossAmount ?? 0);
+    const net = Number(row?.ricoNetPayout ?? row?.expectedNetPayout ?? row?.netPayout ?? 0);
+    if (!ticket) {
+        return { matched: false, key: '', ticket: '' };
+    }
+    const key = ticketLineKey(ticket, gross, net);
+    const held = ledger.counts.get(key) || 0;
+    if (held > 0) {
+        ledger.counts.set(key, held - 1);
+        const existingSale = ledger.docsByKey.get(key)?.shift();
+        return { matched: true, key, ticket, existingSale };
+    }
+    return { matched: false, key, ticket };
 }
 
 /**
@@ -582,34 +715,38 @@ export function flagAlreadyRecordedRows<T extends Record<string, any>>(rows: T[]
 
         let recorded = false;
         if (ticket && /^\d{4,8}$/.test(ticket)) {
+            // Law 15: Any row with a real 4-8 digit POS ticket is judged ONLY by the exact ticket ledger —
+            // never fall through to date+gross (`byInstantGross`) or SKU+price (`bySku*`) heuristics!
             recorded =
                 (byTicketGross.get(`${ticket}|${gross}`) || 0) >= k ||
                 (byTicketNet.get(`${ticket}|${net}`) || 0) >= k;
-        }
-        if (!recorded && iso) {
-            recorded = (byInstantGross.get(`${iso}|${gross}`) || 0) >= k;
-        }
-        if (!recorded && rowCodes.size > 0) {
-            for (const code of rowCodes) {
-                if (day && ((bySkuDayGross.get(`${code}|${day}|${gross}`) || 0) >= k || (bySkuDayNet.get(`${code}|${day}|${net}`) || 0) >= k)) {
-                    recorded = true;
-                    break;
-                }
-                if (month) {
-                    const mKeyGross = `${code}|${month}|${gross}`;
-                    const mKeyNet = `${code}|${month}|${net}`;
-                    const usedM = (consumedByCodeMonth.get(code) || 0) + 1;
-                    if ((bySkuMonthGross.get(mKeyGross) || 0) >= usedM || (bySkuMonthNet.get(mKeyNet) || 0) >= usedM) {
+        } else {
+            // Legacy unticketed CSV exports only (no 4-8 digit POS ticket number present)
+            if (!recorded && iso) {
+                recorded = (byInstantGross.get(`${iso}|${gross}`) || 0) >= k;
+            }
+            if (!recorded && rowCodes.size > 0) {
+                for (const code of rowCodes) {
+                    if (day && ((bySkuDayGross.get(`${code}|${day}|${gross}`) || 0) >= k || (bySkuDayNet.get(`${code}|${day}|${net}`) || 0) >= k)) {
                         recorded = true;
-                        consumedByCodeMonth.set(code, usedM);
                         break;
                     }
-                }
-                const usedG = (consumedByCodeGross.get(code) || 0) + 1;
-                if ((bySkuGross.get(`${code}|${gross}`) || 0) >= usedG || (bySkuNet.get(`${code}|${net}`) || 0) >= usedG) {
-                    recorded = true;
-                    consumedByCodeGross.set(code, usedG);
-                    break;
+                    if (month) {
+                        const mKeyGross = `${code}|${month}|${gross}`;
+                        const mKeyNet = `${code}|${month}|${net}`;
+                        const usedM = (consumedByCodeMonth.get(code) || 0) + 1;
+                        if ((bySkuMonthGross.get(mKeyGross) || 0) >= usedM || (bySkuMonthNet.get(mKeyNet) || 0) >= usedM) {
+                            recorded = true;
+                            consumedByCodeMonth.set(code, usedM);
+                            break;
+                        }
+                    }
+                    const usedG = (consumedByCodeGross.get(code) || 0) + 1;
+                    if ((bySkuGross.get(`${code}|${gross}`) || 0) >= usedG || (bySkuNet.get(`${code}|${net}`) || 0) >= usedG) {
+                        recorded = true;
+                        consumedByCodeGross.set(code, usedG);
+                        break;
+                    }
                 }
             }
         }

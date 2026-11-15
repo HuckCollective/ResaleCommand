@@ -1,10 +1,11 @@
 import {
-  PREVERIFIED_MD_MULTI_QTY_BINS,
   PREVERIFIED_MD_SKU_TO_UPC_OR_ID,
   assignOccurrenceFingerprints,
   buildLockedMultiBinMap,
+  buildTicketLineLedger,
   canonicalTicketNumber,
   cleanCatalogSku,
+  consumeTicketLine,
   flagAlreadyRecordedRows,
   isBbConsignorRow,
   isLeakedInventoryDomRow,
@@ -13,9 +14,11 @@ import {
   normalizeTitleForMdMatch,
   pacificMonthKey,
   parseCsvRfc4180Rows,
+  posTicketOfRow,
   resolveMemoryDenSkuFromPayoutRow,
   resolvePartnerBucketForSaleRow,
   splitTrailingBoothSku,
+  ticketLineKey,
   toSaleIso,
 } from './salesBucketing';
 import { getLocationSettingMeta, resolveCanonicalLocationCode, resolveDefaultRicochetLocationMeta } from './warehouses';
@@ -57,6 +60,13 @@ export interface RicochetSyncSaleLine {
   alreadySynced?: boolean;
   alreadyRecorded?: boolean;
   ticketOccurrence?: number;
+  skipReason?: 'no_ticket' | '';
+}
+
+export interface RicochetNewBucketTotal {
+  count: number;
+  gross: number;
+  net: number;
 }
 
 export interface RicochetSalesSyncPayload {
@@ -82,6 +92,13 @@ export interface RicochetSalesSyncPayload {
     matchedCount: number;
     alreadySyncedCount: number;
     unmatchedCount: number;
+    actionableNewCount?: number;
+    newGross?: number;
+    newNet?: number;
+    newMatchedCount?: number;
+    newUnmatchedCount?: number;
+    newByMonth?: Record<string, RicochetNewBucketTotal>;
+    newByPartner?: Record<'HUCK' | 'PDXGL' | 'BB', RicochetNewBucketTotal>;
   };
   rows: RicochetSyncSaleLine[];
 }
@@ -370,6 +387,8 @@ export function buildEnrichedRicochetSalesPayload(params: {
   spaceRentalAdjustments?: SpaceRentalAdjustment[];
   liveWarehouses?: any[];
   dryRun?: boolean;
+  /** True only when enriching a partial 25-row commit batch so each row's 1-based `ticketOccurrence` from the full manifest is preserved. */
+  preserveTicketOccurrence?: boolean;
 }): RicochetSalesSyncPayload {
   const locMeta = resolveRicochetLocation(params.locCode, params.liveWarehouses);
   const feePct = Number(locMeta.commissionRate ?? locMeta.feePct ?? 0);
@@ -445,35 +464,25 @@ export function buildEnrichedRicochetSalesPayload(params: {
   const claimedItemIdToSku = new Map<string, string>();
   const multiBinResolvedBySku = buildLockedMultiBinMap(eligibleItems, claimedItemIdToSku);
 
-  const existingOrderIds = new Set<string>();
-  const existingSkuGrossSet = new Set<string>();
-  const existingSkuNetSet = new Set<string>();
-  const existingTitleMonthSet = new Set<string>();
-  for (const s of allSales) {
-    if (s.status === 'Cancelled') continue;
-    const ord = cleanCatalogSku(s.orderId).toUpperCase();
-    const so = cleanCatalogSku(s.soNumber).toUpperCase();
-    const gross = Number(s.grossAmount || 0).toFixed(2);
-    const net = Number(s.netPayout ?? (Number(s.grossAmount || 0) - Number(s.commissionFee || 0))).toFixed(2);
-    const sMonth = pacificMonthKey(s.saleDate);
-    if (ord) {
-      existingOrderIds.add(`${ord}|${gross}`);
-      existingOrderIds.add(`${ord}|${net}`);
-      existingOrderIds.add(ord);
+  // Strip any previously persisted `alreadySynced` / `alreadyRecorded` / `fingerprint*` flags on incoming rows
+  // so `GET /api/sales/ricochet-sync` re-hydrates persisted manifests purely against the live `allSales` ticket-line multiset.
+  const scrubbedInputRows = (params.rawRows || []).map((raw) => {
+    const copy: Record<string, any> = { ...(raw || {}) };
+    delete copy.alreadySynced;
+    delete copy.alreadyRecorded;
+    delete copy.isAlreadyRecorded;
+    delete copy.canonicalTicket;
+    delete copy.fingerprint;
+    delete copy.fingerprintBase;
+    delete copy.occurrenceIndex;
+    delete copy.skipReason;
+    if (!params.preserveTicketOccurrence) {
+      delete copy.ticketOccurrence;
     }
-    if (so) {
-      existingSkuGrossSet.add(`${so}|${gross}`);
-      existingSkuNetSet.add(`${so}|${net}`);
-      if (sMonth) existingSkuGrossSet.add(`${so}|${sMonth}`);
-    }
-    const sTitle = normalizeTitleForMdMatch(s.itemTitle || s.title || '');
-    if (sTitle && sMonth) {
-      existingTitleMonthSet.add(`${sTitle}|${sMonth}|${gross}`);
-      existingTitleMonthSet.add(`${sTitle}|${sMonth}|${net}`);
-    }
-  }
+    return copy;
+  });
 
-  const filteredRawRows = (params.rawRows || []).filter((r) => {
+  const filteredRawRows = scrubbedInputRows.filter((r) => {
     const rawTitle = String(r.title || r.itemName || r.name || '').trim();
     const rawSkuText = String(r.sku || r.ricoSku || '').trim();
     if (isPayoutSummaryRow(rawTitle) || isPayoutSummaryRow(rawSkuText) || isLeakedInventoryDomRow(r)) return false;
@@ -634,7 +643,6 @@ export function buildEnrichedRicochetSalesPayload(params: {
     ).toUpperCase();
 
     // Delegate 100% of 4-tier matching to canonical `matchMemoryDenInventoryItem` + `buildLockedMultiBinMap` from `src/lib/salesBucketing.ts`
-    const titleSlug = normalizeTitleForMdMatch(rawTitle);
     const agreedKey = grossPrice.toFixed(2);
     const matchedItem =
       eligibleItems.length > 0
@@ -712,28 +720,6 @@ export function buildEnrichedRicochetSalesPayload(params: {
     }
 
     const effectiveTitle = rawTitle || matchedItem?.title || catalogRow?.name || effectiveSku || 'Booth Sale Item';
-    const grossKey = grossPrice.toFixed(2);
-    const netKey = ricoNetPayout.toFixed(2);
-    const rowMonth = pacificMonthKey(soldDate);
-    const isItemAlreadySoldInDb =
-      matchedItem &&
-      (String(matchedItem.status || '').toLowerCase() === 'sold' || Boolean(matchedItem.saleId)) &&
-      !PREVERIFIED_MD_MULTI_QTY_BINS[effectiveSku];
-    const isSaleInLedger =
-      (cleanPayoutId && existingOrderIds.has(`${cleanPayoutId.toUpperCase()}|${grossKey}`)) ||
-      (cleanPayoutId && existingOrderIds.has(`${cleanPayoutId.toUpperCase()}|${netKey}`)) ||
-      (cleanPayoutId && existingOrderIds.has(`TICKET #${cleanPayoutId.toUpperCase()}|${grossKey}`)) ||
-      (cleanPayoutId && existingOrderIds.has(`TICKET #${cleanPayoutId.toUpperCase()}|${netKey}`)) ||
-      (cleanPayoutId && existingOrderIds.has(`TICKET #${cleanPayoutId.toUpperCase()}`)) ||
-      (effectiveSku && existingSkuGrossSet.has(`${effectiveSku}|${grossKey}`)) ||
-      (effectiveSku && existingSkuNetSet.has(`${effectiveSku}|${netKey}`)) ||
-      (effectiveSku && rowMonth && existingSkuGrossSet.has(`${effectiveSku}|${rowMonth}`)) ||
-      (effectiveUpc && existingSkuGrossSet.has(`${effectiveUpc}|${grossKey}`)) ||
-      (effectiveUpc && existingSkuNetSet.has(`${effectiveUpc}|${netKey}`)) ||
-      (effectiveUpc && rowMonth && existingSkuGrossSet.has(`${effectiveUpc}|${rowMonth}`)) ||
-      (titleSlug && rowMonth && existingTitleMonthSet.has(`${titleSlug}|${rowMonth}|${grossKey}`)) ||
-      (titleSlug && rowMonth && existingTitleMonthSet.has(`${titleSlug}|${rowMonth}|${netKey}`));
-
     const isMatched = Boolean(matchedItem?.$id || matchTier !== 'unmatched');
     const partnerBucket = resolvePartnerBucketForSaleRow({
       ricoSku: effectiveSku,
@@ -743,7 +729,6 @@ export function buildEnrichedRicochetSalesPayload(params: {
       title: effectiveTitle,
       matchedItemTitle: matchedItem?.title,
     });
-    const isSynced = Boolean(r.alreadySynced || r.alreadyRecorded || isItemAlreadySoldInDb || isSaleInLedger);
 
     return {
       ricoItemId: resolveEffectiveRicoId(r, effectiveSku, cleanPayoutId, idx),
@@ -773,42 +758,52 @@ export function buildEnrichedRicochetSalesPayload(params: {
       matchTier,
       matchStatus: isMatched ? 'matched' : 'unmatched',
       partnerBucket,
-      alreadySynced: isSynced,
-      alreadyRecorded: isSynced,
-      ticketOccurrence: Number(r.ticketOccurrence || 1),
+      alreadySynced: false,
+      alreadyRecorded: false,
+      ticketOccurrence: params.preserveTicketOccurrence ? Math.max(1, Number(r.ticketOccurrence || 1)) : 1,
     };
   });
 
-  // Canonical occurrence-indexed fingerprint & ledger idempotency from `salesBucketing.ts`
-  assignOccurrenceFingerprints(normalizedRows as any[], {
-    getSaleNumber: (r) => r.payoutId || r.saleNumber || r.sku,
-    getSoldDate: (r) => r.soldDate,
-    getGross: (r) => r.grossPrice,
-    getNet: (r) => r.ricoNetPayout,
-    getSku: (r) => r.sku,
-    getUpc: (r) => r.upc || r.matchedItemUpc,
-    getTitle: (r) => r.title,
-  });
+  // Delegate canonical ticket & occurrence fingerprint stamping to `salesBucketing.ts` (Golden Rule #3),
+  // then enforce Law 15's exact `ticket|gross|net` multiset (`consumeTicketLine`) as sole authority on ticketed rows.
+  assignOccurrenceFingerprints(normalizedRows as any[]);
+  flagAlreadyRecordedRows(normalizedRows as any[], allSales, locMeta.id);
 
-  flagAlreadyRecordedRows(normalizedRows as any[], allSales, {
-    getSaleNumber: (r) => r.payoutId || r.saleNumber || r.sku,
-    getSoldDate: (r) => r.soldDate,
-    getGross: (r) => r.grossPrice,
-    getNet: (r) => r.ricoNetPayout,
-    getSku: (r) => r.sku,
-    getUpc: (r) => r.upc || r.matchedItemUpc,
-    getTitle: (r) => r.title,
-  });
+  const ticketLedger = buildTicketLineLedger(allSales);
+  const seenTicketLineOccurrences = new Map<string, number>();
 
-  for (const r of normalizedRows as any[]) {
-    if (r.isAlreadyRecorded || r.alreadySynced) {
-      r.alreadySynced = true;
-      r.alreadyRecorded = true;
-      r.isAlreadyRecorded = true;
+  for (const r of normalizedRows) {
+    const ticket = posTicketOfRow(r);
+    if (!ticket || !r.soldDate) {
+      r.skipReason = 'no_ticket';
+      r.alreadySynced = false;
+      r.alreadyRecorded = false;
+      (r as any).isAlreadyRecorded = false;
+      continue;
     }
-    if (r.occurrenceIndex) {
-      r.ticketOccurrence = r.occurrenceIndex;
+
+    const lineKey = ticketLineKey(ticket, r.grossPrice, r.ricoNetPayout);
+    const nextOcc = (seenTicketLineOccurrences.get(lineKey) || 0) + 1;
+    seenTicketLineOccurrences.set(lineKey, nextOcc);
+    const occ =
+      params.preserveTicketOccurrence && Number(r.ticketOccurrence || 0) >= 1
+        ? Number(r.ticketOccurrence)
+        : nextOcc;
+    r.ticketOccurrence = occ;
+
+    let isRecorded = false;
+    if (params.preserveTicketOccurrence) {
+      isRecorded = (ticketLedger.initialCounts.get(lineKey) || 0) >= occ;
+      if (isRecorded) {
+        consumeTicketLine(ticketLedger, r);
+      }
+    } else {
+      isRecorded = consumeTicketLine(ticketLedger, r).matched;
     }
+
+    r.alreadySynced = isRecorded;
+    r.alreadyRecorded = isRecorded;
+    (r as any).isAlreadyRecorded = isRecorded;
   }
 
   let grossSales = 0;
@@ -822,9 +817,24 @@ export function buildEnrichedRicochetSalesPayload(params: {
   let alreadySyncedCount = 0;
   let unmatchedCount = 0;
 
+  let actionableNewCount = 0;
+  let newGross = 0;
+  let newNet = 0;
+  let newMatchedCount = 0;
+  let newUnmatchedCount = 0;
+  const newByMonth: Record<string, RicochetNewBucketTotal> = {};
+  const newByPartner: Record<'HUCK' | 'PDXGL' | 'BB', RicochetNewBucketTotal> = {
+    HUCK: { count: 0, gross: 0, net: 0 },
+    PDXGL: { count: 0, gross: 0, net: 0 },
+    BB: { count: 0, gross: 0, net: 0 },
+  };
+
   for (const r of normalizedRows) {
+    const grossVal = Number(r.grossPrice || 0);
     const netVal = Number(r.ricoNetPayout ?? r.expectedNetPayout ?? 0);
-    grossSales += Number(r.grossPrice || 0);
+    const isMatched = Boolean(r.matchedItemId || r.matchTier !== 'unmatched');
+
+    grossSales += grossVal;
     expectedCommission += Number(r.expectedFee ?? r.ricoCommission ?? 0);
     expectedNetPayout += netVal;
     if (r.payoutStatus === 'paid') {
@@ -835,8 +845,30 @@ export function buildEnrichedRicochetSalesPayload(params: {
       pendingPayoutNet += netVal;
     }
     if (r.alreadySynced) alreadySyncedCount++;
-    if (r.matchedItemId || r.matchTier !== 'unmatched') matchedCount++;
+    if (isMatched) matchedCount++;
     else unmatchedCount++;
+
+    if (!r.alreadySynced && !r.skipReason && Boolean(posTicketOfRow(r)) && Boolean(r.soldDate)) {
+      actionableNewCount++;
+      newGross += grossVal;
+      newNet += netVal;
+      if (isMatched) newMatchedCount++;
+      else newUnmatchedCount++;
+
+      const monthKey = pacificMonthKey(r.soldDate) || 'unknown';
+      if (!newByMonth[monthKey]) {
+        newByMonth[monthKey] = { count: 0, gross: 0, net: 0 };
+      }
+      newByMonth[monthKey].count++;
+      newByMonth[monthKey].gross = Number((newByMonth[monthKey].gross + grossVal).toFixed(2));
+      newByMonth[monthKey].net = Number((newByMonth[monthKey].net + netVal).toFixed(2));
+
+      const pBucket: 'HUCK' | 'PDXGL' | 'BB' =
+        r.partnerBucket === 'PDXGL' || r.partnerBucket === 'BB' ? r.partnerBucket : 'HUCK';
+      newByPartner[pBucket].count++;
+      newByPartner[pBucket].gross = Number((newByPartner[pBucket].gross + grossVal).toFixed(2));
+      newByPartner[pBucket].net = Number((newByPartner[pBucket].net + netVal).toFixed(2));
+    }
   }
 
   const adjustments: SpaceRentalAdjustment[] = Array.isArray(params.spaceRentalAdjustments)
@@ -857,6 +889,8 @@ export function buildEnrichedRicochetSalesPayload(params: {
   pendingPayoutNet = Number(pendingPayoutNet.toFixed(2));
   paidHistoryNet = Number(paidHistoryNet.toFixed(2));
   spaceRentalTotal = Number(spaceRentalTotal.toFixed(2));
+  newGross = Number(newGross.toFixed(2));
+  newNet = Number(newNet.toFixed(2));
   const netAfterRent = Number((expectedNetPayout - monthlyRent).toFixed(2));
 
   return {
@@ -881,6 +915,13 @@ export function buildEnrichedRicochetSalesPayload(params: {
       matchedCount,
       alreadySyncedCount,
       unmatchedCount,
+      actionableNewCount,
+      newGross,
+      newNet,
+      newMatchedCount,
+      newUnmatchedCount,
+      newByMonth,
+      newByPartner,
     },
     rows: normalizedRows,
   };
@@ -891,14 +932,20 @@ export function buildSaleOrderReference(row: RicochetSyncSaleLine, locCode: stri
   orderRef: string;
   soNumber: string;
 } {
-  const saleIso = toSaleIso(row.soldDate) || new Date().toISOString();
-  const ticketSource = [row.payoutId, row.saleNumber].map((v) => String(v ?? '').trim()).find((s) => /(?<!\d)\d{4,8}(?!\d)/.test(s)) || '';
-  const ticket = (ticketSource.match(/(?<!\d)(\d{4,8})(?!\d)/) || [])[1] || canonicalTicketNumber(row.payoutId || row.saleNumber);
+  // Law 7: `saleIso` comes strictly from the row's Ricochet `soldDate` (callers skip any row missing `soldDate`).
+  const saleIso = toSaleIso(row.soldDate);
+  const ticket = posTicketOfRow(row);
+  const ticketSource = [row.payoutId, row.saleNumber].map((v) => String(v ?? '').trim()).find((s) => Boolean(s)) || '';
   const occFromSuffix = Number((ticketSource.match(/#\s*(\d{1,2})\s*$/) || [])[1] || 1);
   const occ = Math.max(1, Number(row.ticketOccurrence || 1), occFromSuffix);
   const formattedTicket = ticket ? (occ > 1 ? `Ticket #${ticket} #${occ}` : `Ticket #${ticket}`) : '';
   const cleanSku = cleanCatalogSku(row.sku || row.ricoSku).toUpperCase();
-  const cleanUpc = cleanCatalogSku(row.upc || row.matchedItemUpc).toUpperCase();
+  // Prioritize partner-prefixed UPC (`HUCK-`, `PDXGL-`, `BB-`) so `SalesList.vue` & `CoopSettlementView.vue` always bucket `PDXGL-0157` / `PDXGL-0154` accurately.
+  const prefixedPartnerUpc =
+    [row.matchedItemUpc, row.upc]
+      .map((v) => cleanCatalogSku(v).toUpperCase())
+      .find((u) => /^(?:HUCK|PDXGL|BB)-/i.test(u)) || '';
+  const cleanUpc = prefixedPartnerUpc || cleanCatalogSku(row.upc || row.matchedItemUpc).toUpperCase();
   // Keep the human-readable title + booth SKU after the ticket (`Ticket #N • Title - 0EJXXX`) so a sale never degrades to a bare
   // `Ticket #N` row when its item link is lost. `canonicalTicketNumber()` still extracts N, so ticket-line dedupe is unchanged.
   const cleanTitle = String(row.matchedItemTitle || row.title || '')
@@ -908,9 +955,16 @@ export function buildSaleOrderReference(row: RicochetSyncSaleLine, locCode: stri
     .slice(0, 60)
     .trim();
   const ticketWithTitle = formattedTicket && cleanTitle ? `${formattedTicket} • ${cleanTitle}${cleanSku ? ` - ${cleanSku}` : ''}` : formattedTicket;
-  const orderRef = ticketWithTitle || cleanSku || row.payoutId || `RICO-${locCode}-${saleIso.slice(0, 10)}`;
-  const soNumber =
-    cleanUpc || cleanSku || formattedTicket || row.payoutId || `RICO-${locCode}-${saleIso.slice(0, 10)}`;
+  const dateTag = saleIso ? saleIso.slice(0, 10) : 'undated';
+  const orderRef = ticketWithTitle || cleanSku || row.payoutId || `RICO-${locCode}-${dateTag}`;
+  let soNumber =
+    prefixedPartnerUpc || cleanUpc || cleanSku || formattedTicket || row.payoutId || `RICO-${locCode}-${dateTag}`;
+  if (
+    !/^(?:HUCK|PDXGL|BB)-/i.test(soNumber) &&
+    (row.partnerBucket === 'PDXGL' || row.partnerBucket === 'BB')
+  ) {
+    soNumber = `${row.partnerBucket}-${cleanSku || ticket || 'SALE'}`;
+  }
   return { saleIso, orderRef, soNumber };
 }
 

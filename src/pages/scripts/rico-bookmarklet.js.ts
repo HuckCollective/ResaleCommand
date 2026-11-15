@@ -75,7 +75,7 @@ export const GET: APIRoute = async ({ url }) => {
     authRuntimeJs = buildInjectableBmlAuthRuntimeJs(activeOrigins, origin);
   } catch {}
 
-  const injectedBootstrap = `window.__RC_ORIGIN__ = ${JSON.stringify(origin)};\nwindow.__RC_ORIGINS__ = ${JSON.stringify(activeOrigins)};\nwindow.__RC_BML_TOOL_CONFIG__ = ${JSON.stringify(bmlToolConfig || null)};\nwindow.__RC_SCRIPT_VERSION__ = ${JSON.stringify(BML_SCRIPT_VERSION)};\nwindow.__RC_ACTIVE_LOCATION_CODE__ = ${JSON.stringify(locCode)};\nwindow.__RC_ACTIVE_LOCATION_META__ = ${JSON.stringify({
+  const injectedBootstrap = `window.__RC_BOOKMARKLET_CLICKED__ = true;\nwindow.__RC_ORIGIN__ = ${JSON.stringify(origin)};\nwindow.__RC_ORIGINS__ = ${JSON.stringify(activeOrigins)};\nwindow.__RC_BML_TOOL_CONFIG__ = ${JSON.stringify(bmlToolConfig || null)};\nwindow.__RC_SCRIPT_VERSION__ = ${JSON.stringify(BML_SCRIPT_VERSION)};\nwindow.__RC_ACTIVE_LOCATION_CODE__ = ${JSON.stringify(locCode)};\nwindow.__RC_ACTIVE_LOCATION_META__ = ${JSON.stringify({
     code: locMeta.code,
     name: locMeta.shortName,
     fullName: locMeta.name,
