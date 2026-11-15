@@ -47,6 +47,11 @@ export const componentItemSchema: Schema = {
     name: { type: SchemaType.STRING, description: 'Clean item title without tier bracket prefixes' },
     identity: { type: SchemaType.STRING, description: 'Specific edition/model identity' },
     tag_title: { type: SchemaType.STRING, description: 'Thermal barcode label title, strictly <= 40 chars' },
+    quantity: {
+      type: SchemaType.INTEGER,
+      nullable: true,
+      description: 'Number of identical units rolled up in this line (default 1; e.g. 3 for "Sealed Blind Boxes (x3)")'
+    },
     physical_substrate: {
       type: SchemaType.STRING,
       format: 'enum',

@@ -413,6 +413,7 @@ export function computeCanonicalAuctionTiers(input: CanonicalTierInput): Canonic
 export interface GuardrailContext {
     venueMetas: VenueMetaLike[];
     shippingTotal: number;
+    shippingWeightLbs?: number;
     currentBid: number;
     buyersPremiumPct: number;
     isAuction: boolean;
@@ -421,6 +422,24 @@ export interface GuardrailContext {
     boothFeePct?: number;
     visionPhotosScanned?: number;
     visionPhotoUrls?: string[];
+}
+
+function extractLotItemQty(li: any): number {
+    if (!li || typeof li !== 'object') return 1;
+    const explicit = Number(li.quantity ?? li.qty ?? 0);
+    if (Number.isFinite(explicit) && explicit > 1 && explicit <= 99) return Math.round(explicit);
+    const text = `${li.name || ''} ${li.title || ''} ${li.identity || ''} ${li.tag_title || ''}`;
+    const pm = text.match(/[\(\[]\s*(?:x\s*(\d{1,2})|(\d{1,2})\s*x|(?:lot|set|pack|bundle|qty)\s*(?:of|:)?\s*(\d{1,2}))\s*[\)\]]/i);
+    if (pm) {
+        const n = parseInt(pm[1] || pm[2] || pm[3] || '1', 10);
+        if (n > 1 && n <= 99) return n;
+    }
+    const tm = text.match(/(?:^|\s)(?:x\s*(\d{1,2})|(\d{1,2})\s*x)(?=\s*$|\s*[-–—|])/i);
+    if (tm) {
+        const n = parseInt(tm[1] || tm[2] || '1', 10);
+        if (n > 1 && n <= 99) return n;
+    }
+    return 1;
 }
 
 export function applyScoutReportGuardrails(item: any, ctx: GuardrailContext): void {
@@ -437,11 +456,19 @@ export function applyScoutReportGuardrails(item: any, ctx: GuardrailContext): vo
         item.is_oversized_freight = true;
     }
 
-    // 3) Best Venue — never a 0%-fee backstock warehouse
+    // 3) Best Venue — never a 0%-fee backstock warehouse, and never DT on >=2 lb / >=8" / bulky playset / apparel items
     const mr = item.market_report && typeof item.market_report === 'object' ? item.market_report : null;
     const substrate = String(item.physical_substrate || '');
     const isApparel = substrate === 'APPAREL_GARMENT';
-    const isSmallCurio = freight.longestInches > 0 ? freight.longestInches < 8 : /JEWELRY_METAL|TOY_FIGURE|POTTERY_DRINKWARE/.test(substrate);
+    const weightLbs = Number(ctx.shippingWeightLbs ?? item?.seller_info?.shipping_weight ?? item?.shippingWeight ?? freight.weightLbs ?? 0);
+    const bulkyPlaysetOrBoxedSet = /\b(?:\d{3,5}\s*(?:pcs|pieces|pzs)|sealed\s+set|playset|board\s*game|castle|joust|display\s+case|framed)\b/i.test(
+        `${item?.title || ''} ${item?.identity || ''} ${item?.ocr_detected_text || ''}`
+    );
+    const isSmallCurio =
+        !isApparel &&
+        !bulkyPlaysetOrBoxedSet &&
+        (weightLbs <= 0 || weightLbs < 2.0) &&
+        (freight.longestInches > 0 ? freight.longestInches < 8 : /JEWELRY_METAL|TOY_FIGURE|POTTERY_DRINKWARE/.test(substrate));
     if (mr) {
         const venue = sanitizeBestVenue(mr.best_platform, ctx.venueMetas, {
             longestInches: freight.longestInches,
@@ -454,9 +481,17 @@ export function applyScoutReportGuardrails(item: any, ctx: GuardrailContext): vo
             mr.best_platform_sanitized = true;
         }
         if (Array.isArray(mr.channels)) {
-            const metas = ctx.venueMetas.filter(isBackstockMeta);
-            const pats = metas.flatMap(buildNamePatterns);
-            mr.channels = mr.channels.filter((c: any) => !pats.some((re) => re.test(String(c?.name || ''))));
+            const backstockMetas = ctx.venueMetas.filter(isBackstockMeta);
+            const dtDisqualifiedMetas =
+                isApparel || !isSmallCurio ? ctx.venueMetas.filter((m) => String(m.code || '').toUpperCase() === 'DT') : [];
+            const pats = [...backstockMetas, ...dtDisqualifiedMetas].flatMap(buildNamePatterns);
+            const fallbackDtRe = isApparel || !isSmallCurio ? /\bdusty\s*tiger\b|\(\s*DT\s*\)/i : null;
+            mr.channels = mr.channels.filter((c: any) => {
+                const cName = String(c?.name || '');
+                if (pats.some((re) => re.test(cName))) return false;
+                if (fallbackDtRe && fallbackDtRe.test(cName)) return false;
+                return true;
+            });
         }
     }
 
@@ -544,7 +579,15 @@ export const SCOUT_SECTION_BUILDERS: Record<string, SectionBuilder> = {
         }
         if (ps.max_landed_cost !== undefined && ps.max_landed_cost !== null) s += `- **Max Landed Cost:** $${Number(ps.max_landed_cost).toFixed(2)}\n`;
         const acb = t.canonical_tiers?.atCurrentBid;
-        if (acb) s += `- **At Current Bid:** landed $${acb.landed.toFixed(2)} → ${acb.netProfit < 0 ? `**${money(acb.netProfit)} loss**` : `${moneyWhole(acb.netProfit)} net`}\n`;
+        if (acb) {
+            const acbTxt =
+                acb.netProfit < 0
+                    ? `**${money(acb.netProfit)} loss**`
+                    : dead
+                      ? `⚠️ ${moneyWhole(acb.netProfit)} thin margin (below 1.7x floor)`
+                      : `${moneyWhole(acb.netProfit)} net`;
+            s += `- **At Current Bid:** landed $${acb.landed.toFixed(2)} → ${acbTxt}\n`;
+        }
         if (t.is_freight_trap) s += `- **🚚 Freight Killer:** S&H is ${t.canonical_tiers?.freightPctOfResale ?? '?'}% of resale value\n`;
         if (ps.advice) s += `- **Advice:** ${ps.advice}\n`;
         return s + `\n`;
@@ -572,7 +615,18 @@ export const SCOUT_SECTION_BUILDERS: Record<string, SectionBuilder> = {
     lot: (t) => {
         if (!(t.lot_items && t.lot_items.length > 0)) return '';
         let s = `**📦 Lot Items (${t.lot_items.length}):**\n`;
-        t.lot_items.forEach((li: any, idx: number) => (s += `${idx + 1}. **${li.name || li.title || li.identity}** - Est: ${li.estimated_value || '-'}\n`));
+        t.lot_items.forEach((li: any, idx: number) => {
+            const qty = extractLotItemQty(li);
+            const splitCost = Number(li.split_cost_basis || 0);
+            const unitCost = qty > 1 && splitCost > 0 ? (splitCost / qty).toFixed(2) : '';
+            const costSuffix =
+                splitCost > 0
+                    ? qty > 1
+                        ? ` | Cost/Item: **$${unitCost}/ea** (Split $${splitCost.toFixed(2)} ÷ ${qty})`
+                        : ` | Split Cost: $${splitCost.toFixed(2)}`
+                    : '';
+            s += `${idx + 1}. **${li.name || li.title || li.identity}**${qty > 1 ? ` *(×${qty} Qty)*` : ''} — Boutique: ${li.pricing_potential?.boutique || li.price_breakdown?.boutique_premium || li.estimated_value || '-'}${costSuffix}\n`;
+        });
         return s + `\n`;
     },
     diagnostics: (t) => {

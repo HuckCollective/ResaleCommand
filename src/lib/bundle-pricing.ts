@@ -74,6 +74,45 @@ export function formatPriceRange(val: any): string {
 }
 
 /**
+ * Extracts rolled-up unit quantity from a lot component (e.g. `quantity: 3` or `"Sealed Blind Boxes (x3)"` -> `3`).
+ * Defaults to `1` for standard single-unit components.
+ */
+export function extractSubItemQuantity(subItem: any): number {
+    if (!subItem || typeof subItem !== 'object') return 1;
+    const explicit = Number(subItem.quantity ?? subItem.qty ?? 0);
+    if (Number.isFinite(explicit) && explicit > 1 && explicit <= 99) {
+        return Math.round(explicit);
+    }
+    const text = `${subItem.name || ''} ${subItem.title || ''} ${subItem.identity || ''} ${subItem.tag_title || ''}`;
+    // Match "(x3)", "[x3]", "x3", "3x", "(Set of 3)", "(Lot of 3)", "(Pack of 3)" (ignoring dimensions like "8x10" or "2x4")
+    const parenMatch = text.match(/[\(\[]\s*(?:x\s*(\d{1,2})|(\d{1,2})\s*x|(?:lot|set|pack|bundle|qty)\s*(?:of|:)?\s*(\d{1,2}))\s*[\)\]]/i);
+    if (parenMatch) {
+        const n = parseInt(parenMatch[1] || parenMatch[2] || parenMatch[3] || '1', 10);
+        if (n > 1 && n <= 99) return n;
+    }
+    const trailingMatch = text.match(/(?:^|\s)(?:x\s*(\d{1,2})|(\d{1,2})\s*x)(?=\s*$|\s*[-–—|])/i);
+    if (trailingMatch) {
+        const n = parseInt(trailingMatch[1] || trailingMatch[2] || '1', 10);
+        if (n > 1 && n <= 99) return n;
+    }
+    return 1;
+}
+
+/**
+ * Returns per-unit Boutique midpoint hint when `extractSubItemQuantity(subItem) > 1` (e.g. `"~$6.50/ea"`).
+ */
+export function getSubItemUnitPriceHint(subItem: any): string {
+    const qty = extractSubItemQuantity(subItem);
+    if (qty <= 1) return '';
+    const bStr = getSubItemBoutique(subItem);
+    const { low, high } = parsePriceRange(bStr);
+    const mid = high > 0 ? (low + high) / 2 : low;
+    if (mid <= 0) return '';
+    const unit = mid / qty;
+    return `~$${unit % 1 === 0 ? unit.toFixed(0) : unit.toFixed(2)}/ea`;
+}
+
+/**
  * Higher Boutique Range:
  * Curated physical retail / antique mall booth pricing tier (e.g. Memory Den / DustyTiger).
  * Defaults to +35% to +50% above fair market comps if not explicitly provided.
@@ -141,34 +180,55 @@ export function getSubItemBuyRange(subItem: any): string {
     return '-';
 }
 
-/**
- * Split Cost Basis:
- * Shows the individual acquisition cost of that specific component (Total Cost ÷ Lot Count).
- * Always returns a valid string (e.g. "$6.67", or "$0.00" if cost is unassigned). Never disappears.
- */
-export function getSubItemCostBasis(subItem: any, totalCount: number, totalCost?: number | string | null): string {
-    const count = Math.max(1, totalCount || 1);
+function getPieceBoutiqueMidpoint(subItem: any): number {
+    const r = parsePriceRange(getSubItemBoutique(subItem));
+    return r.high > 0 ? (r.low + r.high) / 2 : r.low;
+}
 
-    // 1. If explicit total cost is passed from form or lot parent
+/**
+ * Split Cost Basis (Value-Weighted + Per-Unit Roll-Up Aware):
+ * - Allocates `totalCost` proportionally by Boutique midpoint when `allLotItems` is provided (matching `#rc-scout-tray`).
+ * - When a component is a multi-quantity roll-up (`qty > 1`, e.g. `Sealed Blind Boxes (x3)` with `$9.06` group split cost),
+ *   returns `"$3.02/ea ($9.06 ÷ 3)"` so the reseller sees the exact cost per individual unit!
+ */
+export function getSubItemCostBasis(
+    subItem: any,
+    totalCount: number,
+    totalCost?: number | string | null,
+    allLotItems?: any[]
+): string {
+    const count = Math.max(1, totalCount || 1);
+    const qty = extractSubItemQuantity(subItem);
+
     let costNum = 0;
     if (totalCost !== undefined && totalCost !== null) {
         costNum = typeof totalCost === 'number' ? totalCost : parseFloat(String(totalCost).replace(/[$,]/g, '')) || 0;
     }
 
-    // 2. Check if subItem already has an explicit split_cost_basis
-    if (costNum <= 0 && subItem?.split_cost_basis !== undefined && subItem?.split_cost_basis !== null) {
-        const subCost = parseFloat(String(subItem.split_cost_basis)) || 0;
-        if (subCost > 0) {
-            return `$${subCost.toFixed(2)}`;
+    let lineCost = 0;
+    if (costNum > 0 && Array.isArray(allLotItems) && allLotItems.length > 1) {
+        const sumBoutique = allLotItems.reduce((s, li) => s + getPieceBoutiqueMidpoint(li), 0);
+        const thisBoutique = getPieceBoutiqueMidpoint(subItem);
+        if (sumBoutique > 0 && thisBoutique > 0) {
+            lineCost = (thisBoutique / sumBoutique) * costNum;
+        } else {
+            lineCost = costNum / count;
         }
+    } else if (costNum > 0) {
+        lineCost = costNum / count;
+    } else if (subItem?.split_cost_basis !== undefined && subItem?.split_cost_basis !== null) {
+        lineCost = parseFloat(String(subItem.split_cost_basis)) || 0;
     }
 
-    if (costNum > 0) {
-        const perItem = (costNum / count).toFixed(2);
-        return `$${perItem}`;
+    if (lineCost > 0) {
+        if (qty > 1) {
+            const unitCost = lineCost / qty;
+            return `$${unitCost.toFixed(2)}/ea ($${lineCost.toFixed(2)} ÷ ${qty})`;
+        }
+        return `$${lineCost.toFixed(2)}`;
     }
 
-    return '$0.00';
+    return qty > 1 ? `$0.00/ea (÷ ${qty})` : '$0.00';
 }
 
 /**
@@ -358,6 +418,26 @@ export function normalizeBundleComponents(lotItems: any[], totalCost?: number | 
             },
             split_cost_basis: splitCost
         };
+    });
+
+    const bMidList = normalized.map((n) => {
+        const r = parsePriceRange(n.pricing_potential?.boutique || n.price_breakdown?.boutique_premium);
+        return r.high > 0 ? (r.low + r.high) / 2 : r.low;
+    });
+    const sumBoutiqueMid = bMidList.reduce((a, b) => a + b, 0);
+    normalized.forEach((n, idx) => {
+        const qty = extractSubItemQuantity(n);
+        const bMid = bMidList[idx] || 0;
+        const lineCost =
+            costNum > 0 && sumBoutiqueMid > 0 && bMid > 0
+                ? parseFloat(((bMid / sumBoutiqueMid) * costNum).toFixed(2))
+                : splitCost;
+        n.quantity = qty;
+        n.split_cost_basis = lineCost;
+        n.unit_cost_basis = parseFloat((lineCost / qty).toFixed(2));
+        if (qty > 1 && bMid > 0) {
+            n.unit_boutique_estimate = parseFloat((bMid / qty).toFixed(2));
+        }
     });
 
     // Guarantee Hero Anchor is at slot #1, sorted descending by Boutique value

@@ -328,9 +328,9 @@
                                 </div>
                                 <div class="flex items-center gap-2">
                                     <span class="badge badge-sm font-mono font-black gap-1 shadow-2xs"
-                                          :class="getAuctionFinancials(item).currentNetProfit < 0 ? 'badge-error text-error-content' : 'badge-success'">
+                                          :class="getAuctionFinancials(item).currentNetProfit < 0 ? 'badge-error text-error-content' : (isDeadAuctionDeal(item) ? 'badge-warning text-warning-content' : 'badge-success')">
                                         <Icon icon="solar:wallet-money-bold" class="w-3.5 h-3.5" />
-                                        {{ fmtSignedProfit(getAuctionFinancials(item).currentNetProfit) }} {{ getAuctionFinancials(item).currentNetProfit < 0 ? 'Loss at Current Bid' : 'Cash Profit' }}
+                                        {{ fmtSignedProfit(getAuctionFinancials(item).currentNetProfit) }} {{ getAuctionFinancials(item).currentNetProfit < 0 ? 'Loss at Current Bid' : (isDeadAuctionDeal(item) ? '⚠️ Thin (<1.7x Floor)' : 'Cash Profit') }}
                                     </span>
                                     <span class="badge badge-sm badge-outline font-mono font-bold">
                                         {{ getAuctionFinancials(item).roi }}x ROI
@@ -722,8 +722,11 @@
                                             {{ subIdx + 1 }}
                                         </span>
                                         <div class="flex flex-col">
-                                            <span class="text-base-content font-bold leading-snug text-left">
-                                                {{ subItem.name || subItem.title || subItem.identity || subItem.item }}
+                                            <span class="text-base-content font-bold leading-snug text-left flex items-center gap-1.5 flex-wrap">
+                                                <span>{{ subItem.name || subItem.title || subItem.identity || subItem.item }}</span>
+                                                <span v-if="extractSubItemQuantity(subItem) > 1" class="badge badge-xs badge-info font-mono font-extrabold">
+                                                    📦 ×{{ extractSubItemQuantity(subItem) }} Qty
+                                                </span>
                                             </span>
                                             <span v-if="isHeroAnchor(subItem, item.lot_items)" class="text-[10px] font-black text-warning flex items-center gap-1 mt-0.5">
                                                 <Icon icon="solar:crown-star-bold" class="w-3.5 h-3.5" /> Hero Anchor (Recoups Lot Basis)
@@ -733,13 +736,13 @@
                                     <span class="badge badge-outline badge-primary badge-xs whitespace-nowrap px-1.5 py-1 shrink-0">{{ subItem.condition || 'Used' }}</span>
                                 </div>
                                 <div class="flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[10px] opacity-80 border-t border-base-200/80 pt-2 mt-0.5">
-                                    <span>Boutique: <strong class="text-secondary font-mono">{{ getSubItemBoutique(subItem) }}</strong></span>
+                                    <span>Boutique: <strong class="text-secondary font-mono">{{ getSubItemBoutique(subItem) }}</strong><span v-if="getSubItemUnitPriceHint(subItem)" class="text-info font-mono font-bold ml-1">{{ getSubItemUnitPriceHint(subItem) }}</span></span>
                                     <span class="opacity-30">|</span>
                                     <span>Fair: <strong class="text-primary font-mono">{{ getSubItemFair(subItem) }}</strong></span>
                                     <span class="opacity-30">|</span>
                                     <span>Buy Range: <strong class="text-success font-mono">{{ getSubItemBuyRange(subItem) }}</strong></span>
                                     <span class="opacity-30">|</span>
-                                    <span>Split Cost: <strong class="text-warning font-mono">{{ getSubItemCostBasis(subItem, item.lot_items.length, cost) }}</strong></span>
+                                    <span>{{ extractSubItemQuantity(subItem) > 1 ? 'Cost/Item:' : 'Split Cost:' }} <strong class="text-warning font-mono">{{ getSubItemCostBasis(subItem, item.lot_items.length, cost, item.lot_items) }}</strong></span>
                                 </div>
                             </li>
                         </ul>
@@ -1428,6 +1431,8 @@ import {
     getSubItemFair, 
     getSubItemBuyRange, 
     getSubItemCostBasis, 
+    extractSubItemQuantity,
+    getSubItemUnitPriceHint,
     calculateMaxBuyPrice, 
     calculateSubItemMaxBidPrice 
 } from '../../lib/bundle-pricing';
@@ -2339,9 +2344,19 @@ function getScoutChannels(item: any): any[] {
     const fin = getAuctionFinancials(item);
     const hasLot = Boolean(item?.lot_items && Array.isArray(item.lot_items) && item.lot_items.length > 1);
     const splitRec = hasLot ? getLotSplitRecommendation(item) : null;
+    const itemText = `${item?.identity || item?.title || ''} ${item?.category || ''}`.toLowerCase();
+    const isBulkyOrHeavyForDt = (Number(item?.shipping_weight_lbs) || 0) >= 2.0 ||
+        /\b(playset|castle|joust|modular|lego\s+set|boxed\s+set|\d{3,4}\s*pcs|apparel|shirt|jacket|coat|dress|pants|framed|canvas)\b/i.test(itemText);
 
     if (item?.market_report?.channels && Array.isArray(item.market_report.channels) && item.market_report.channels.length > 0) {
-        return item.market_report.channels.map((ch: any) => {
+        const filteredChannels = item.market_report.channels.filter((ch: any) => {
+            const chName = String(ch?.name || '');
+            if (isBulkyOrHeavyForDt && (/dusty\s*tiger/i.test(chName) || /\bdt\b/i.test(chName))) {
+                return false;
+            }
+            return true;
+        });
+        return filteredChannels.map((ch: any) => {
             const isBooth = (ch.name || '').toLowerCase().includes('memory den') || (ch.name || '').toLowerCase().includes('booth');
             const isEbay = (ch.name || '').toLowerCase().includes('ebay');
 

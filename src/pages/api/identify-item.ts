@@ -895,7 +895,10 @@ export const ALL: APIRoute = async ({ request }) => {
 
         const dynamicBoothChannels = getAllLocationSettingMetas(outerTargetLocations)
             .filter((m) => m.commissionRate > 0)
-            .map((m) => `${m.name} (${m.code}, ${m.commissionRate}% fee${m.vibesAndNotes ? ` — ${m.vibesAndNotes}` : ''})`)
+            .map((m) => {
+                const vibe = m.subtitle || (m as any).vibesAndNotes || m.notes || '';
+                return `${m.name} (${m.code}, ${m.commissionRate}% fee${vibe ? ` — ${vibe}` : ''})`;
+            })
             .join('; ');
         const organizationChannelsStr = dynamicBoothChannels
             ? `${dynamicBoothChannels}; eBay; Poshmark.`
@@ -1222,9 +1225,16 @@ export const ALL: APIRoute = async ({ request }) => {
                 try {
                     const guardMetas = getAllLocationSettingMetas(outerTargetLocations);
                     const primaryBooth = guardMetas.find((m) => m.commissionRate > 0);
+                    const resolvedWeightLbs = Number(
+                        target.seller_info?.shipping_weight ||
+                            target.shippingWeight ||
+                            scrapedAuctionMeta?.shipping_weight ||
+                            0
+                    );
                     applyScoutReportGuardrails(target, {
                         venueMetas: guardMetas,
                         shippingTotal: shipTotal,
+                        shippingWeightLbs: resolvedWeightLbs > 0 ? resolvedWeightLbs : undefined,
                         currentBid: currentAskNum > 0 ? currentAskNum : 0,
                         buyersPremiumPct: bpPct,
                         isAuction,
@@ -1234,6 +1244,16 @@ export const ALL: APIRoute = async ({ request }) => {
                         visionPhotosScanned: imageParts.length,
                         visionPhotoUrls: usedImageUrls.slice(0, maxVisionPhotos),
                     });
+                    if (target.lot_items && Array.isArray(target.lot_items) && target.lot_items.length > 0) {
+                        const finalLandedForSplit =
+                            target.canonical_tiers?.tiers?.balanced?.status === 'active'
+                                ? target.canonical_tiers.tiers.balanced.estLanded
+                                : target.canonical_tiers?.atCurrentBid?.landed ||
+                                  target.purchase_strategy?.max_landed_cost ||
+                                  target.purchase_strategy?.max_bid ||
+                                  null;
+                        target.lot_items = normalizeBundleComponents(target.lot_items, finalLandedForSplit);
+                    }
                 } catch (guardErr) {
                     console.warn('[identify-item] scout guardrails failed (non-fatal):', guardErr);
                 }
