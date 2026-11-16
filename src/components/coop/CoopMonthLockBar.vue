@@ -40,7 +40,7 @@
           <button
             v-if="activeLock?.status === 'locked'"
             type="button"
-            class="btn btn-xs sm:btn-sm btn-warning btn-outline rounded-xl font-bold gap-1.5"
+            class="btn btn-xs sm:btn-sm h-11 min-h-11 md:h-9 md:min-h-9 btn-warning btn-outline rounded-xl font-bold gap-1.5"
             :disabled="isSubmitting"
             @click="openUnlockDrawer"
           >
@@ -49,7 +49,7 @@
           <button
             v-else-if="!isMonthInProgress"
             type="button"
-            class="btn btn-xs sm:btn-sm btn-primary rounded-xl font-black gap-1.5 shadow-2xs"
+            class="btn btn-xs sm:btn-sm h-11 min-h-11 md:h-9 md:min-h-9 btn-primary text-primary-content rounded-xl font-black gap-1.5 shadow-2xs"
             :disabled="isSubmitting"
             @click="openLockDrawer"
           >
@@ -75,7 +75,7 @@
       </div>
       <button
         type="button"
-        class="btn btn-2xs btn-outline rounded-lg font-bold shrink-0"
+        class="btn btn-xs h-11 min-h-11 md:h-7 md:min-h-0 btn-outline rounded-lg font-bold shrink-0"
         @click="showDriftDetails = !showDriftDetails"
       >
         {{ showDriftDetails ? 'Hide Drift' : 'Review Drift' }}
@@ -200,10 +200,10 @@
         </label>
 
         <div class="flex justify-end gap-2 pt-2">
-          <button type="button" class="btn btn-sm btn-ghost rounded-xl" @click="drawerOpen = false">Cancel</button>
+          <button type="button" class="btn btn-sm h-11 min-h-11 md:h-9 md:min-h-9 btn-ghost rounded-xl" @click="drawerOpen = false">Cancel</button>
           <button
             type="button"
-            class="btn btn-sm btn-primary rounded-xl font-black"
+            class="btn btn-sm h-11 min-h-11 md:h-9 md:min-h-9 btn-primary text-primary-content rounded-xl font-black"
             :disabled="isSubmitting || isMonthInProgress || pendingLaborCount > 0 || !confirmedIssued"
             @click="submitLock"
           >
@@ -230,10 +230,10 @@
         </div>
 
         <div class="flex justify-end gap-2 pt-2">
-          <button type="button" class="btn btn-sm btn-ghost rounded-xl" @click="drawerOpen = false">Cancel</button>
+          <button type="button" class="btn btn-sm h-11 min-h-11 md:h-9 md:min-h-9 btn-ghost rounded-xl" @click="drawerOpen = false">Cancel</button>
           <button
             type="button"
-            class="btn btn-sm btn-warning rounded-xl font-black"
+            class="btn btn-sm h-11 min-h-11 md:h-9 md:min-h-9 btn-warning text-warning-content rounded-xl font-black"
             :disabled="isSubmitting || unlockReason.trim().length < 3"
             @click="submitUnlock"
           >

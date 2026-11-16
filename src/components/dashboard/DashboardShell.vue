@@ -1,5 +1,5 @@
 <template>
-  <div class="space-y-4 sm:space-y-6" @click.capture="onDemoClick">
+  <div class="space-y-5 sm:space-y-6" @click.capture="onDemoClick">
     <!-- PUBLIC DEMO BANNER -->
     <div v-if="mode === 'demo'" class="card bg-secondary/10 border border-secondary/40 rounded-2xl p-4 space-y-3">
       <div class="flex flex-col md:flex-row md:items-center justify-between gap-3">
@@ -10,8 +10,8 @@
           </p>
         </div>
         <div class="flex flex-wrap gap-2 shrink-0">
-          <a href="/coop" data-demo-allow class="btn btn-sm btn-primary text-primary-content rounded-xl font-bold">Connect With Us</a>
-          <a href="/login" data-demo-allow class="btn btn-sm btn-outline rounded-xl font-bold">Member Login</a>
+          <a href="/coop" data-demo-allow class="btn btn-sm h-11 min-h-11 md:h-8 md:min-h-0 btn-primary text-primary-content rounded-xl font-bold">Connect With Us</a>
+          <a href="/login" data-demo-allow class="btn btn-sm h-11 min-h-11 md:h-8 md:min-h-0 btn-outline rounded-xl font-bold">Member Login</a>
         </div>
       </div>
       <div class="flex flex-wrap items-center gap-1.5" role="group" aria-label="Preview as role">
@@ -20,7 +20,7 @@
           v-for="hat in demoRoles"
           :key="hat"
           type="button"
-          class="btn btn-xs h-7 min-h-0 rounded-lg gap-1 font-bold"
+          class="btn btn-xs h-11 min-h-11 md:h-7 md:min-h-0 rounded-lg gap-1 font-bold shrink-0 whitespace-nowrap"
           :class="demoRole === hat ? 'btn-secondary text-secondary-content' : 'btn-ghost border border-base-300'"
           @click="demoRole = hat"
         >
@@ -51,7 +51,7 @@
           <button
             v-if="pendingJoinCount > 0 && mode === 'live' && canSeeCollective"
             type="button"
-            class="btn btn-xs sm:btn-sm btn-info text-info-content rounded-xl font-black gap-1 shadow-xs"
+            class="btn btn-xs sm:btn-sm h-11 min-h-11 md:h-8 md:min-h-0 btn-info text-info-content rounded-xl font-black gap-1 shadow-xs"
             @click="openJoinQueueTray"
           >
             <span>📬 {{ pendingJoinCount }} Join Request{{ pendingJoinCount === 1 ? '' : 's' }}</span>
@@ -60,7 +60,7 @@
           <button
             v-if="canSeeCollective"
             type="button"
-            class="btn btn-xs sm:btn-sm btn-ghost border border-success/40 text-success rounded-xl font-bold gap-1 hover:bg-success/10 transition-all shrink-0"
+            class="btn btn-xs sm:btn-sm h-11 min-h-11 min-w-11 md:h-8 md:min-h-0 md:min-w-0 btn-ghost border border-success/40 text-success rounded-xl font-bold gap-1 hover:bg-success/10 transition-all shrink-0"
             title="Open IRS Schedule C Tax Playbook"
             @click="openTaxPlaybook"
           >
@@ -70,7 +70,7 @@
 
           <button
             type="button"
-            class="btn btn-xs sm:btn-sm btn-ghost border border-base-300/80 rounded-xl font-bold gap-1 hover:bg-base-200 transition-all shrink-0"
+            class="btn btn-xs sm:btn-sm h-11 min-h-11 min-w-11 md:h-8 md:min-h-0 md:min-w-0 btn-ghost border border-base-300/80 rounded-xl font-bold gap-1 hover:bg-base-200 transition-all shrink-0"
             :title="allCollapsed ? 'Expand All Dashboard Areas' : 'Collapse All Dashboard Areas'"
             @click="toggleAllSections"
           >
@@ -88,7 +88,7 @@
             v-for="hat in availableHats"
             :key="hat"
             type="button"
-            class="btn btn-xs h-7 min-h-0 rounded-xl gap-1 font-bold shrink-0"
+            class="btn btn-xs h-11 min-h-11 md:h-7 md:min-h-0 rounded-xl gap-1 font-bold shrink-0 whitespace-nowrap"
             :class="activeLens === hat ? 'btn-primary text-primary-content shadow-xs' : 'btn-ghost border border-base-300'"
             @click="selectLens(hat)"
           >
@@ -105,7 +105,7 @@
           <button
             v-if="availableHats.length > 1"
             type="button"
-            class="btn btn-xs h-7 min-h-0 rounded-xl gap-1 font-bold shrink-0"
+            class="btn btn-xs h-11 min-h-11 md:h-7 md:min-h-0 rounded-xl gap-1 font-bold shrink-0 whitespace-nowrap"
             :class="activeLens === 'all' ? 'btn-secondary text-secondary-content shadow-xs' : 'btn-ghost border border-base-300'"
             @click="selectLens('all')"
           >
@@ -123,7 +123,7 @@
         <div class="flex items-center gap-1.5 shrink-0">
           <button
             type="button"
-            class="btn btn-xs rounded-xl btn-ghost border border-base-300 font-bold gap-1"
+            class="btn btn-xs h-11 min-h-11 md:h-8 md:min-h-0 rounded-xl btn-ghost border border-base-300 font-bold gap-1 shrink-0 whitespace-nowrap"
             @click="tray.openTray('tools')"
           >
             <Icon icon="solar:compass-bold-duotone" class="w-3.5 h-3.5 text-primary shrink-0" />
@@ -134,8 +134,54 @@
     </header>
 
     <!-- STRICT PER-LENS PRIORITY WIDGET STACK -->
-    <div v-if="loading" class="flex justify-center py-16">
-      <span class="loading loading-spinner loading-lg text-primary"></span>
+    <div v-if="loading" class="space-y-5" aria-busy="true" aria-label="Loading dashboard metrics">
+      <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+        <div
+          v-for="idx in 3"
+          :key="`sk-alert-${idx}`"
+          class="card bg-base-100 border border-base-300 rounded-2xl p-4 space-y-2.5"
+        >
+          <div class="flex items-center justify-between gap-2">
+            <div class="skeleton h-4 w-32 rounded-md"></div>
+            <div class="skeleton h-5 w-10 rounded-full"></div>
+          </div>
+          <div class="skeleton h-4 w-3/4 rounded-md"></div>
+          <div class="skeleton h-3 w-full rounded-md"></div>
+          <div class="pt-2 flex items-center justify-between gap-2">
+            <div class="skeleton h-7 w-28 rounded-lg"></div>
+            <div class="skeleton h-7 w-16 rounded-lg"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <div
+          v-for="kpi in 4"
+          :key="`sk-kpi-${kpi}`"
+          class="rounded-2xl bg-base-100 border border-base-300 p-4 space-y-2"
+        >
+          <div class="skeleton h-3 w-24 rounded-md"></div>
+          <div class="skeleton h-6 w-20 rounded-md"></div>
+          <div class="skeleton h-3 w-28 rounded-md"></div>
+        </div>
+      </div>
+
+      <div class="card bg-base-100 border border-base-300 rounded-2xl p-4 space-y-3">
+        <div class="flex items-center justify-between gap-2">
+          <div class="skeleton h-5 w-48 rounded-md"></div>
+          <div class="skeleton h-7 w-24 rounded-lg"></div>
+        </div>
+        <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-2.5">
+          <div
+            v-for="rad in 3"
+            :key="`sk-rad-${rad}`"
+            class="rounded-xl border border-base-200 p-3 space-y-2"
+          >
+            <div class="skeleton h-4 w-36 rounded-md"></div>
+            <div class="skeleton h-3 w-full rounded-md"></div>
+          </div>
+        </div>
+      </div>
     </div>
     <template v-else>
       <component :is="WIDGET_COMPONENTS[id]" v-for="id in widgetIds" :key="`${activeLens}-${id}`" />
@@ -172,7 +218,6 @@ import {
 import { useLiveDashboardSource } from '../../composables/dashboard/useLiveDashboardSource';
 import { useDemoDashboardSource } from '../../composables/dashboard/useDemoDashboardSource';
 import { createDashboardCommandTray } from '../../composables/dashboard/useDashboardCommandTray';
-import { useLoader } from '../../composables/useLoader';
 import RoleAlertsGrid from './RoleAlertsGrid.vue';
 import FinancialsOverview from './FinancialsOverview.vue';
 import OperationsRadarGrid from './OperationsRadarGrid.vue';
@@ -304,11 +349,6 @@ const onDemoClick = (e: MouseEvent) => {
     addToast({ type: 'info', message: 'This is an example. Members get this live after signing in.' });
   }
 };
-
-if (props.mode === 'live') {
-  const { showLoader } = useLoader();
-  showLoader('Loading Dashboard...');
-}
 
 onMounted(() => {
   activeLens.value = resolveValidStoredLens(source.member.value.hats);

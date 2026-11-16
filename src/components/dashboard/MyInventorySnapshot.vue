@@ -10,7 +10,7 @@
           Items tagged <span class="font-mono font-bold">{{ prefix }}</span>
         </div>
       </div>
-      <a v-if="prefix" href="/inventory" class="btn btn-xs btn-outline rounded-lg font-bold">Open My Inventory</a>
+      <a v-if="prefix" href="/inventory" class="btn btn-xs h-11 min-h-11 md:h-7 md:min-h-0 px-3 btn-outline rounded-lg font-bold">Open My Inventory</a>
     </div>
 
     <p v-if="!prefix" class="text-xs text-base-content/70 leading-relaxed">

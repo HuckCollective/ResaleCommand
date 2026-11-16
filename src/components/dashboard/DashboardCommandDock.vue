@@ -38,7 +38,7 @@
               </div>
               <button
                 type="button"
-                class="btn btn-sm btn-ghost btn-circle shrink-0"
+                class="btn btn-sm h-11 w-11 min-h-11 md:h-8 md:w-8 md:min-h-0 btn-ghost btn-circle shrink-0"
                 aria-label="Close tray"
                 @click="closeTray"
               >
@@ -50,7 +50,7 @@
             <div class="flex items-center gap-1.5 overflow-x-auto max-w-full scrollbar-none pb-0.5">
               <button
                 type="button"
-                class="btn btn-xs h-8 rounded-xl font-bold gap-1.5 shrink-0"
+                class="btn btn-xs h-11 min-h-11 md:h-8 md:min-h-0 rounded-xl font-bold gap-1.5 shrink-0 whitespace-nowrap"
                 :class="activeTray === 'triage' ? 'btn-warning text-warning-content shadow-xs' : 'btn-ghost bg-base-100 border border-base-300'"
                 @click="openTray('triage')"
               >
@@ -67,7 +67,7 @@
               <button
                 v-if="showCollectiveRadar"
                 type="button"
-                class="btn btn-xs h-8 rounded-xl font-bold gap-1.5 shrink-0"
+                class="btn btn-xs h-11 min-h-11 md:h-8 md:min-h-0 rounded-xl font-bold gap-1.5 shrink-0 whitespace-nowrap"
                 :class="activeTray === 'radar' ? 'btn-secondary text-secondary-content shadow-xs' : 'btn-ghost bg-base-100 border border-base-300'"
                 @click="openTray('radar')"
               >
@@ -83,7 +83,7 @@
 
               <button
                 type="button"
-                class="btn btn-xs h-8 rounded-xl font-bold gap-1.5 shrink-0"
+                class="btn btn-xs h-11 min-h-11 md:h-8 md:min-h-0 rounded-xl font-bold gap-1.5 shrink-0 whitespace-nowrap"
                 :class="activeTray === 'tools' ? 'btn-primary text-primary-content shadow-xs' : 'btn-ghost bg-base-100 border border-base-300'"
                 @click="openTray('tools')"
               >
@@ -114,7 +114,7 @@
               <button
                 v-if="activeTray === 'triage' && snoozedCards.length > 0"
                 type="button"
-                class="btn btn-xs btn-ghost rounded-xl font-bold"
+                class="btn btn-xs h-11 min-h-11 md:h-8 md:min-h-0 btn-ghost rounded-xl font-bold"
                 @click="unsnoozeAll"
               >
                 Unsnooze All ({{ snoozedCards.length }})
@@ -122,14 +122,14 @@
               <a
                 :href="primaryCpa.href"
                 data-demo-allow
-                class="btn btn-xs sm:btn-sm btn-primary text-primary-content rounded-xl font-black gap-1.5 px-3.5 shadow-sm"
+                class="btn btn-xs sm:btn-sm h-11 min-h-11 md:h-8 md:min-h-0 btn-primary text-primary-content rounded-xl font-black gap-1.5 px-3.5 shadow-sm"
               >
                 <Icon :icon="primaryCpa.icon" class="w-4 h-4 shrink-0" />
                 <span>{{ primaryCpa.label }}</span>
               </a>
               <button
                 type="button"
-                class="btn btn-xs sm:btn-sm btn-outline rounded-xl font-bold"
+                class="btn btn-xs sm:btn-sm h-11 min-h-11 md:h-8 md:min-h-0 btn-outline rounded-xl font-bold"
                 @click="closeTray"
               >
                 Done
@@ -176,7 +176,7 @@
         <!-- 1. Triage Stack Trigger -->
         <button
           type="button"
-          class="h-10 sm:h-11 px-2.5 sm:px-3.5 rounded-2xl flex items-center justify-center gap-1.5 transition-all duration-200 font-extrabold text-xs border shadow-xs active:scale-95 shrink-0"
+          class="h-11 px-2.5 sm:px-3.5 rounded-2xl flex items-center justify-center gap-1.5 transition-all duration-200 font-extrabold text-xs border shadow-xs active:scale-95 shrink-0"
           :class="
             activeTray === 'triage'
               ? 'bg-warning text-warning-content border-warning-content/25 shadow-md'
@@ -201,7 +201,7 @@
         <button
           v-if="showCollectiveRadar"
           type="button"
-          class="h-10 sm:h-11 px-2.5 sm:px-3.5 rounded-2xl flex items-center justify-center gap-1.5 transition-all duration-200 font-extrabold text-xs border shadow-xs active:scale-95 shrink-0"
+          class="h-11 px-2.5 sm:px-3.5 rounded-2xl flex items-center justify-center gap-1.5 transition-all duration-200 font-extrabold text-xs border shadow-xs active:scale-95 shrink-0"
           :class="
             activeTray === 'radar'
               ? 'bg-secondary text-secondary-content border-secondary-content/25 shadow-md'
@@ -222,7 +222,7 @@
         <!-- 3. Role & Tools Trigger -->
         <button
           type="button"
-          class="h-10 sm:h-11 px-2.5 sm:px-3.5 rounded-2xl flex items-center justify-center gap-1.5 transition-all duration-200 font-extrabold text-xs border shadow-xs active:scale-95 shrink-0"
+          class="h-11 px-2.5 sm:px-3.5 rounded-2xl flex items-center justify-center gap-1.5 transition-all duration-200 font-extrabold text-xs border shadow-xs active:scale-95 shrink-0"
           :class="
             activeTray === 'tools'
               ? 'bg-primary text-primary-content border-primary-content/25 shadow-md'
@@ -239,7 +239,7 @@
         <button
           v-if="source.mode === 'live'"
           type="button"
-          class="h-10 sm:h-11 px-2.5 rounded-2xl flex items-center justify-center gap-1 transition-all duration-200 bg-base-200/80 hover:bg-base-300 text-base-content font-bold text-xs border border-base-content/15 shadow-xs active:scale-95 shrink-0"
+          class="h-11 min-w-11 sm:min-w-0 px-2.5 rounded-2xl flex items-center justify-center gap-1 transition-all duration-200 bg-base-200/80 hover:bg-base-300 text-base-content font-bold text-xs border border-base-content/15 shadow-xs active:scale-95 shrink-0"
           title="Open Co-op Messages & Screenshot Bug Reports"
           @click="handoffToMessages('list')"
         >
@@ -251,7 +251,7 @@
         <a
           :href="primaryCpa.href"
           data-demo-allow
-          class="h-10 sm:h-11 px-3.5 sm:px-4 rounded-2xl flex items-center justify-center gap-1.5 transition-all duration-200 bg-primary text-primary-content font-black text-xs uppercase tracking-wide shadow-md border border-primary-content/25 active:scale-95 hover:brightness-110 shrink-0"
+          class="h-11 px-3.5 sm:px-4 rounded-2xl flex items-center justify-center gap-1.5 transition-all duration-200 bg-primary text-primary-content font-black text-xs uppercase tracking-wide shadow-md border border-primary-content/25 active:scale-95 hover:brightness-110 shrink-0"
         >
           <Icon :icon="primaryCpa.icon" class="w-4 h-4 shrink-0" />
           <span class="sm:hidden">{{ primaryCpa.shortLabel }}</span>

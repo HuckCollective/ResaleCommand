@@ -34,7 +34,7 @@
         <button
           type="button"
           @click.stop="openTray('radar')"
-          class="btn btn-xs btn-outline border-base-300 font-bold gap-1 transition-all px-2 h-7 min-h-7"
+          class="btn btn-xs btn-outline border-base-300 font-bold gap-1 transition-all px-2 h-11 min-h-11 md:h-7 md:min-h-0"
         >
           <span class="text-[11px] whitespace-nowrap">Full Tray ({{ visibleRadarCards.length }}) ↑</span>
         </button>
@@ -42,7 +42,7 @@
         <button
           type="button"
           @click.stop="isCustomizing = !isCustomizing; if (isCollapsed) isCollapsed = false;"
-          class="btn btn-xs font-bold gap-1 transition-all px-2 h-7 min-h-7"
+          class="btn btn-xs font-bold gap-1 transition-all px-2 h-11 min-h-11 md:h-7 md:min-h-0"
           :class="isCustomizing ? 'btn-secondary text-secondary-content shadow-xs' : 'btn-ghost border border-base-300'"
           title="Customize which radar cards appear on your Command Center"
         >
@@ -54,7 +54,7 @@
 
         <button
           type="button"
-          class="btn btn-ghost btn-xs btn-circle shrink-0 hover:bg-base-300"
+          class="btn btn-ghost btn-xs h-11 w-11 min-h-11 md:h-7 md:w-7 md:min-h-0 btn-circle shrink-0 hover:bg-base-300"
           :aria-expanded="!isCollapsed"
           aria-label="Toggle Operations Radar"
         >
@@ -83,14 +83,14 @@
               v-if="hiddenCardIds.length > 0"
               type="button"
               @click="resetCardConfig"
-              class="btn btn-2xs btn-ghost text-warning font-bold"
+              class="btn btn-xs h-11 min-h-11 md:h-7 md:min-h-0 btn-ghost text-warning font-bold"
             >
               Reset Default
             </button>
             <button
               type="button"
               @click="isCustomizing = false"
-              class="btn btn-2xs btn-secondary text-secondary-content font-bold px-2.5"
+              class="btn btn-xs h-11 min-h-11 md:h-7 md:min-h-0 btn-secondary text-secondary-content font-bold px-2.5"
             >
               Done
             </button>
@@ -101,7 +101,7 @@
           <label
             v-for="card in allRadarCards"
             :key="`cfg-${card.id}`"
-            class="flex items-center justify-between gap-2 p-2 rounded-xl border bg-base-100 cursor-pointer select-none transition-all text-xs"
+            class="flex items-center justify-between gap-2 p-2 min-h-11 md:min-h-0 rounded-xl border bg-base-100 cursor-pointer select-none transition-all text-xs"
             :class="isCardVisible(card.id) ? 'border-secondary/40 font-bold' : 'border-base-300 opacity-60'"
           >
             <div class="flex items-center gap-2 min-w-0">
@@ -126,7 +126,7 @@
             :key="tab.id"
             type="button"
             @click="activeCategory = tab.id"
-            class="btn btn-xs rounded-lg font-bold gap-1 shrink-0 transition-all h-7 min-h-7 px-2.5"
+            class="btn btn-xs rounded-lg font-bold gap-1 shrink-0 whitespace-nowrap transition-all h-11 min-h-11 md:h-7 md:min-h-0 px-2.5"
             :class="activeCategory === tab.id ? tab.activeClass : 'btn-ghost text-base-content/75'"
           >
             <span>{{ tab.label }}</span>
@@ -149,7 +149,7 @@
           </span>
           <button
             type="button"
-            class="btn btn-xs btn-secondary text-secondary-content rounded-lg font-black gap-1"
+            class="btn btn-xs h-11 min-h-11 md:h-7 md:min-h-0 btn-secondary text-secondary-content rounded-lg font-black gap-1"
             @click="openTray('radar')"
           >
             <span>Open Full Radar Tray ({{ visibleRadarCards.length }}) ↑</span>
@@ -159,7 +159,7 @@
 
       <div v-else class="text-center py-5 border border-dashed border-base-300 rounded-xl text-xs text-base-content/60 space-y-2">
         <p>No radar cards visible in this category.</p>
-        <button type="button" @click="resetCardConfig" class="btn btn-xs btn-outline">
+        <button type="button" @click="resetCardConfig" class="btn btn-xs h-11 min-h-11 md:h-7 md:min-h-0 btn-outline">
           Reset Card Visibility
         </button>
       </div>

@@ -5,11 +5,11 @@
         <span class="text-[11px] font-extrabold uppercase tracking-wider text-primary">My Statement</span>
         <span class="badge badge-2xs badge-primary badge-outline font-bold whitespace-nowrap">👤 My Pulse</span>
       </div>
-      <a href="/coop/settlements" class="btn btn-xs btn-outline rounded-lg font-bold">Open Statements</a>
+      <a href="/coop/settlements" class="btn btn-xs h-11 min-h-11 md:h-7 md:min-h-0 px-3 btn-outline rounded-lg font-bold">Open Statements</a>
     </div>
 
     <div v-if="statement" class="space-y-3">
-      <div class="text-xs text-base-content/70 break-words">{{ statement.month }} · {{ statement.dealLabel }}</div>
+      <div class="text-xs text-base-content/70 break-words">{{ formattedMonth }} · {{ statement.dealLabel }}</div>
       <KpiStatGrid :items="rows" />
       <p class="text-[11px] text-base-content/60 leading-relaxed">
         You see your own statement and deal terms. The Collective's shared books are visible across voting members.
@@ -25,9 +25,14 @@
 import { computed } from 'vue';
 import KpiStatGrid, { type KpiStatItem } from '../common/KpiStatGrid.vue';
 import { useDashboardSource } from '../../composables/dashboard/useDashboardSource';
+import { monthKeyToLabel } from '../../lib/salesBucketing';
 
 const source = useDashboardSource();
 const statement = computed(() => source.snapshot.value.statement);
+const formattedMonth = computed(() => {
+  const m = statement.value?.month || '';
+  return /^\d{4}-\d{2}$/.test(m) ? monthKeyToLabel(m) : m;
+});
 const money = (n: number) => `$${n.toFixed(2)}`;
 
 const rows = computed<KpiStatItem[]>(() => {

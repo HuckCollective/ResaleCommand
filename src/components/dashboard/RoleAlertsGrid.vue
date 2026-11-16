@@ -19,14 +19,14 @@
         <button
           v-if="snoozedCards.length > 0"
           type="button"
-          class="btn btn-2xs btn-ghost rounded-lg font-bold text-base-content/65"
+          class="btn btn-xs h-11 min-h-11 md:h-7 md:min-h-0 btn-ghost rounded-lg font-bold text-base-content/65"
           @click="openTray('triage', 'snoozed')"
         >
           {{ snoozedCards.length }} snoozed
         </button>
         <button
           type="button"
-          class="btn btn-xs btn-outline rounded-xl font-extrabold gap-1"
+          class="btn btn-xs h-11 min-h-11 md:h-7 md:min-h-0 btn-outline rounded-xl font-extrabold gap-1"
           @click="openTray('triage', 'all')"
         >
           <Icon icon="solar:layers-minimalistic-bold-duotone" class="w-3.5 h-3.5 text-warning shrink-0" />
@@ -72,12 +72,12 @@
         </ul>
 
         <div class="mt-auto pt-2 border-t border-base-200 flex flex-wrap items-center justify-between gap-2">
-          <a :href="card.href" class="btn btn-xs btn-primary text-primary-content rounded-lg font-bold gap-1 h-auto min-h-7 py-1 whitespace-normal">
+          <a :href="card.href" class="btn btn-xs btn-primary text-primary-content rounded-lg font-bold gap-1 h-auto min-h-11 md:min-h-7 py-1.5 md:py-1 whitespace-normal">
             {{ card.actionText }}
             <Icon icon="solar:arrow-right-linear" class="w-3.5 h-3.5 shrink-0" />
           </a>
           <div class="dropdown dropdown-end">
-            <button type="button" tabindex="0" class="btn btn-xs btn-ghost rounded-lg font-bold gap-1">
+            <button type="button" tabindex="0" class="btn btn-xs h-11 min-h-11 md:h-7 md:min-h-0 btn-ghost rounded-lg font-bold gap-1">
               <Icon icon="solar:bell-off-linear" class="w-3.5 h-3.5" />
               Snooze
             </button>
@@ -112,7 +112,7 @@
       </div>
       <button
         type="button"
-        class="btn btn-xs btn-warning text-warning-content rounded-xl font-black gap-1 shrink-0 self-start sm:self-center"
+        class="btn btn-xs h-11 min-h-11 md:h-8 md:min-h-0 btn-warning text-warning-content rounded-xl font-black gap-1 shrink-0 self-start sm:self-center"
         @click="openTray('triage', 'all')"
       >
         <span>Open All {{ activeCards.length }} in Tray</span>
@@ -129,7 +129,7 @@
     <button
       v-if="snoozedCards.length > 0"
       type="button"
-      class="btn btn-xs btn-ghost rounded-lg font-bold"
+      class="btn btn-xs h-11 min-h-11 md:h-7 md:min-h-0 btn-ghost rounded-lg font-bold"
       @click="openTray('triage', 'snoozed')"
     >
       {{ snoozedCards.length }} snoozed →

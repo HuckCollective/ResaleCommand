@@ -31,25 +31,25 @@
       <div class="flex items-center gap-2 w-full sm:w-auto justify-end flex-wrap">
         <button
           type="button"
-          class="btn btn-sm btn-secondary btn-outline gap-1.5 rounded-xl font-bold h-9 min-h-9 px-3 text-xs"
+          class="btn btn-sm btn-secondary btn-outline gap-1.5 rounded-xl font-bold h-11 min-h-11 md:h-9 md:min-h-9 px-3 text-xs"
           @click="openSweatDrawer()"
         >
-          <Icon icon="solar:users-group-rounded-bold-duotone" class="w-4 h-4 shrink-0" />
+          <Icon icon="solar:users-group-rounded-bold" class="w-4 h-4 shrink-0" />
           <span>🏦 Compare Cash vs. ICA &amp; Worker Logs</span>
         </button>
 
         <a
           href="/expenses"
-          class="btn btn-sm btn-outline gap-1.5 rounded-xl font-bold h-9 min-h-9 px-3 text-xs bg-base-100"
+          class="btn btn-sm btn-outline gap-1.5 rounded-xl font-bold h-11 min-h-11 md:h-9 md:min-h-9 px-3 text-xs bg-base-100"
           title="View shared commons expenses, receipts & reimbursements"
         >
-          <Icon icon="solar:bill-list-bold-duotone" class="w-4 h-4 text-primary shrink-0" />
+          <Icon icon="solar:bill-list-bold" class="w-4 h-4 text-primary shrink-0" />
           <span>Commons Expenses</span>
         </a>
 
         <button
           type="button"
-          class="btn btn-sm btn-success text-success-content font-black gap-1.5 shadow-sm rounded-xl h-9 min-h-9 px-3.5"
+          class="btn btn-sm btn-success text-success-content font-black gap-1.5 shadow-sm rounded-xl h-11 min-h-11 md:h-9 md:min-h-9 px-3.5"
           :disabled="partnerSettlements.length === 0"
           title="Download official PDF settlement statements for all active partners & Sweat-Equity workers"
           @click="exportAllPartnerPdfs"

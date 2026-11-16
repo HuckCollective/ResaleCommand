@@ -35,16 +35,16 @@
           <div class="join border border-base-300 rounded-xl bg-base-100 p-0.5">
             <button
               type="button"
-              class="join-item btn btn-2xs rounded-lg font-bold px-2"
-              :class="isPreset(10, 60, 30) ? 'btn-primary' : 'btn-ghost'"
+              class="join-item btn btn-xs h-11 min-h-11 md:h-7 md:min-h-0 rounded-lg font-bold px-2"
+              :class="isPreset(10, 60, 30) ? 'btn-primary text-primary-content' : 'btn-ghost'"
               @click="applyPreset(10, 60, 30)"
             >
               10/60/30 WSDE
             </button>
             <button
               type="button"
-              class="join-item btn btn-2xs rounded-lg font-bold px-2"
-              :class="isPreset(10, 45, 45) ? 'btn-primary' : 'btn-ghost'"
+              class="join-item btn btn-xs h-11 min-h-11 md:h-7 md:min-h-0 rounded-lg font-bold px-2"
+              :class="isPreset(10, 45, 45) ? 'btn-primary text-primary-content' : 'btn-ghost'"
               @click="applyPreset(10, 45, 45)"
             >
               10/45/45 Mondragon
@@ -83,8 +83,8 @@
         <div class="join border border-base-300 rounded-xl bg-base-100 p-0.5">
           <button
             type="button"
-            class="join-item btn btn-xs h-6 min-h-0 px-2 rounded-lg font-mono"
-            :class="sampleSurplus === 0 ? 'btn-neutral' : 'btn-ghost'"
+            class="join-item btn btn-xs h-11 min-h-11 md:h-7 md:min-h-0 px-2 rounded-lg font-mono"
+            :class="sampleSurplus === 0 ? 'btn-neutral text-neutral-content' : 'btn-ghost'"
             @click="sampleSurplus = 0"
           >
             Actual (${{ actualDistributablePool.toFixed(0) }})
@@ -93,8 +93,8 @@
             v-for="amt in [100, 250, 500]"
             :key="amt"
             type="button"
-            class="join-item btn btn-xs h-6 min-h-0 px-2 rounded-lg font-mono"
-            :class="sampleSurplus === amt ? 'btn-neutral' : 'btn-ghost'"
+            class="join-item btn btn-xs h-11 min-h-11 md:h-7 md:min-h-0 px-2 rounded-lg font-mono"
+            :class="sampleSurplus === amt ? 'btn-neutral text-neutral-content' : 'btn-ghost'"
             @click="sampleSurplus = amt"
           >
             Ex: ${{ amt }}
@@ -159,8 +159,8 @@
                   v-for="pct in [15, 25, 45, 50]"
                   :key="pct"
                   type="button"
-                  class="btn btn-2xs rounded-md font-mono"
-                  :class="draftPolicy.icaRetainedPct === pct ? 'btn-primary' : 'btn-ghost border border-base-300'"
+                  class="btn btn-xs h-11 min-h-11 md:h-7 md:min-h-0 rounded-md font-mono"
+                  :class="draftPolicy.icaRetainedPct === pct ? 'btn-primary text-primary-content' : 'btn-ghost border border-base-300'"
                   @click="draftPolicy.icaRetainedPct = pct"
                 >
                   {{ pct }}%
@@ -254,7 +254,7 @@
           <button
             v-if="canSavePolicy"
             type="button"
-            class="btn btn-xs sm:btn-sm btn-primary rounded-xl font-black gap-1.5"
+            class="btn btn-xs sm:btn-sm h-11 min-h-11 md:h-9 md:min-h-9 btn-primary text-primary-content rounded-xl font-black gap-1.5"
             :disabled="saving"
             @click="handleSavePolicy"
           >
