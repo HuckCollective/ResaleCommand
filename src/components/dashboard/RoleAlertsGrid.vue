@@ -72,7 +72,11 @@
         </ul>
 
         <div class="mt-auto pt-2 border-t border-base-200 flex flex-wrap items-center justify-between gap-2">
-          <a :href="card.href" class="btn btn-xs btn-primary text-primary-content rounded-lg font-bold gap-1 h-auto min-h-11 md:min-h-7 py-1.5 md:py-1 whitespace-normal">
+          <a
+            :href="card.href"
+            class="btn btn-xs btn-primary text-primary-content rounded-lg font-bold gap-1 h-auto min-h-11 md:min-h-7 py-1.5 md:py-1 whitespace-normal"
+            @click="onActionClick($event, card.href)"
+          >
             {{ card.actionText }}
             <Icon icon="solar:arrow-right-linear" class="w-3.5 h-3.5 shrink-0" />
           </a>
@@ -156,4 +160,14 @@ const {
   openTray,
   snooze,
 } = useDashboardCommandTray();
+
+const onActionClick = (e: MouseEvent, href: string) => {
+  if (href === '#join-queue') {
+    e.preventDefault();
+    window.dispatchEvent(new CustomEvent('rc:open-join-queue-tray'));
+  } else if (href === '#coop-messages') {
+    e.preventDefault();
+    window.dispatchEvent(new CustomEvent('rc:open-coop-messages', { detail: { mode: 'list' } }));
+  }
+};
 </script>

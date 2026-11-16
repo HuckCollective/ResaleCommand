@@ -29,6 +29,7 @@ import { getDatabaseId, resolveCollectionId } from '../../lib/appwriteEnv';
 import { coopExpensesApi } from '../../lib/coopExpenses';
 import { manifestsApi } from '../../lib/manifests';
 import { getSavedDropcasts } from '../../lib/dropcastModel';
+import { effectiveStatus, loadVaultNotes } from '../../lib/founderVault';
 import { joinApi } from '../../lib/joinRequestsClient';
 import {
   PREVERIFIED_MD_MULTI_QTY_BINS,
@@ -60,11 +61,29 @@ export function useLiveDashboardSource(): DashboardSource {
   const drops = ref<DashboardDropLite[]>([]);
   const lastSyncAt = ref<string | null>(null);
   const joinRequests = ref(0);
+  const coopMessages = ref(0);
+  let messagesListenerAttached = false;
 
   /** Verified "Connect With Us" requests waiting on stewards (non-stewards simply get 0). */
   const loadJoinRequests = async () => {
     const res = await joinApi<{ pending: number }>('count', {}, { steward: true });
     joinRequests.value = res.ok ? res.data.pending || 0 : 0;
+  };
+
+  /** Open member messages, UI bug screenshots & AI scan flags in the shared Co-op Vault feed. */
+  const loadCoopMessages = async () => {
+    try {
+      const res = await loadVaultNotes();
+      const openNotes = (res.notes || []).filter(
+        (n) =>
+          !n.isMasterTemplate &&
+          (n.kind === 'report' || n.kind === 'idea' || Boolean(n.messageKind)) &&
+          effectiveStatus(n) === 'pending_review'
+      );
+      coopMessages.value = openNotes.length;
+    } catch {
+      coopMessages.value = 0;
+    }
   };
 
   /** Recent sales ledger docs. Uses `salesBucketing.ts` (Law 3) and matches `SalesList.vue` 1:1 so Booth Bins, `orderId` titles, `COMMONS-`, and SKU/UPC matches all resolve accurately. */
@@ -222,7 +241,17 @@ export function useLiveDashboardSource(): DashboardSource {
   };
 
   const profile = computed(() => {
+    const uid = user.value?.$id;
+    const email = user.value?.email?.trim().toLowerCase();
     const name = user.value?.name?.toLowerCase();
+    if (uid) {
+      const byUid = roster.value.find((m) => m.userId && m.userId === uid);
+      if (byUid) return byUid;
+    }
+    if (email) {
+      const byEmail = roster.value.find((m) => m.email && m.email.trim().toLowerCase() === email);
+      if (byEmail) return byEmail;
+    }
     if (!name) return undefined;
     return roster.value.find((m) => m.name.toLowerCase().includes(name));
   });
@@ -296,11 +325,20 @@ export function useLiveDashboardSource(): DashboardSource {
     statement: statement.value,
     shortfall: Math.max(0, Number(policyConfig.value.carriedOverShortfall || 0)),
     joinRequests: joinRequests.value,
+    coopMessages: coopMessages.value,
   }));
 
   const loading = computed(() => initialLoading.value || inventoryLoading.value);
 
   const init = async () => {
+    if (!messagesListenerAttached && typeof window !== 'undefined') {
+      messagesListenerAttached = true;
+      window.addEventListener('coop-messages-updated', ((ev: CustomEvent) => {
+        if (typeof ev?.detail?.pending === 'number') {
+          coopMessages.value = ev.detail.pending;
+        }
+      }) as EventListener);
+    }
     try {
       const tasks: Promise<unknown>[] = [];
       if (inventoryItems.value.length === 0) {
@@ -318,7 +356,7 @@ export function useLiveDashboardSource(): DashboardSource {
         })
       );
       loadDrops();
-      tasks.push(loadLastSync(), loadExpenses(), loadJoinRequests());
+      tasks.push(loadLastSync(), loadExpenses(), loadJoinRequests(), loadCoopMessages());
       await Promise.allSettled(tasks);
       // Sales need inventory loaded first so each sale can be tied to its owner
       await loadSales().catch((e) => console.warn('[Dashboard] Sales load failed:', e));
@@ -335,7 +373,7 @@ export function useLiveDashboardSource(): DashboardSource {
       {
         member: profile.value?.name,
         partner: 'SWEAT',
-        category: hat === 'enabler' ? 'Booth Restock' : 'Social & Marketing',
+        category: hat === 'enabler' ? 'Booth Restock' : hat === 'builder' ? 'Tech & Admin' : 'Social & Marketing',
         hours: 1.5,
         notes: `${MEMBER_HAT_META[hat].label} contribution logged from My Role dashboard`,
       },

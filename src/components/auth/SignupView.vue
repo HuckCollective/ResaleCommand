@@ -506,11 +506,18 @@ const submit = async () => {
   loading.value = true;
   error.value = '';
   try {
-    await auth.register(email.value, password.value, name.value);
+    await auth.register(email.value.trim().toLowerCase(), password.value, name.value.trim());
 
     if (approvedInvite.value) {
-      // Non-blocking: mark the invitation as used.
-      await joinApi('accept', { id: inviteId.value, t: tokenT.value, v: tokenV.value });
+      // Auto-provision Appwrite Team membership + Roster link & mark invitation joined.
+      const registeredUserId = auth.user.value?.$id || '';
+      await joinApi('accept', {
+        id: inviteId.value,
+        t: tokenT.value,
+        v: tokenV.value,
+        userId: registeredUserId,
+      });
+      await auth.init();
     }
 
     const urlParams = new URLSearchParams(window.location.search);

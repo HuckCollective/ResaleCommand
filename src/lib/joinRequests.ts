@@ -20,7 +20,7 @@ export const JOIN_REQUEST_STATUS = {
 export type JoinRequestStatus = (typeof JOIN_REQUEST_STATUS)[keyof typeof JOIN_REQUEST_STATUS];
 
 /** Hats a visitor can ask for. `founder` is never requestable. */
-export const JOIN_REQUEST_HATS = ['curator', 'promoter', 'enabler', 'consignor'] as const;
+export const JOIN_REQUEST_HATS = ['curator', 'promoter', 'enabler', 'builder', 'consignor'] as const;
 export type JoinRequestHat = (typeof JOIN_REQUEST_HATS)[number];
 
 /** Canonical Hat Options for ConnectWithUsForm (shared across /coop and /signup). */
@@ -28,6 +28,7 @@ export const JOIN_REQUEST_HAT_OPTIONS = [
   { id: 'curator', icon: '💎', title: 'Curator Partner' },
   { id: 'promoter', icon: '📣', title: 'Promoter' },
   { id: 'enabler', icon: '🔥', title: 'Surplus Enabler' },
+  { id: 'builder', icon: '🛠️', title: 'Builder — Dev, Design & Displays' },
   { id: 'consignor', icon: '🏷️', title: 'Straight Consignor' },
 ] as const;
 
@@ -39,6 +40,7 @@ export const JOIN_NICHE_CHIPS = [
   '🧥 Vintage / Cosplay',
   '📹 Reels & Dropcasts',
   '📦 Booth Restock / Tagging',
+  '🛠️ Displays / Design / Dev',
 ] as const;
 
 /** 1-Click Steward Decision Templates sent directly by the app (zero manual emails). */

@@ -24,10 +24,12 @@ To prevent conflicting instructions, each workspace customization owns one stric
 
 ---
 
-## 2. Master 30-Law Index & Progressive-Disclosure Router
+## 2. Master 30-Law Index, 9-Persona Ecosystem & Progressive-Disclosure Router
 
-Every law is tagged **`[LINT]`** (deterministic DOM/class/AST check — eligible for `FAIL` or `WARN`) or **`[REVIEW]`** (contextual human-factors judgment — defaults to `WARN` unless breaking a core invariant). Open ONLY the bucket reference file(s) needed for your task:
+Every law is tagged **`[LINT]`** (deterministic DOM/class/AST check — eligible for `FAIL` or `WARN`) or **`[REVIEW]`** (contextual human-factors judgment — defaults to `WARN` unless breaking a core invariant). Open [`references/00-personas-and-ia-hierarchy.md`](./references/00-personas-and-ia-hierarchy.md) plus ONLY the bucket reference file(s) needed for your task:
 
+0. **[`references/00-personas-and-ia-hierarchy.md`](./references/00-personas-and-ia-hierarchy.md) (`9 Personas + 4-Tier IA Signal Hierarchy`):**
+   - Personas #1–#9 (`👑 Founder`, `💎 Curator`, `📣 Promoter`, `🔥 Enabler`, `🛠️ Builder`, `🏷️ Consignor`, `🌱 Applicant`, `🧪 /demo Explorer`, `🛒 Shopper`) • Tier-1 Human-to-Human Signal Elevation (`Join Requests`, `Co-op Messages`, `Votes` `[LINT]`) • Role Visibility Isolation `[LINT]`
 1. **[`references/01-decision-and-choice.md`](./references/01-decision-and-choice.md) (`6 Laws`):**
    - Hick's Law `[LINT]` • Choice Overload `[LINT]` • Fitts's Law `[LINT]` • Jakob's Law `[LINT]` • Mental Model `[REVIEW]` • Occam's Razor `[REVIEW]`
 2. **[`references/02-visual-grouping-and-layout.md`](./references/02-visual-grouping-and-layout.md) (`7 Laws`):**
@@ -86,15 +88,17 @@ Every law is tagged **`[LINT]`** (deterministic DOM/class/AST check — eligible
 
 ---
 
-## 4. On-Demand 5-Point Read-Only UI Audit Runner
+## 4. On-Demand 9-Persona + 5-Bucket Read-Only UI Audit Runner
 
 When asked to **audit** a `.vue` or `.astro` view with `laws-of-ux`:
 1. **Stay 100% Read-Only:** Inspect the target file(s) with `read_file` — never modify `.vue`/`.astro` files or run local `astro build` during an audit.
-2. **Evaluate All 5 Buckets:** Score each bucket `PASS`, `WARN`, or `FAIL` (`[LINT]` violations with user-facing friction = `FAIL`; documented exceptions like `SalesImportTray.vue` or `[REVIEW]` heuristics = `WARN`).
-3. **Return Concise Findings (`<= 25` lines):**
+2. **Identify Persona Posture & Check Tiers 1–4 + All 5 Buckets:** Verify the active Personas (`#1–#9`) and 4-Tier IA Signal Hierarchy ([`references/00-personas-and-ia-hierarchy.md`](./references/00-personas-and-ia-hierarchy.md)), then score each bucket `PASS`, `WARN`, or `FAIL` (`[LINT]` violations with user-facing friction = `FAIL`; documented exceptions like `SalesImportTray.vue` or `[REVIEW]` heuristics = `WARN`).
+3. **Return Concise Findings (`<= 28` lines):**
 
 ```text
 UX AUDIT SUMMARY: <Component / Route> — Score: X/5 Buckets Passing
+Target Persona(s) & Posture: <e.g., #1 Founder (Desktop/Mobile Triage), #2–#5 Voting Hats, #6 Consignor (Isolated)>
+IA Signal Check (Tiers 1–4): PASS | WARN | FAIL — <1-line note on Tier-1 Human Signals vs Tier-2..4 ordering>
 1. Decision & Choice: PASS | WARN | FAIL
 2. Visual Grouping & Layout: PASS | WARN | FAIL
 3. Memory & Cognitive Load: PASS | WARN | FAIL
@@ -102,6 +106,7 @@ UX AUDIT SUMMARY: <Component / Route> — Score: X/5 Buckets Passing
 5. Perception & Emotional Impression: PASS | WARN | FAIL
 
 FINDINGS:
+- [FAIL | IA Tier 1 · Human Signal [LINT]] src/components/.../Example.vue:18 — Pending Join Requests / Messages buried below fold; elevate to Tier-1 warning alert + 1-tap tray.
 - [FAIL | Bucket 1 · Fitts's Law [LINT]] src/components/.../Example.vue:42 — Mobile pill uses `btn-xs` (24px < 44px floor); use `h-11 md:h-auto` or `btn-lg md:btn-xs`.
 - [WARN | Bucket 2 · Proximity [LINT]] src/components/.../Example.vue:68 — Outer section stack (`space-y-3` = 12px) is < 2x field gap (`gap-2.5` = 10px); widen sections to `space-y-5 sm:space-y-6`.
 - [FAIL | Bucket 3 · Postel's Law [LINT]] src/components/.../Example.vue:111 — Email submitted un-normalized; apply `.trim().toLowerCase()` (never trim password).

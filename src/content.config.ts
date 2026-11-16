@@ -39,7 +39,7 @@ const tax = defineCollection({
 const roleHelp = defineCollection({
   loader: glob({ pattern: '**/*.md', base: './src/content/roles' }),
   schema: z.object({
-    hatId: z.enum(['curator', 'promoter', 'enabler', 'consignor', 'founder']),
+    hatId: z.enum(['curator', 'promoter', 'enabler', 'builder', 'consignor', 'founder']),
     order: z.number(),
     icon: z.string(),
     title: z.string(),

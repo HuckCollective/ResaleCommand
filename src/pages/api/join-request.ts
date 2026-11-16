@@ -18,6 +18,7 @@ import { siteConfig } from '../../site-config';
 import {
   decisionEmail,
   getJoinServerContext,
+  provisionAcceptedJoinMember,
   requireSteward,
   sendApplicantEmail,
   sendStewardEmail,
@@ -378,9 +379,22 @@ export const POST: APIRoute = async ({ request }) => {
       }
 
       if (action === 'accept') {
-        if (req.status !== JOIN_REQUEST_STATUS.approved) return json({ error: 'This invitation is not approved.' }, 409);
-        await saveRow(ctx, id, { status: JOIN_REQUEST_STATUS.joined });
-        return json({ ok: true });
+        if (req.status !== JOIN_REQUEST_STATUS.approved && req.status !== JOIN_REQUEST_STATUS.joined) {
+          return json({ error: 'This invitation is not approved.' }, 409);
+        }
+        let teamProvisioned = false;
+        let rosterLinked = false;
+        try {
+          const prov = await provisionAcceptedJoinMember(ctx, req, String(body?.userId || ''));
+          teamProvisioned = prov.teamProvisioned;
+          rosterLinked = prov.rosterLinked;
+        } catch (provErr: any) {
+          console.error('[join-request] Auto-provisioning warning (manual Roster fallback available):', provErr?.message || provErr);
+        }
+        if (req.status !== JOIN_REQUEST_STATUS.joined) {
+          await saveRow(ctx, id, { status: JOIN_REQUEST_STATUS.joined });
+        }
+        return json({ ok: true, teamProvisioned, rosterLinked });
       }
     }
 

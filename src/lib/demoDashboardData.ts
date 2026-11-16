@@ -15,6 +15,7 @@ export const DEMO_MEMBERS: Record<MemberHat, DashboardMember> = {
   curator: { name: 'Alex Curator', hats: ['curator'], inventoryPrefix: 'DEMO-A-' },
   promoter: { name: 'Sam Promoter', hats: ['promoter'] },
   enabler: { name: 'Jordan Enabler', hats: ['enabler'] },
+  builder: { name: 'Taylor Builder', hats: ['builder'] },
   consignor: { name: 'Riley Consignor', hats: ['consignor'], inventoryPrefix: 'DEMO-C-' },
 };
 
@@ -43,6 +44,7 @@ export const DEMO_ALERT_COVERAGE: Record<string, MemberHat> = {
   drop_unannounced: 'promoter',
   labor_unlogged: 'promoter',
   join_requests: 'founder',
+  coop_messages: 'builder',
 };
 
 const HEALTHY_TITLES = [
@@ -148,6 +150,7 @@ export function buildDemoSnapshot(now = Date.now()): DashboardSnapshot {
       { member: 'Casey Steward', date: iso(2).slice(0, 10), hours: 3.5 },
       { member: 'Sam Promoter', date: iso(12).slice(0, 10), hours: 1.5 },
       { member: 'Jordan Enabler', date: iso(10).slice(0, 10), hours: 2 },
+      { member: 'Taylor Builder', date: iso(11).slice(0, 10), hours: 2.5 },
     ],
     drops: [{ id: 'demo-drop-1', title: 'Cozy Autumn Booth Drop', status: 'ready' }],
     lastSyncAt: iso(20),
@@ -162,6 +165,7 @@ export function buildDemoSnapshot(now = Date.now()): DashboardSnapshot {
     },
     shortfall: 118.4,
     joinRequests: 3,
+    coopMessages: 2,
   };
 }
 

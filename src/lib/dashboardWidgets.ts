@@ -42,10 +42,11 @@ export const ROLE_LAYOUTS: Record<MemberHat, string[]> = {
   curator: ['alerts', 'my_inventory', 'my_statement', 'financials'],
   promoter: ['alerts', 'labor_week', 'financials'],
   enabler: ['alerts', 'radar', 'labor_week', 'financials'],
+  builder: ['alerts', 'radar', 'labor_week', 'financials'],
   consignor: ['alerts', 'my_statement', 'my_inventory'],
 };
 
-const HAT_ORDER: MemberHat[] = ['founder', 'curator', 'promoter', 'enabler', 'consignor'];
+const HAT_ORDER: MemberHat[] = ['founder', 'curator', 'promoter', 'enabler', 'builder', 'consignor'];
 
 /** Union of the member's hat layouts, lead hat first, de-duplicated (first occurrence wins). */
 export function layoutForHats(hats: readonly MemberHat[], leadHat: MemberHat): string[] {
@@ -80,7 +81,7 @@ export function widgetAllowed(def: DashboardWidgetDef, memberHats: readonly Memb
 
 /**
  * Strict per-lens widget resolver:
- * - Single hat lens (`curator`, `promoter`, `enabler`, `founder`, `consignor`): renders ONLY that hat's focused stack.
+ * - Single hat lens (`curator`, `promoter`, `enabler`, `builder`, `founder`, `consignor`): renders ONLY that hat's focused stack.
  * - `'all'` lens: renders the deduplicated union across all of the member's real hats.
  */
 export function visibleWidgetIdsForLens(

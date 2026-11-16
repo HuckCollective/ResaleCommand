@@ -55,6 +55,13 @@ export function getRoleActionsForHat(hat: MemberHat, prefix: string): RoleAction
         { label: 'Inventory', hint: 'Restock & staging queues', icon: 'solar:box-bold-duotone', href: '/inventory' },
         { label: 'Labor Ledger', hint: 'My logged work', icon: 'solar:clock-circle-bold-duotone', href: '/coop/labor' },
       ];
+    case 'builder':
+      return [
+        { label: 'Idea & Prompt Vault', hint: 'Bug reports, specs & AI prompts', icon: 'solar:notebook-bold-duotone', href: '/coop/vault?tab=reports' },
+        { label: 'Thermal Label Studio', hint: 'Signage, shelf cards & barcode tags', icon: 'solar:printer-bold-duotone', href: '/labels/studio' },
+        { label: 'Locations & Booth Sync', hint: 'Booth fixtures, SKUs & floor setup', icon: 'solar:shop-2-bold-duotone', href: '/warehouse' },
+        { label: 'Labor Ledger', hint: 'My logged Commons build hours', icon: 'solar:clock-circle-bold-duotone', href: '/coop/labor' },
+      ];
     default:
       return [
         { label: 'My Statement & What-If', hint: prefix ? `${prefix} payouts` : 'Consignor payouts', icon: 'solar:document-text-bold-duotone', href: '/coop/settlements' },
@@ -71,6 +78,8 @@ export function getRolePrimaryCpa(hat: MemberHat): RolePrimaryCpa {
       return { label: 'Booth & Sync Hub', shortLabel: 'Locations', icon: 'solar:shop-2-bold', href: '/warehouse' };
     case 'promoter':
       return { label: 'Dropcast Studio', shortLabel: 'Dropcast', icon: 'solar:broadcast-bold', href: '/social' };
+    case 'builder':
+      return { label: 'Builder Vault', shortLabel: 'Vault', icon: 'solar:code-square-bold', href: '/coop/vault?tab=reports' };
     case 'consignor':
       return { label: 'My Statement', shortLabel: 'Statement', icon: 'solar:document-text-bold', href: '/coop/settlements' };
     case 'curator':
@@ -172,6 +181,7 @@ export function createDashboardCommandTray(
       curator: 0,
       promoter: 0,
       enabler: 0,
+      builder: 0,
       consignor: 0,
     };
     for (const hat of source.member.value.hats) {

@@ -129,14 +129,19 @@
         <button
           v-if="source.mode === 'live'"
           type="button"
-          class="p-3 rounded-xl bg-base-100 border border-warning/40 hover:bg-warning/10 transition-all flex items-center gap-2.5 text-left"
-          @click="emit('handoff-messages', 'new_bug')"
+          class="p-3 rounded-xl bg-base-100 border border-warning/40 hover:bg-warning/10 transition-all flex items-center justify-between gap-2 text-left"
+          @click="emit('handoff-messages', openMessagesCount > 0 ? 'list' : 'new_bug')"
         >
-          <Icon icon="solar:bug-bold-duotone" class="w-5 h-5 text-warning shrink-0" />
-          <div class="min-w-0">
-            <div class="text-xs font-black break-words">Report UI Bug or Paste Screenshot</div>
-            <div class="text-[11px] opacity-65 break-words">Opens Co-op Messages &amp; AI Vault tray</div>
+          <div class="flex items-center gap-2.5 min-w-0">
+            <Icon icon="solar:bug-bold-duotone" class="w-5 h-5 text-warning shrink-0" />
+            <div class="min-w-0">
+              <div class="text-xs font-black break-words">Co-op Messages &amp; Bug Reports</div>
+              <div class="text-[11px] opacity-65 break-words">Read notes, report UI bugs or paste screenshots</div>
+            </div>
           </div>
+          <span v-if="openMessagesCount > 0" class="badge badge-warning text-warning-content badge-xs font-bold whitespace-nowrap shrink-0">
+            {{ openMessagesCount }}
+          </span>
         </button>
 
         <a
@@ -193,8 +198,11 @@ const prefix = computed(() => source.member.value.inventoryPrefix || '');
 const isAdmin = computed(() => source.isAdmin.value);
 const showCollectiveRadar = computed(() => canSeeCollectiveFinancials(source.member.value.hats));
 const joinRequestCount = computed(() => source.snapshot.value.joinRequests || 0);
+const openMessagesCount = computed(() => source.snapshot.value.coopMessages || 0);
 
-const canLogHours = computed(() => activeHat.value === 'promoter' || activeHat.value === 'enabler');
+const canLogHours = computed(
+  () => activeHat.value === 'promoter' || activeHat.value === 'enabler' || activeHat.value === 'builder'
+);
 const roleActions = computed(() => getRoleActionsForHat(activeHat.value, prefix.value));
 
 const handleLogHours = async () => {

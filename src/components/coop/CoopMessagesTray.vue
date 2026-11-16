@@ -720,12 +720,14 @@ onMounted(() => {
   isMounted.value = true;
   if (typeof window !== 'undefined') {
     window.addEventListener('open-coop-messages-tray', handleOpenTrayEvent as EventListener);
+    window.addEventListener('rc:open-coop-messages', handleOpenTrayEvent as EventListener);
   }
 });
 
 onUnmounted(() => {
   if (typeof window !== 'undefined') {
     window.removeEventListener('open-coop-messages-tray', handleOpenTrayEvent as EventListener);
+    window.removeEventListener('rc:open-coop-messages', handleOpenTrayEvent as EventListener);
   }
 });
 </script>

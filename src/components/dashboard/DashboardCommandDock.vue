@@ -239,12 +239,23 @@
         <button
           v-if="source.mode === 'live'"
           type="button"
-          class="h-11 min-w-11 sm:min-w-0 px-2.5 rounded-2xl flex items-center justify-center gap-1 transition-all duration-200 bg-base-200/80 hover:bg-base-300 text-base-content font-bold text-xs border border-base-content/15 shadow-xs active:scale-95 shrink-0"
+          class="h-11 min-w-11 sm:min-w-0 px-2.5 rounded-2xl flex items-center justify-center gap-1.5 transition-all duration-200 font-bold text-xs border shadow-xs active:scale-95 shrink-0"
+          :class="
+            openMessagesCount > 0
+              ? 'bg-info/15 hover:bg-info/25 text-base-content border-info/50 font-extrabold'
+              : 'bg-base-200/80 hover:bg-base-300 text-base-content border-base-content/15'
+          "
           title="Open Co-op Messages & Screenshot Bug Reports"
           @click="handoffToMessages('list')"
         >
           <Icon icon="solar:chat-round-dots-bold" class="w-4 h-4 text-info shrink-0" />
           <span class="hidden sm:inline">Msgs</span>
+          <span
+            v-if="openMessagesCount > 0"
+            class="badge badge-2xs badge-info text-info-content font-mono font-black whitespace-nowrap shrink-0"
+          >
+            {{ openMessagesCount }}
+          </span>
         </button>
 
         <!-- 5. Solid Elevated Contextual Primary Action (CPA) -->
@@ -301,6 +312,7 @@ const { categoryCounts } = useOperationsRadar();
 const isMounted = ref(false);
 
 const showCollectiveRadar = computed(() => canSeeCollectiveFinancials(source.member.value.hats));
+const openMessagesCount = computed(() => source.snapshot.value.coopMessages || 0);
 const primaryCpa = computed(() => getRolePrimaryCpa(activeHat.value));
 const lensLabel = computed(() =>
   activeLens.value === 'all' ? '✨ All Hats Lens' : `${META[activeHat.value].icon} ${META[activeHat.value].label} Lens`

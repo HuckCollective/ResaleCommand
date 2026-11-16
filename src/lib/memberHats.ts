@@ -3,7 +3,7 @@
  * Re-exported from coopGovernance.ts so existing imports keep working, and imported
  * directly by dashboard widgets / the public demo so they never touch the database.
  */
-export type MemberHat = 'founder' | 'curator' | 'promoter' | 'enabler' | 'consignor';
+export type MemberHat = 'founder' | 'curator' | 'promoter' | 'enabler' | 'builder' | 'consignor';
 
 export interface MemberHatMeta {
   id: MemberHat;
@@ -28,7 +28,7 @@ export const MEMBER_HAT_META: Record<MemberHat, MemberHatMeta> = {
     id: 'curator',
     label: 'Curator',
     icon: '💎',
-    pitch: 'Brings inventory. 100% cost back first, then the Curator share of net profit.',
+    pitch: 'Brings or co-curates inventory. 100% cost back first, then the Curator share of net profit.',
     usesPrefix: true,
     canVote: true,
   },
@@ -48,6 +48,14 @@ export const MEMBER_HAT_META: Record<MemberHat, MemberHatMeta> = {
     usesPrefix: false,
     canVote: true,
   },
+  builder: {
+    id: 'builder',
+    label: 'Builder',
+    icon: '🛠️',
+    pitch: 'Dev, design & physical displays: web/AI tools, signage, shelving and booth lighting. $0 inventory required.',
+    usesPrefix: false,
+    canVote: true,
+  },
   consignor: {
     id: 'consignor',
     label: 'Consignor',
@@ -58,6 +66,29 @@ export const MEMBER_HAT_META: Record<MemberHat, MemberHatMeta> = {
   },
 };
 
+const VOTING_PROVIDER_ROLES = new Set(['owner', 'founder', 'promoter', 'enabler', 'builder']);
+
+/**
+ * Universal Curator onboarding helper (initial invite / accept ONLY):
+ * Auto-includes `'curator'` whenever a voting/provider role (`founder`, `promoter`, `enabler`, `builder`)
+ * is granted on initial onboarding, while keeping `'consignor'` strictly isolated (§14A).
+ * Never run this inside manual role-checkbox toggles so Founders can intentionally uncheck `'curator'`.
+ */
+export function ensureCuratorBaseRoles<T extends string>(roles: readonly T[]): Array<T | 'curator'> {
+  const out: Array<T | 'curator'> = [];
+  let hasVotingProvider = false;
+  for (const r of roles) {
+    if (!out.includes(r)) out.push(r);
+    if (VOTING_PROVIDER_ROLES.has(String(r).trim().toLowerCase())) {
+      hasVotingProvider = true;
+    }
+  }
+  if (hasVotingProvider && !out.some((r) => String(r).trim().toLowerCase() === 'curator')) {
+    out.push('curator');
+  }
+  return out;
+}
+
 /**
  * WSDE rule: voting members share ONE information class — they all see the collective's
  * aggregate financials (you cannot vote on numbers you cannot see). Founder differs only in
@@ -67,4 +98,3 @@ export const MEMBER_HAT_META: Record<MemberHat, MemberHatMeta> = {
 export function canSeeCollectiveFinancials(hats?: readonly MemberHat[] | null): boolean {
   return !!hats?.some((h) => MEMBER_HAT_META[h]?.canVote);
 }
-

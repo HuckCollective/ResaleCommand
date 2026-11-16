@@ -14,6 +14,15 @@ import {
   type JoinRequest,
 } from './joinRequests';
 import { signJoinToken } from './joinLinkTokens';
+import {
+  COOP_GOVERNANCE_DOC_ID,
+  DEFAULT_COOP_POLICY_CONFIG,
+  MEMBER_HAT_META,
+  ensureCuratorBaseRoles,
+  normalizePolicyConfig,
+  type CoopMemberProfile,
+  type MemberHat,
+} from './coopGovernance';
 import { siteConfig } from '../site-config';
 
 export interface JoinServerContext {
@@ -262,5 +271,199 @@ export function decisionEmail(req: JoinRequest, decision: JoinDecisionKey, quest
       FOOTER('Automated status update'),
     ].join(''),
   };
+}
+
+const SAFE_ACCEPT_HATS: ReadonlySet<MemberHat> = new Set<MemberHat>([
+  'curator',
+  'promoter',
+  'enabler',
+  'builder',
+  'consignor',
+]);
+
+const MANIFESTS_COL_ID = 'manifests';
+
+/**
+ * 1-Click Server Auto-Provisioning (`SignupView.vue` -> `/api/join-request` `action: 'accept'`):
+ * 1. Filters `req.hats` strictly through `SAFE_ACCEPT_HATS` (never `founder`/`owner`) and auto-pairs
+ *    `'curator'` on initial onboarding for voting provider roles (`ensureCuratorBaseRoles`).
+ * 2. Resolves the registered Appwrite `userId` (verifying email ownership) and adds the user directly
+ *    to `COOP_TEAM_ID` via `node-appwrite` `Teams.createMembership({ teamId, roles, userId, name })`
+ *    (automatic confirmation, zero duplicate invite email; idempotent `409` fallback via `updateMembership`).
+ * 3. Upserts and links their `CoopMemberProfile` row inside `manifests/coop_governance_proposals_v1`.
+ */
+export async function provisionAcceptedJoinMember(
+  ctx: JoinServerContext,
+  req: JoinRequest,
+  hintUserId?: string
+): Promise<{ teamProvisioned: boolean; rosterLinked: boolean; resolvedUserId: string }> {
+  const cleanEmail = String(req.email || '').trim().toLowerCase();
+  const cleanName = String(req.name || 'Co-op Member').trim().slice(0, 128);
+
+  const allowlistedHats = (Array.isArray(req.hats) ? req.hats : [])
+    .map((h) => String(h || '').trim().toLowerCase() as MemberHat)
+    .filter((h) => SAFE_ACCEPT_HATS.has(h));
+
+  const baseHats: MemberHat[] = allowlistedHats.length > 0 ? allowlistedHats : ['curator'];
+  const pairedHats = ensureCuratorBaseRoles(baseHats) as MemberHat[];
+  const teamRoles = Array.from(new Set(['member', ...pairedHats]));
+
+  const users = new Users(ctx.keyClient);
+  let resolvedUserId = '';
+
+  const candidateId = String(hintUserId || '').trim();
+  if (candidateId) {
+    try {
+      const u = await users.get(candidateId);
+      if (String(u.email || '').trim().toLowerCase() === cleanEmail) {
+        resolvedUserId = String(u.$id);
+      }
+    } catch {
+      // Fall back to email lookup below
+    }
+  }
+
+  if (!resolvedUserId && cleanEmail) {
+    const found = await users.list([Query.equal('email', [cleanEmail]), Query.limit(1)]);
+    if (found.users.length > 0) {
+      resolvedUserId = String(found.users[0].$id);
+    }
+  }
+
+  let teamProvisioned = false;
+  const coopTeamId = getEnvVar('COOP_TEAM_ID');
+  if (coopTeamId && resolvedUserId) {
+    const teams = new Teams(ctx.keyClient);
+    try {
+      await teams.createMembership({
+        teamId: coopTeamId,
+        roles: teamRoles,
+        userId: resolvedUserId,
+        name: cleanName,
+      });
+      teamProvisioned = true;
+    } catch (teamErr: any) {
+      if (
+        teamErr?.code === 409 ||
+        /already|conflict|invited|member/i.test(String(teamErr?.message || ''))
+      ) {
+        const list = await teams.listMemberships(coopTeamId, [Query.limit(100)]);
+        const existing = (list.memberships || []).find(
+          (m: any) =>
+            m.userId === resolvedUserId ||
+            String(m.userEmail || '').trim().toLowerCase() === cleanEmail
+        );
+        if (existing) {
+          const mergedRoles = Array.from(new Set([...(existing.roles || []), ...teamRoles]));
+          await teams.updateMembership({
+            teamId: coopTeamId,
+            membershipId: existing.$id,
+            roles: mergedRoles,
+          });
+          teamProvisioned = true;
+        }
+      } else {
+        throw teamErr;
+      }
+    }
+  }
+
+  let rosterLinked = false;
+  if (ctx.dbId) {
+    const manifestCol = resolveCollectionId(MANIFESTS_COL_ID);
+    let rawSnap: Record<string, any> = {};
+    let docExists = false;
+
+    try {
+      const doc: any = await ctx.databases.getDocument(ctx.dbId, manifestCol, COOP_GOVERNANCE_DOC_ID);
+      docExists = true;
+      if (typeof doc.itemsSnapshot === 'string' && doc.itemsSnapshot.trim().startsWith('{')) {
+        rawSnap = JSON.parse(doc.itemsSnapshot);
+      }
+    } catch (err: any) {
+      if (err?.code !== 404) throw err;
+    }
+
+    const policyConfig = normalizePolicyConfig(rawSnap.policyConfig || DEFAULT_COOP_POLICY_CONFIG);
+    const members = [...policyConfig.members];
+
+    const matchIdx = members.findIndex(
+      (m) =>
+        (resolvedUserId && m.userId && m.userId === resolvedUserId) ||
+        (cleanEmail && m.email && m.email.trim().toLowerCase() === cleanEmail) ||
+        m.name.trim().toLowerCase() === cleanName.toLowerCase()
+    );
+
+    if (matchIdx >= 0) {
+      const prev = members[matchIdx];
+      const mergedHats = Array.from(new Set([...(prev.hats || []), ...pairedHats])) as MemberHat[];
+      const usesPrefix = mergedHats.some((h) => MEMBER_HAT_META[h]?.usesPrefix);
+      const nextPartner = prev.partner;
+      members[matchIdx] = {
+        ...prev,
+        userId: resolvedUserId || prev.userId,
+        email: cleanEmail || prev.email,
+        hats: mergedHats,
+        inventoryPrefix: usesPrefix
+          ? prev.inventoryPrefix || (nextPartner === 'SWEAT' ? 'HUCK-' : `${nextPartner}-`)
+          : undefined,
+        canVote: mergedHats.some((h) => MEMBER_HAT_META[h]?.canVote),
+      };
+    } else {
+      const isConsignorOnly = pairedHats.length === 1 && pairedHats[0] === 'consignor';
+      const explicitlyPickedCurator = allowlistedHats.includes('curator');
+      const partner: CoopMemberProfile['partner'] = isConsignorOnly
+        ? 'BB'
+        : explicitlyPickedCurator
+          ? 'HUCK'
+          : 'SWEAT';
+      const role: CoopMemberProfile['role'] = isConsignorOnly
+        ? 'Consignor'
+        : explicitlyPickedCurator
+          ? 'Partner Curator'
+          : 'Marketing & Social Enabler';
+      const usesPrefix = pairedHats.some((h) => MEMBER_HAT_META[h]?.usesPrefix);
+
+      members.push({
+        name: cleanName,
+        partner,
+        role,
+        canVote: pairedHats.some((h) => MEMBER_HAT_META[h]?.canVote),
+        userId: resolvedUserId || undefined,
+        email: cleanEmail || undefined,
+        hats: pairedHats,
+        inventoryPrefix: usesPrefix
+          ? isConsignorOnly
+            ? 'BB-'
+            : 'HUCK-'
+          : undefined,
+      });
+    }
+
+    const nowIso = new Date().toISOString();
+    const nextSnapshotStr = JSON.stringify({
+      ...rawSnap,
+      policyConfig: {
+        ...policyConfig,
+        members,
+      },
+      updatedAt: nowIso,
+    });
+
+    if (docExists) {
+      await ctx.databases.updateDocument(ctx.dbId, manifestCol, COOP_GOVERNANCE_DOC_ID, {
+        itemsSnapshot: nextSnapshotStr,
+      });
+    } else {
+      await ctx.databases.createDocument(ctx.dbId, manifestCol, COOP_GOVERNANCE_DOC_ID, {
+        manifestType: 'system_coop_governance',
+        tenantId: 'huck_collective',
+        itemsSnapshot: nextSnapshotStr,
+      });
+    }
+    rosterLinked = true;
+  }
+
+  return { teamProvisioned, rosterLinked, resolvedUserId };
 }
 

@@ -51,10 +51,19 @@
           <button
             v-if="pendingJoinCount > 0 && mode === 'live' && canSeeCollective"
             type="button"
-            class="btn btn-xs sm:btn-sm h-11 min-h-11 md:h-8 md:min-h-0 btn-info text-info-content rounded-xl font-black gap-1 shadow-xs"
+            class="btn btn-xs sm:btn-sm h-11 min-h-11 md:h-8 md:min-h-0 btn-warning text-warning-content rounded-xl font-black gap-1 shadow-xs"
             @click="openJoinQueueTray"
           >
             <span>📬 {{ pendingJoinCount }} Join Request{{ pendingJoinCount === 1 ? '' : 's' }}</span>
+          </button>
+
+          <button
+            v-if="openMessagesCount > 0 && mode === 'live' && canSeeCollective"
+            type="button"
+            class="btn btn-xs sm:btn-sm h-11 min-h-11 md:h-8 md:min-h-0 btn-info text-info-content rounded-xl font-black gap-1 shadow-xs"
+            @click="openMessagesTray"
+          >
+            <span>💬 {{ openMessagesCount }} Message{{ openMessagesCount === 1 ? '' : 's' }}</span>
           </button>
 
           <button
@@ -184,11 +193,27 @@
       </div>
     </div>
     <template v-else>
-      <component :is="WIDGET_COMPONENTS[id]" v-for="id in widgetIds" :key="`${activeLens}-${id}`" />
+      <component
+        :is="WIDGET_COMPONENTS[widgetIds[0]]"
+        v-if="widgetIds.length > 0"
+        :key="`${activeLens}-${widgetIds[0]}`"
+      />
 
-      <!-- CO-OP JOIN & INVITE QUEUE (Inline on Founder / All Hats lens; tray/drawer always reachable from Header/Dock) -->
+      <!-- TIER-1 HUMAN SIGNAL ELEVATION: Directly below RoleAlertsGrid whenever pendingJoinCount > 0 -->
       <JoinRequestsPanel
-        v-if="mode === 'live' && canSeeCollective"
+        v-if="mode === 'live' && canSeeCollective && pendingJoinCount > 0"
+        :inline-visible="true"
+      />
+
+      <component
+        :is="WIDGET_COMPONENTS[id]"
+        v-for="id in widgetIds.slice(1)"
+        :key="`${activeLens}-${id}`"
+      />
+
+      <!-- CO-OP JOIN & INVITE QUEUE (Quiet footer slot when 0 pending; tray/drawer always reachable from Header/Dock) -->
+      <JoinRequestsPanel
+        v-if="mode === 'live' && canSeeCollective && pendingJoinCount === 0"
         :inline-visible="activeLens === 'founder' || activeLens === 'all'"
       />
     </template>
@@ -250,7 +275,7 @@ const WIDGET_COMPONENTS: Record<string, Component> = {
   ai_usage: AiUsageCard,
 };
 
-const demoRoles: MemberHat[] = ['curator', 'promoter', 'enabler', 'consignor', 'founder'];
+const demoRoles: MemberHat[] = ['curator', 'promoter', 'enabler', 'builder', 'consignor', 'founder'];
 const demoRole = ref<MemberHat>('curator');
 
 const source: DashboardSource = props.mode === 'demo' ? useDemoDashboardSource(demoRole) : useLiveDashboardSource();
@@ -275,6 +300,7 @@ const memberName = computed(() => source.member.value.name);
 const availableHats = computed(() => source.member.value.hats);
 const canSeeCollective = computed(() => canSeeCollectiveFinancials(source.member.value.hats));
 const pendingJoinCount = computed(() => source.snapshot.value.joinRequests || 0);
+const openMessagesCount = computed(() => source.snapshot.value.coopMessages || 0);
 const loading = computed(() => source.loading.value);
 
 const activeLensSubtitle = computed(() => {
@@ -331,6 +357,10 @@ const toggleAllSections = () => {
 
 const openJoinQueueTray = () => {
   window.dispatchEvent(new CustomEvent('rc:open-join-queue-tray'));
+};
+
+const openMessagesTray = () => {
+  window.dispatchEvent(new CustomEvent('rc:open-coop-messages', { detail: { mode: 'list' } }));
 };
 
 const openTaxPlaybook = () => {

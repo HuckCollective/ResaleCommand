@@ -122,7 +122,7 @@ const nameMatches = (a: string | undefined, b: string | undefined) =>
 const ownsPrefix = (member: DashboardMember, prefix?: string) =>
   !!member.inventoryPrefix && !!prefix && prefix.toUpperCase().startsWith(member.inventoryPrefix.toUpperCase());
 
-const VOTING_HATS: MemberHat[] = ['founder', 'curator', 'promoter', 'enabler'];
+const VOTING_HATS: MemberHat[] = ['founder', 'curator', 'promoter', 'enabler', 'builder'];
 
 const countOnly = (items: any[], detail: string, href?: string): AlertResult => ({
   count: items.length,
@@ -313,7 +313,7 @@ export const ALERT_TYPES: AlertTypeDef[] = [
   {
     id: 'labor_unlogged', category: 'marketing', severity: 'info', icon: 'solar:clock-circle-bold-duotone',
     title: 'No hours logged this week', actionText: 'Log hours', href: '/coop/labor',
-    hats: ['promoter', 'enabler'], liveWired: true,
+    hats: ['promoter', 'enabler', 'builder'], liveWired: true,
     evaluate: ({ snap, member, cfg }) => {
       const cutoff = snap.now - cfg.laborLogDays * 86_400_000;
       const logged = snap.laborEntries.some((e) => nameMatches(e.member, member.name) && Date.parse(e.date) >= cutoff);
@@ -323,16 +323,26 @@ export const ALERT_TYPES: AlertTypeDef[] = [
     },
   },
 
-  // Membership
+  // Tier-1 Human-to-Human Signals (Membership & Co-op Messages)
   {
-    id: 'join_requests', category: 'membership', severity: 'info', icon: 'solar:user-plus-bold-duotone',
-    title: 'Join requests waiting', actionText: 'Review requests', href: '/coop/governance',
+    id: 'join_requests', category: 'membership', severity: 'warning', icon: 'solar:user-plus-bold-duotone',
+    title: 'Join requests waiting', actionText: 'Review requests', href: '#join-queue',
     hats: VOTING_HATS, liveWired: true,
-    evaluate: ({ snap }) => ({ count: snap.joinRequests, detail: 'People who asked for an invitation to join the Co-op.' }),
+    evaluate: ({ snap }) => ({ count: snap.joinRequests, detail: 'Verified applicants waiting on a steward invite decision.' }),
+  },
+  {
+    id: 'coop_messages', category: 'coop', severity: 'warning', icon: 'solar:chat-round-dots-bold-duotone',
+    title: 'Co-op messages & bug reports', actionText: 'Open messages tray', href: '#coop-messages',
+    hats: VOTING_HATS, liveWired: true,
+    evaluate: ({ snap }) => ({
+      count: snap.coopMessages,
+      detail: 'Open member messages, UI bug screenshots, or AI scan flags waiting on review.',
+    }),
   },
 ];
 
 const SEVERITY_ORDER: Record<AlertSeverity, number> = { error: 0, warning: 1, info: 2, success: 3 };
+const TIER_ONE_HUMAN_ALERT_IDS: ReadonlySet<string> = new Set(['join_requests', 'coop_messages', 'vote_needed']);
 
 export interface BuildAlertsOptions {
   /** Live dashboard: skip alert types whose data the live source cannot load yet */
@@ -371,9 +381,13 @@ export function buildAlertsForMember(
     });
   }
 
-  return cards.sort(
-    (a, b) => SEVERITY_ORDER[a.severity] - SEVERITY_ORDER[b.severity] || b.count - a.count
-  );
+  return cards.sort((a, b) => {
+    const sevDiff = SEVERITY_ORDER[a.severity] - SEVERITY_ORDER[b.severity];
+    if (sevDiff !== 0) return sevDiff;
+    const humanDiff = (TIER_ONE_HUMAN_ALERT_IDS.has(b.id) ? 1 : 0) - (TIER_ONE_HUMAN_ALERT_IDS.has(a.id) ? 1 : 0);
+    if (humanDiff !== 0) return humanDiff;
+    return b.count - a.count;
+  });
 }
 
 /** Items owned by the member's prefix (used for consignor-only views). */

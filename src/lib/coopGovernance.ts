@@ -135,7 +135,7 @@ export function canUserEditProposal(
 
 // Member hats live in ./memberHats (pure, no Appwrite) so the dashboard and public demo can share them.
 import { MEMBER_HAT_META, type MemberHat } from './memberHats';
-export { MEMBER_HAT_META, canSeeCollectiveFinancials } from './memberHats';
+export { MEMBER_HAT_META, canSeeCollectiveFinancials, ensureCuratorBaseRoles } from './memberHats';
 export type { MemberHat, MemberHatMeta } from './memberHats';
 
 /** Barcode prefixes printed on physical booth tags. Never editable or removable once registered. */
@@ -180,6 +180,7 @@ export function deriveMemberHatsFromRoles(
       else if (clean === 'curator') derived.add('curator');
       else if (clean === 'promoter') derived.add('promoter');
       else if (clean === 'enabler') derived.add('enabler');
+      else if (clean === 'builder') derived.add('builder');
       else if (clean === 'consignor') derived.add('consignor');
     }
     if (derived.size > 0) return Array.from(derived);

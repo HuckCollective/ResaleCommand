@@ -1,8 +1,18 @@
 # Resale Command — Completed Sprint & Session Archive (`docs/SESSION_ARCHIVE.md`)
 
-> **Historical Reference Only:** Completed milestones rolled out of [`ACTIVE_SESSION.md`](file:///c:/Users/15034/Projects/ResaleCommand/ACTIVE_SESSION.md) on Nov 15, 2026 so root AI context stays lean and untruncated. Live in-flight work lives in [`ACTIVE_SESSION.md`](file:///c:/Users/15034/Projects/ResaleCommand/ACTIVE_SESSION.md).
+> **Historical Reference Only:** Completed milestones rolled out of [`ACTIVE_SESSION.md`](file:///c:/Users/15034/Projects/ResaleCommand/ACTIVE_SESSION.md) on Nov 16, 2026 so root AI context stays lean and untruncated. Live in-flight work lives in [`ACTIVE_SESSION.md`](file:///c:/Users/15034/Projects/ResaleCommand/ACTIVE_SESSION.md).
 
 ---
+
+## ✅ `🕸️ AUCTION SWEEP` (`v4.5`) — ACTIVE AUCTION GRID TRIAGE, HYBRID 2-SPEED SLEEPER VISION, WEBPAGE CARD OVERLAYS & IN-DRAWER `⚡ FULL SCOUT` DRILL-DOWN (`alpha-1` & `main` — Nov 15, 2026)
+- **Isomorphic Sweep Engine & Authenticated Batch API (`src/lib/auctionSweep.ts`, `src/pages/api/bml/auction-sweep.ts`)**:
+  - Built `sanitizeSweepCandidates`, `selectSleeperThumbnailIndices` (`MAX_SWEEP_LOTS = 40`, `MAX_SLEEPER_THUMBS = 8` rationed strictly to vague `"Lot / Box / Jar / Assorted / Mystery / RPG / Jewelry"` cards), `buildAuctionSweepPrompt`, and deterministic `scoreAndRankSweepLots` grounded dynamically in `loadLiveWarehouseDocs()` + `getLocationSettingMeta()` (Law 2 Zero Hardcoding) and `loadAppraisalRules()` (`manifests/ai_appraisal_rules_v1`).
+- **Universal Grid Harvester, Webpage Card Overlays & Seamless In-Drawer Drill-Down (`public/auction-scout-sync.user.js` `v4.5.0`, `src/site-config.ts` `v4.5`)**:
+  - Upgraded passive browse pages into `state.pageType = 'auction-grid'` via `scrapeActiveAuctionGridDom()` across **ShopGoodwill**, **eBay**, and **Estate BP catalogs** (`HiBid`, `CTBids`, `LiveAuctioneers`, `MaxSold`, `Proxibid`) using distinct-lot-ID ancestor boundary detection, webpage `.rc-sweep-card-bar` overlays + **`🌘 Dim Passed Lots`**, and `renderAuctionSweepTrayBody()` inside `#rc-scout-tray`.
+
+## ✅ AI CUSTOMIZATION AUDIT, `<20 KB` `GEMINI.md` UN-TRUNCATION, 4 `trigger: glob` RULES & READ-ONLY SUBAGENTS (`alpha-1` & `main` — Nov 15, 2026)
+- **Un-Truncated `GEMINI.md` (`140.8 KB` ➔ `< 20 KB`) & 4 `trigger: glob` Rules (`scripts/sync-ai-context.mjs`, `.agents/rules/*.md`, `.agents/plugins/rc-auditors/`)**:
+  - Refactored `syncCoreDocsAndHucksSkill()` so `GEMINI.md` embeds de-duplicated Core DNA + Physical Retail Tag Safety Laws + Chrome Sidebar QA format + 3 Golden Rules + Canonical Warehouses + **all 7 Immutable Architecture Laws** under `20,000` bytes, consolidated `.agents/rules/*.md` into 4 active `trigger: glob` guardrails, and added `rc-ledger-and-schema-auditor` + `rc-pre-push-contract-auditor`.
 
 ## ✅ UNIFIED BOOKMARKLET PILL ⇄ FROZEN-TOP `100dvh` DRAWER SHELL, ZERO-BIAS CLOUD SOURCING DOMAINS, DOMAIN-BUCKETED BUY TRACKERS & AUCTION SCOUT `v4.4` (`alpha-1` — Nov 15, 2026)
 - **Unified URL-Driven Bookmarklet Shell & ShopGoodwill `v4.4` (`src/lib/bml/clientCore.ts`, `public/auction-scout-sync.user.js`, `src/lib/sourcingDomains.ts`, `src/lib/appraisalCalibration.ts`)**:

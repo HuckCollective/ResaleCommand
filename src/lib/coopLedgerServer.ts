@@ -35,6 +35,7 @@ export const COOP_VIEW_AND_LOG_ROLES: readonly CoopAppwriteRole[] = [
   'curator',
   'promoter',
   'enabler',
+  'builder',
 ] as const;
 
 export const COOP_FOUNDER_ROLES: readonly CoopAppwriteRole[] = [
@@ -48,6 +49,7 @@ const KNOWN_ROLES = new Set<CoopAppwriteRole>([
   'curator',
   'promoter',
   'enabler',
+  'builder',
   'consignor',
   'member',
 ]);

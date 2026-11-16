@@ -14,6 +14,7 @@ export type CoopAppwriteRole =
   | 'curator'
   | 'promoter'
   | 'enabler'
+  | 'builder'
   | 'consignor'
   | 'member';
 

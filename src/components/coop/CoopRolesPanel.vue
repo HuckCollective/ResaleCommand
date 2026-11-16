@@ -22,13 +22,13 @@
           Co-op Security Roles &amp; Account Linking
         </h4>
         <p class="text-xs text-base-content/70">
-          Assign Appwrite Team roles (<code>founder</code>, <code>curator</code>, <code>promoter</code>, <code>enabler</code>, <code>consignor</code>) for real server enforcement on labor approvals &amp; month locks, and link each account to a Roster profile.
+          Assign Appwrite Team roles (<code>founder</code>, <code>curator</code>, <code>promoter</code>, <code>enabler</code>, <code>builder</code>, <code>consignor</code>) for real server enforcement on labor approvals &amp; month locks, and link each account to a Roster profile.
         </p>
       </div>
 
       <button
         type="button"
-        class="btn btn-xs btn-outline rounded-xl font-bold gap-1.5 self-start sm:self-auto"
+        class="btn btn-xs h-11 min-h-11 md:h-7 md:min-h-0 btn-outline rounded-xl font-bold gap-1.5 self-start sm:self-auto"
         :disabled="loadingMemberships"
         @click="loadMemberships"
       >
@@ -53,8 +53,9 @@
           <input
             v-model="inviteForm.name"
             type="text"
+            autocomplete="name"
             placeholder="e.g. Jesse (Social & Ops)"
-            class="input input-bordered input-xs h-8 rounded-lg text-xs"
+            class="input input-bordered input-xs h-11 md:h-8 rounded-lg text-xs"
             required
           />
         </div>
@@ -63,25 +64,28 @@
           <input
             v-model="inviteForm.email"
             type="email"
+            autocomplete="email"
+            autocapitalize="none"
             placeholder="partner@example.com"
-            class="input input-bordered input-xs h-8 rounded-lg text-xs font-mono"
+            class="input input-bordered input-xs h-11 md:h-8 rounded-lg text-xs font-mono"
             required
           />
         </div>
         <div class="sm:col-span-4 flex items-center justify-between sm:justify-end gap-2 flex-wrap">
           <select
             v-model="inviteForm.initialRole"
-            class="select select-bordered select-xs h-8 rounded-lg font-bold text-xs"
+            class="select select-bordered select-xs h-11 md:h-8 rounded-lg font-bold text-xs"
           >
-            <option value="enabler">🔥 Enabler ($0 Inv)</option>
-            <option value="promoter">📣 Promoter ($0 Inv)</option>
+            <option value="enabler">🔥 Enabler ($0 Inv + Curator)</option>
+            <option value="promoter">📣 Promoter ($0 Inv + Curator)</option>
+            <option value="builder">🛠️ Builder ($0 Inv + Curator)</option>
             <option value="curator">💎 Curator Partner</option>
-            <option value="founder">👑 Co-Founder</option>
-            <option value="consignor">🏷️ Consignor</option>
+            <option value="founder">👑 Co-Founder (+ Curator)</option>
+            <option value="consignor">🏷️ Consignor (Isolated)</option>
           </select>
           <button
             type="submit"
-            class="btn btn-xs btn-primary h-8 rounded-lg font-black px-3"
+            class="btn btn-xs btn-primary text-primary-content h-11 min-h-11 md:h-8 md:min-h-0 rounded-lg font-black px-3"
             :disabled="inviting"
           >
             {{ inviting ? 'Sending…' : '+ Send Invite' }}
@@ -188,7 +192,7 @@
     <div class="text-[11px] text-base-content/65 flex items-center justify-between gap-2 flex-wrap">
       <span>
         <strong>Founder power:</strong> <code>owner</code> or <code>founder</code> (approves labor, locks/unlocks months).
-        <strong>Voting/Labor roles:</strong> <code>curator</code>, <code>promoter</code>, <code>enabler</code>.
+        <strong>Voting/Labor roles:</strong> <code>curator</code>, <code>promoter</code>, <code>enabler</code>, <code>builder</code>.
         <strong>Consignor:</strong> own statement only (no labor access).
       </span>
       <span v-if="soleFounder" class="badge badge-info badge-outline badge-xs font-mono">
@@ -207,8 +211,10 @@ import { useAuth } from '../../composables/useAuth';
 import { useCoopFounderGate } from '../../composables/useCoopFounderGate';
 import {
   deriveMemberHatsFromRoles,
+  ensureCuratorBaseRoles,
   MEMBER_HAT_META,
   type CoopMemberProfile,
+  type MemberHat,
 } from '../../lib/coopGovernance';
 
 const props = defineProps<{
@@ -220,13 +226,14 @@ const emit = defineEmits<{
   (e: 'update:members', next: CoopMemberProfile[]): void;
 }>();
 
-type CustomRoleId = 'founder' | 'curator' | 'promoter' | 'enabler' | 'consignor';
+type CustomRoleId = 'founder' | 'curator' | 'promoter' | 'enabler' | 'builder' | 'consignor';
 
 const customRoleOptions: ReadonlyArray<{ id: CustomRoleId; icon: string; label: string }> = [
   { id: 'founder', icon: '👑', label: 'Founder' },
   { id: 'curator', icon: '💎', label: 'Curator' },
   { id: 'promoter', icon: '📣', label: 'Promoter' },
   { id: 'enabler', icon: '🔥', label: 'Enabler' },
+  { id: 'builder', icon: '🛠️', label: 'Builder' },
   { id: 'consignor', icon: '🏷️', label: 'Consignor' },
 ];
 
@@ -407,7 +414,12 @@ async function handleInviteMember() {
   if (!isOwner.value || !resolvedTeamId.value) return;
   const email = inviteForm.value.email.trim().toLowerCase();
   const name = inviteForm.value.name.trim();
+  const invitedRole = inviteForm.value.initialRole;
   if (!email || !name) return;
+
+  // Auto-pair 'curator' ONLY on initial invite for voting/provider roles; keep 'consignor' isolated (§14A).
+  const pairedCustomRoles = ensureCuratorBaseRoles([invitedRole]) as MemberHat[];
+  const teamRoles = Array.from(new Set(['member', ...pairedCustomRoles]));
 
   inviting.value = true;
   try {
@@ -417,7 +429,7 @@ async function handleInviteMember() {
         : 'https://works.thehc.llc/coop/governance';
     const created = await teams.createMembership(
       resolvedTeamId.value,
-      ['member', inviteForm.value.initialRole],
+      teamRoles,
       email,
       undefined,
       undefined,
@@ -425,10 +437,62 @@ async function handleInviteMember() {
       name
     );
     memberships.value = [created, ...memberships.value];
+
+    // Auto-upsert & link a matching Roster profile so the Founder never has to add them twice.
+    const createdUid = created?.userId ? String(created.userId).trim() : '';
+    const existingIdx = props.members.findIndex(
+      (rm) =>
+        (createdUid && rm.userId === createdUid) ||
+        (rm.email && rm.email.trim().toLowerCase() === email) ||
+        rm.name.trim().toLowerCase() === name.toLowerCase()
+    );
+    const derivedHats = deriveMemberHatsFromRoles(teamRoles);
+    const isConsignorOnly = derivedHats.length === 1 && derivedHats[0] === 'consignor';
+    const usesPrefix = derivedHats.some((h) => MEMBER_HAT_META[h]?.usesPrefix);
+
+    if (existingIdx >= 0) {
+      const nextMembers = props.members.map((rm, idx) => {
+        if (idx !== existingIdx) return rm;
+        const mergedHats = Array.from(new Set([...(rm.hats || []), ...derivedHats])) as MemberHat[];
+        return {
+          ...rm,
+          userId: createdUid || rm.userId,
+          email,
+          hats: mergedHats,
+          canVote: mergedHats.some((h) => MEMBER_HAT_META[h]?.canVote),
+        };
+      });
+      emit('update:members', nextMembers);
+    } else {
+      const partner: CoopMemberProfile['partner'] = isConsignorOnly
+        ? 'BB'
+        : invitedRole === 'curator' || invitedRole === 'founder'
+          ? 'HUCK'
+          : 'SWEAT';
+      const roleLabel: CoopMemberProfile['role'] = isConsignorOnly
+        ? 'Consignor'
+        : invitedRole === 'founder'
+          ? 'Co-op Member'
+          : invitedRole === 'curator'
+            ? 'Partner Curator'
+            : 'Marketing & Social Enabler';
+      const newProfile: CoopMemberProfile = {
+        name,
+        partner,
+        role: roleLabel,
+        canVote: derivedHats.some((h) => MEMBER_HAT_META[h]?.canVote),
+        userId: createdUid || undefined,
+        email,
+        hats: derivedHats,
+        inventoryPrefix: usesPrefix ? (isConsignorOnly ? 'BB-' : 'HUCK-') : undefined,
+      };
+      emit('update:members', [...props.members, newProfile]);
+    }
+
     inviteForm.value = { name: '', email: '', initialRole: 'enabler' };
     addToast({
       type: 'success',
-      message: `Sent Appwrite team invite to ${email} (${inviteForm.value.initialRole}).`,
+      message: `Sent Appwrite team invite to ${email} (${pairedCustomRoles.join(' + ')}) & synced Roster.`,
     });
   } catch (err: any) {
     addToast({

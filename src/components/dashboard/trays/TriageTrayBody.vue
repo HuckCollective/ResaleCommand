@@ -5,7 +5,7 @@
         v-for="tab in triageTabs"
         :key="tab.id"
         type="button"
-        class="btn btn-2xs sm:btn-xs rounded-xl font-bold gap-1 shrink-0"
+        class="btn btn-xs h-11 min-h-11 md:h-7 md:min-h-0 rounded-xl font-bold gap-1 shrink-0 whitespace-nowrap"
         :class="triageFilter === tab.id ? 'btn-primary text-primary-content' : 'btn-ghost bg-base-200/70'"
         @click="triageFilter = tab.id"
       >
@@ -60,7 +60,8 @@
         <div class="pt-2 border-t border-base-200 flex flex-wrap items-center justify-between gap-2">
           <a
             :href="card.href"
-            class="btn btn-xs btn-primary text-primary-content rounded-lg font-black gap-1 h-8 px-3"
+            class="btn btn-xs btn-primary text-primary-content rounded-lg font-black gap-1 h-11 min-h-11 md:h-8 md:min-h-0 px-3"
+            @click="onActionClick($event, card.href)"
           >
             <span>{{ card.actionText }}</span>
             <Icon icon="solar:arrow-right-linear" class="w-3.5 h-3.5 shrink-0" />
@@ -69,7 +70,7 @@
           <div v-if="triageFilter === 'snoozed'" class="flex items-center gap-1.5">
             <button
               type="button"
-              class="btn btn-xs btn-outline btn-success rounded-lg font-bold"
+              class="btn btn-xs h-11 min-h-11 md:h-8 md:min-h-0 btn-outline btn-success rounded-lg font-bold"
               @click="unsnooze(card.id)"
             >
               Restore Alert
@@ -78,14 +79,14 @@
           <div v-else class="flex items-center gap-1">
             <button
               type="button"
-              class="btn btn-2xs btn-ghost rounded-lg font-bold text-base-content/65"
+              class="btn btn-xs h-11 min-h-11 md:h-7 md:min-h-0 btn-ghost rounded-lg font-bold text-base-content/65"
               @click="snooze(card.id, 1)"
             >
               Snooze 1d
             </button>
             <button
               type="button"
-              class="btn btn-2xs btn-ghost rounded-lg font-bold text-base-content/65"
+              class="btn btn-xs h-11 min-h-11 md:h-7 md:min-h-0 btn-ghost rounded-lg font-bold text-base-content/65"
               @click="snooze(card.id, 7)"
             >
               7d
@@ -114,9 +115,22 @@ const {
   activeCards,
   snoozedCards,
   criticalCount,
+  closeTray,
   snooze,
   unsnooze,
 } = useDashboardCommandTray();
+
+const onActionClick = (e: MouseEvent, href: string) => {
+  if (href === '#join-queue') {
+    e.preventDefault();
+    closeTray();
+    window.dispatchEvent(new CustomEvent('rc:open-join-queue-tray'));
+  } else if (href === '#coop-messages') {
+    e.preventDefault();
+    closeTray();
+    window.dispatchEvent(new CustomEvent('rc:open-coop-messages', { detail: { mode: 'list' } }));
+  }
+};
 
 const triageTabs = computed<{ id: TriageFilterId; label: string; count: number }[]>(() => [
   { id: 'all', label: 'All Active', count: activeCards.value.length },

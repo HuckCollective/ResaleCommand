@@ -72,6 +72,8 @@ export interface DashboardSnapshot {
   /** Commons breakeven shortfall for the current month (0 when none) */
   shortfall: number;
   joinRequests: number;
+  /** Open member messages, UI bug screenshots & AI flags awaiting review */
+  coopMessages: number;
 }
 
 export function emptySnapshot(now = Date.now()): DashboardSnapshot {
@@ -88,6 +90,7 @@ export function emptySnapshot(now = Date.now()): DashboardSnapshot {
     statement: null,
     shortfall: 0,
     joinRequests: 0,
+    coopMessages: 0,
   };
 }
 
