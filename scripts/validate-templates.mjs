@@ -64,7 +64,7 @@ for (const file of vueFiles) {
     if (descriptor.script || descriptor.scriptSetup) {
         try {
             const compiled = compileScript(descriptor, { id: file, inlineTemplate: false });
-            const vName = file + '.ts';
+            const vName = path.resolve(file + '.ts').replace(/\\/g, '/');
             virtualVueMap.set(vName, compiled.content);
             virtualVueFiles.push(vName);
         } catch (scriptErr) {
@@ -102,16 +102,18 @@ if (fs.existsSync(tsconfigPath)) {
 }
 
 const defaultHost = ts.createCompilerHost(compilerOptions);
+const normalizeVirtualKey = (f) => path.resolve(f).replace(/\\/g, '/');
 const customHost = {
     ...defaultHost,
     getSourceFile: (fileName, languageVersion) => {
-        if (virtualVueMap.has(fileName)) {
-            return ts.createSourceFile(fileName, virtualVueMap.get(fileName), languageVersion, true);
+        const key = virtualVueMap.has(fileName) ? fileName : normalizeVirtualKey(fileName);
+        if (virtualVueMap.has(key)) {
+            return ts.createSourceFile(fileName, virtualVueMap.get(key), languageVersion, true);
         }
         return defaultHost.getSourceFile(fileName, languageVersion);
     },
     fileExists: (fileName) => {
-        if (virtualVueMap.has(fileName)) return true;
+        if (virtualVueMap.has(fileName) || virtualVueMap.has(normalizeVirtualKey(fileName))) return true;
         return defaultHost.fileExists(fileName);
     }
 };

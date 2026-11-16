@@ -220,15 +220,16 @@ const emit = defineEmits<{
   (e: 'update:members', next: CoopMemberProfile[]): void;
 }>();
 
-const customRoleOptions = [
+type CustomRoleId = 'founder' | 'curator' | 'promoter' | 'enabler' | 'consignor';
+
+const customRoleOptions: ReadonlyArray<{ id: CustomRoleId; icon: string; label: string }> = [
   { id: 'founder', icon: '👑', label: 'Founder' },
   { id: 'curator', icon: '💎', label: 'Curator' },
   { id: 'promoter', icon: '📣', label: 'Promoter' },
   { id: 'enabler', icon: '🔥', label: 'Enabler' },
   { id: 'consignor', icon: '🏷️', label: 'Consignor' },
-] as const;
+];
 
-type CustomRoleId = (typeof customRoleOptions)[number]['id'];
 const CUSTOM_ROLE_IDS = new Set<string>(customRoleOptions.map((r) => r.id));
 
 const { currentTeam } = useAuth();

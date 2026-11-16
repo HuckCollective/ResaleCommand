@@ -4,6 +4,10 @@
 
 ---
 
+## ✅ UNIFIED BOOKMARKLET PILL ⇄ FROZEN-TOP `100dvh` DRAWER SHELL, ZERO-BIAS CLOUD SOURCING DOMAINS, DOMAIN-BUCKETED BUY TRACKERS & AUCTION SCOUT `v4.4` (`alpha-1` — Nov 15, 2026)
+- **Unified URL-Driven Bookmarklet Shell & ShopGoodwill `v4.4` (`src/lib/bml/clientCore.ts`, `public/auction-scout-sync.user.js`, `src/lib/sourcingDomains.ts`, `src/lib/appraisalCalibration.ts`)**:
+  - Added ES5-safe `ensureShellStyles()`, `consumeBookmarkletClick()`, `registerLive()`, `watchSpaLocation(onChange)`, fixed SPA `"YOU MAY ALSO LIKE"` freeze, Combined-Shipping `dead_deal` override, `$0` saved-report auto-restore (`GET /api/bml/sgw-sync?docId=<id>&report=1`), and domain-bucketed Draft Buy Trackers (`SC-`, `LC-`, `EB-`, `BP-`, `OM-`).
+
 ## ✅ BULLETPROOF RICOCHET CLOUD STAGING + ZERO JS `alert()`/`confirm()` `<SlideOverDrawer>` CONFIRMATION ON THE WORKS (`alpha-1` — Nov 15, 2026)
 - **Staging & Hydration Fixes + `<SlideOverDrawer>` Commit (`src/lib/ricochetPayoutParser.ts`, `src/pages/api/sales/ricochet-sync.ts`, `src/composables/useRicochetSalesSync.ts`, `public/ricochet-upc-sync.user.js`, `src/components/sales/SalesList.vue`)**:
   - Fixed `FingerprintAccessors` runtime `HTTP 500`, Appwrite `401` on manifest updates, client hydration fallback, and replaced browser JS popups with stage-only bookmarklet handoff (`↗ Review & Confirm N New Sales on The Works`) into `<SlideOverDrawer>` on `/sales?confirmRicochet=1&location=MD`.
