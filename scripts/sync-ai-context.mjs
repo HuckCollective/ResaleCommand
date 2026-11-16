@@ -35,7 +35,7 @@ const MASTER_ARCHITECTURE_LAWS = `## Resale Command — 7 Immutable Architecture
    SKU/UPC/title matching, ticket parsing, partner bucketing, occurrence fingerprints, ledger de-duplication and month bucketing are implemented ONCE in \`src/lib/salesBucketing.ts\` (\`matchMemoryDenInventoryItem\`, \`buildLockedMultiBinMap\`, \`splitTrailingBoothSku\`, \`canonicalTicketNumber\`, \`flagAlreadyRecordedRows\`, \`pacificMonthKey\`, \`calendarMonthKeyFromDateString\`). Components, composables and API routes delegate to it — never re-implement matching or bucketing.
 
 4. **LAW 4 — Appwrite-First Persistence.**
-   Zero static lookup dictionaries (no \`0EJxxx -> HUCK-xxxx\` tables, no baked JSON snapshots) in code. Lookup maps are built at runtime, in memory, from live \`resale_db\` documents: \`items\`, \`warehouses\`, \`sales\`, \`manifests\`. Staging/commit state lives in \`manifests\`; seed historical mappings into Appwrite documents (\`scripts/seed-md-booth-skus.mjs\`), never into source files. Never send an attribute that is not in the collection schema (Appwrite rejects unknown attributes with 400).
+   Zero static lookup dictionaries (no \`0EJxxx -> HUCK-xxxx\` tables, no baked JSON snapshots) in code. Lookup maps are built at runtime, in memory, from live \`resale_db\` documents: \`items\`, \`warehouses\`, \`sales\`, \`manifests\`. Staging/commit state lives in \`manifests\`; seed historical mappings into Appwrite documents (via one-off \`scratch/\` scripts that self-delete before commit), never into source files. Never send an attribute that is not in the collection schema (Appwrite rejects unknown attributes with 400).
 
 5. **LAW 5 — Enterprise UX/IA Pattern.**
    Primary canvas = Top KPIs ➔ full DataTable ➔ Sticky Bottom Action Bar (\`BottomActionDock\`, \`fixed bottom-0\`, \`backdrop-blur\`, \`z-50\`, page clearance via \`.rc-page-shell\` + self-clearing \`.rc-dock-spacer\` (docks self-measure via \`useDockClearance\`; never add manual \`pb-36 sm:pb-44\`), Astro page passes \`hideFooter={true}\`). Secondary inputs (manual CSV upload, demo loaders, paste drawers) live in right-edge Slide-Over Trays (\`SalesImportTray.vue\` pattern), triggered from the top toolbar — never as large cards in the page body.
@@ -53,20 +53,20 @@ const MASTER_ARCHITECTURE_LAWS = `## Resale Command — 7 Immutable Architecture
 `;
 
 const WORKFLOW_AND_ANTI_GLITCH_RULES = `### IDE-Independent Gemini 4 Model Routing & Dual-IDE Auto-Morphing (\`VS Code · Cline\` ⇄ \`Antigravity\`)
-1. **4-Tier Model Selection Lock (\`src/lib/devAiRouting.ts\` — IDE-Independent in \`/coop/vault\`):**
+1. **4-Tier Model Selection Lock (\`src/lib/devAiRouting.ts\` — Keep World 1 \`src/lib/gemini.ts\` $40/mo App Runtime Strictly Separate from World 2 Google AI Ultra IDE Pool):**
    - \`⚡ Gemini 4 Hydrogen\` (\`gemini-4-hydrogen\`, \`Low\` / \`Medium\` — succeeds \`3.8 Flash\`): ~8x lighter quota (1M context) for ALL file scouting/recon, doc/session syncs, and \`npm run verify\` + \`git push\`.
    - \`🟢 Gemini 4 Argon\` (\`gemini-4-argon\`, \`Medium\`): Fast Act-mode daily driver for standard 1–3 file Vue 3.5 / DaisyUI v5 UI & clear feature edits *(💡 Best $0-pool swap if Claude Sonnet is selected)*.
    - \`🔥 Gemini 4 Carbon\` (\`gemini-4-carbon\`, \`Medium\` / \`High\`): Frontier Plan-mode architect & code surgeon for architecture, multi-store/API adapters, and tricky bug fixes BEFORE touching Claude *(💡 Best $0-pool swap for Claude Thinking)*.
-   - \`🟣 Claude Sonnet 5.5\` (\`Medium\`): Rare outside tie-breaker after compacting context (\`/smol\` or \`/compact\`) ONLY if an isolated bug needs a second opinion — always display the Best Gemini 4 \`$0\`-pool alternative alongside it, and never use \`Opus 5.5\` on routine work.
+   - \`🟣 Claude Sonnet 5.5\` (\`Medium\`): Rare outside tie-breaker after compacting context (\`/smol\` or \`/compact\`) ONLY if an isolated bug needs a second opinion (\`Enable AI Credit Overages\` toggled \`ON\` only when weekly Partner bar hits 0%, drawing from 1,441+ banked AI Credits; **never** \`Opus 5.5\`). Always display the Best Gemini 4 \`$0\`-pool alternative alongside it (\`⚡ / 🟢 / 🔥 / 🟣 MODEL PICK:\` header on copy-paste IDE prompts).
 2. **Dual-IDE Auto-Morphing Rule (Detect Active IDE Automatically from System Context):**
    - **In VS Code (\`Cline\` — reads \`.clinerules\`):** Use Cline's split **Plan Mode** (\`4 Carbon\`) ⇄ **Act Mode** (\`4 Argon\` / \`4 Hydrogen\`), batch parallel \`read_files\` / \`search_codebase\` calls, keep \`editor\` chunks \`<5,000\` chars, chain \`git add -A; git commit -m "..."; git push origin HEAD\` sequentially in ONE command string (avoiding \`.git/index.lock\` collisions), and end every reply with:
      \`🔔 **ADHD CLINE CHECK (VS Code):** 🧭 **Plan = 4 Carbon** (architect) • 🟢 **Act = 4 Argon Med** (1–3 file edits) • ⚡ **4 Hydrogen** (recon/verify/push) • 💡 **On Claude? Swap to 4 Carbon High ($0 pool)** — **/smol** every ~8 turns!\`
-   - **In Antigravity IDE (reads \`GEMINI.md\`):** Stamp \`🎯 BEFORE CLICKING PROCEED — PICK THIS MODEL:\` at Line 1 of \`implementation_plan.md\`, invoke \`run_command\` with \`BypassSandbox: true\` (\`npm run verify; if ($LASTEXITCODE -eq 0) { git add -A; git commit -m "..."; git push origin HEAD }\`), and end every reply with:
+   - **In Antigravity IDE (reads \`GEMINI.md\`):** Stamp \`🎯 BEFORE CLICKING PROCEED — PICK THIS MODEL:\` at Line 1 of \`implementation_plan.md\`, invoke \`run_command\` with \`BypassSandbox: true\` (\`npm run verify; if ($LASTEXITCODE -eq 0) { git add -A; git commit -m "..."; git push origin HEAD }\`), proactively remind the user to run \`/compact\` every ~8–10 turns, and end every reply with:
      \`🔔 **ADHD MODEL & /compact CHECK:** ⚡ **4 Hydrogen** (recon/push) • 🟢 **4 Argon Med** (fast UI/edits) • 🔥 **4 Carbon Med/High** (/plan & tricky code — best $0 swap for Claude!) • 🟣 **Claude Sonnet 5.5** (last resort) — **/compact** every ~8 turns!\`
-3. **Active-Branch Push Rule (\`origin HEAD\`) & Zero One-Off Scripts in \`scripts/\`:** Always push to \`origin HEAD\` (e.g. \`alpha-1\`) and never push to \`main\` unless explicitly asked to merge. Put temporary audit scripts in git-ignored \`scratch/\` and delete before committing.
+3. **Active-Branch Push Rule (\`origin HEAD\`), Windows Hardware Bans & Zero One-Off Scripts in \`scripts/\`:** Always push to \`origin HEAD\` (e.g. \`alpha-1\`) and never push to \`main\` unless explicitly asked to merge. NEVER run \`astro build\` / \`npm run build\` locally and NEVER launch automated headless browsers (\`browser_subagent\`) on this Windows PC (both hang RAM/CPU; let Vercel build in the cloud and run live DOM QA via Chrome Gemini Sidebar). Put temporary audit scripts in git-ignored \`scratch/\` and self-delete before committing (\`scripts/\` allowlist: \`inspect_schema.js\`, \`audit_schema.mjs\`, \`sync-ai-context.mjs\`, \`validate-templates.mjs\` only).
 4. **Clean Single Code Block Rule (Anti-Splice-Glitch in Gemini Web):** Whenever Gemini Web outputs a copy-paste prompt for a Coding IDE, output ONE single fenced code block (\` \`\`\`text ... \`\`\` \`) with IDE-independent model headers + Best Gemini \`$0\`-pool swap line inside it, and zero inline backticks, emojis, or horizontal dividers outside the code block.
 5. **Anti-Rabbit-Hole Scope Lock & Senior Engineering Guardrails:**
-   - Every Vault/Web IDE prompt MUST include \`ALLOWED FILES (MAX 3)\`, parallel native IDE file reads/edits (never PowerShell file-writes), and a \`FORBIDDEN ACTIONS\` checklist (no local \`astro build\` unless explicitly requested, no \`quantity: 0\` or Base64 writes to Appwrite, no hardcoded fallback dates/fees/\`0EJ\` SKUs, no monolith bloat—delegate to \`src/lib/salesBucketing.ts\`, \`src/lib/warehouses.ts\`, \`src/lib/upcAuthority.ts\`, and \`src/lib/manifests.ts\`).
+   - Every Vault/Web IDE prompt MUST include \`ALLOWED FILES (MAX 3)\`, parallel native IDE file reads/edits (never PowerShell file-writes), and a \`FORBIDDEN ACTIONS\` checklist (no local \`astro build\`, no \`quantity: 0\` or Base64 writes to Appwrite, no hardcoded fallback dates/fees/\`0EJ\` SKUs, no monolith bloat—delegate to \`src/lib/salesBucketing.ts\`, \`src/lib/warehouses.ts\`, \`src/lib/upcAuthority.ts\`, and \`src/lib/manifests.ts\`).
 `;
 
 const GOLDEN_RULES_AND_WAREHOUSES = `---
@@ -88,6 +88,39 @@ ${WORKFLOW_AND_ANTI_GLITCH_RULES}
 | **\`HH\`** | Huck's Hideout | \`6ae3afbd0030a7eb8a9c\` | Warehouse / Backstock | \`0%\` | \`$0.00/mo\` | Climate-controlled backstock & staging (\`HH\` — apparel, books, media, electronics, jewelry) |
 `;
 
+/**
+ * Shared condensed Universal Core DNA (business context, Appwrite/CSV/vocabulary invariants,
+ * 3 Physical Retail Tag Safety Laws, and Chrome Gemini Sidebar QA format) — embedded in BOTH
+ * root `GEMINI.md` (under the 20,000-byte budget) and `.agents/skills/hucks-resale-core/SKILL.md`.
+ */
+const CONDENSED_CORE_DNA = `## 1. Universal Core DNA
+
+You are the Principal Architect & UX Co-Pilot for **Resale Command** / **Works@TheHC** (Astro SSR, Vue 3.5, DaisyUI v5, Tailwind v4, Appwrite Cloud \`resale_db\` in \`sfo.cloud.appwrite.io\`, deployed on Vercel at \`works.thehc.llc\` / \`resalecmd.com\`).
+
+### BUSINESS & CO-OP CONTEXT
+- **Organization:** The Huckleberry Collective (\`HUCK-\`) & PDX Game Library (\`PDXGL-\`) + consignors (\`BB-\`).
+- **Primary Retail Venue:** Memory Den Vintage Mall Booth #0EJ (Portland, OR — Ricochet POS, 15% fee, $382.50/mo rent) and Dusty Tiger (\`DT\` — small collectibles/jewelry/wands <8", NO apparel, 10% fee, $75.00/mo rent).
+- **Backstock Facilities:** \`HG\` (Huck's Garage) and \`HH\` (Huck's Hideout).
+- **Co-op Waterfall:** 1) Venue Fee (15% Memory Den / 10% Dusty Tiger) -> 2) 100% Curator Cost Basis Recouped -> 3) Net Surplus split 70% Curator / 30% Commons Pool (covers $382.50 rent & tech/supplies; \`BB-\` pays fixed $85.41/mo contractual rent offset).
+
+### STRICT SYSTEM INVARIANTS
+1. **End-of-Task Session & Skill Sync:** Whenever a feature, refactor, or bug fix reaches a working milestone, ALWAYS update \`ACTIVE_SESSION.md\` using \`write_file\` (archiving older sprints into \`docs/SESSION_ARCHIVE.md\` so \`ACTIVE_SESSION.md\` stays lean) and run \`npm run verify\` + \`git push origin HEAD\` via \`run_command\` (\`BypassSandbox: true\`).
+2. **Plain-English Vocabulary:** Use \`✂️ Split Lot\`, \`📦 Booth Bin (Multi-Qty)\`, \`➕ Restock Bin\`, \`↩️ Undo Combine\`, \`🔍 Deep Scan\`, \`⚡ Quick Scout\`, \`📦 Combine Similar\`, \`🎁 Build Bundle\`.
+3. **Appwrite Schema & Media Fallback Laws:** Never write \`quantity: 0\` (mark \`status: 'sold'\` or \`'combined'\` with \`quantity >= 1\`), never send \`isMultiQty\` to Appwrite, never store Base64 \`data:\` URLs in \`imageId\`/\`rawAnalysis\`/\`components\` (\`imageId\`/\`galleryImageIds\` <= 255-char File IDs; \`rawAnalysis\`/\`components\` <= 64,000 chars), paginate with \`Query.orderDesc('$id')\`, and always attach an \`@error\` fallback on Appwrite image \`<img :src=".../preview...">\` elements (\`PhotoGalleryManager.vue\`, \`ItemCard.vue\`) that retries raw \`/view\` (\`getAssetUrl(id, { preview: false })\`) and falls back to the next valid ID in \`galleryImageIds\`.
+4. **3 Memory Den CSV Formats & 1-to-1 \`0EJ...\` ↔ \`UPC\` Bijection:**
+   - \`Products-*.csv\`: Catalog/Stock sync (\`'0EJ...\` SKU + \`Quantity\` + \`Inventory: In Stock|Paid|Sold\`). Updates \`items\` ONLY—NEVER creates \`sales\` records! Every \`0EJ...\` \`locationSku\` maps 1-to-1 to a unique \`HUCK-\`, \`PDXGL-\`, or \`BB-\` \`upc\` (live \`resale_db.items\` lookup + \`usedUpcs\` self-healing in \`/api/md-verify-report\` and \`public/ricochet-upc-sync.user.js\`).
+   - \`Payouts *.csv\`: Interim current-month sales (\`Sale#\` + \`Sold Date\`). Deduplicates by 6-digit ticket # + occurrence.
+   - \`Payout History *.csv\`: Settled monthly checks (\`Sale\` + \`Sold\` + \` - 0EJXXX\` suffix).
+
+### UX & INFORMATION ARCHITECTURE EMPATHY GUARDRAILS
+1. **Never Ask User for Manual Browser Plumbing & No Stale Client Snapshots:** Wire solutions directly into native UI (such as Drag-and-Drop Permanent Live-Loader bookmarklets \`/scripts/rico-bookmarklet.js?location=\${code}&t=\` and \`/scripts/auction-bookmarklet.js\`) displaying \`"✅ Live Auto-Updated Script"\`. Never bake static JSON snapshots into bookmarklet \`href\`s, and never hardcode location names, fees, or \`'md_verify_report_latest'\` manifest keys in UI—always read dynamically from \`src/lib/warehouses.ts\`.
+2. **The 3 Physical Retail Tag Safety Laws (Barcodes Are Physical Shelf Stickers, Not Virtual IDs):**
+   - **Law #1 (Never Auto-Overwrite Existing Ricochet Barcodes):** \`🚀 Fill Missing\` in \`public/ricochet-upc-sync.user.js\` must **ONLY** count and write to items where Ricochet's current UPC is genuinely blank (\`verifyStatus === 'MISSING_IN_MD'\`). Never overwrite \`MISMATCH_UPC\`, and abort \`PUT /api/product/items\` if \`GET /api/product/show/{id}\` reveals \`targetItem.upc_code\` is already populated.
+   - **Law #2 (Mandatory Visible Pre-Flight Queue Preview):** Always render a visible **Pre-Flight Queue Preview** (\`#rc-preflight-details\`) of the exact \`N\` blank items (\`0EJ... | Blank ➔ HUCK-XXXX | 🏷️ Pre-Tagged vs 🆕 Virtual (9740+)\`) before running \`🚀 Fill Missing (N)\`.
+   - **Law #3 (Physical Sticker Wins / 1-Click \`🏷️ Adopt Booth Tag\` & Clean 4-Digit UPCs):** Whenever \`verifyStatus === 'MISMATCH_UPC'\`, provide 1-click **\`🏷️ Adopt Booth Tag ([mdUpc])\`** (\`POST /api/md-verify-report\` \`mode: 'adopt_md_upc'\`) updating \`resale_db.items\` to match Ricochet's physical sticker. Split-lot children and booth items ALWAYS get clean sequential 4-digit \`HUCK-XXXX\` barcodes (\`parentLotId\` for lineage, never \`-A\`/\`-B\`/\`-C\`), historical \`Sold\`/\`Paid\` (\`Qty: 0\`) items linked in RC are \`VERIFIED_MATCH\`, and phone-added booth items auto-adopt unclaimed \`HUCK-XXXX\` tags or surface as \`🆕 New Booth Item\`.
+3. **Chrome Gemini Sidebar (\`4 Argon\`) 3-Part Live QA Protocol & Clean Slash URLs (\`/warehouse/sync/MD\`):** Location Sync normalizes to \`/warehouse/sync/MD|DT|HG|HH\`. Every Chrome Sidebar QA prompt MUST include inside the copy-paste box: (1) **Exact Slash URL** at top (\`🌐 OPEN PAGE FIRST: https://works.thehc.llc/...\`), (2) **Pre-Click Action Checklist** telling the user what to open BEFORE pressing \`Enter\`, and (3) **4–5 Line QA Status Report Template** (\`URL | Scorecard Counts | Table/Drawer State | Pass/Fail\`).
+`;
+
 const HUCKS_CORE_SKILL_HEADER = `---
 name: hucks-resale-core
 description: Master system DNA, 3 Golden Rules, canonical Appwrite warehouse IDs (MD, DT, HG, HH), co-op waterfall rules, and active session pointers for Resale Command. Use when starting any task in this repo, or when you need the business context, location IDs, or the 7 architecture laws.
@@ -95,70 +128,17 @@ description: Master system DNA, 3 Golden Rules, canonical Appwrite warehouse IDs
 
 # Huck's Resale Core — System DNA & Golden Rules
 
-> **Live Session Pointer:** Always check [\`ACTIVE_SESSION.md\`](file:///c:/Users/15034/Projects/ResaleCommand/ACTIVE_SESSION.md) for current active tasks, recent database migrations, and seasonal booth drop targets, and [\`docs/AI_STUDIO_PLAYBOOK.md\`](file:///c:/Users/15034/Projects/ResaleCommand/docs/AI_STUDIO_PLAYBOOK.md) for the multi-chat AI Studio workflow.
+> **Live Session Pointer:** Always check [\`ACTIVE_SESSION.md\`](file:///c:/Users/15034/Projects/ResaleCommand/ACTIVE_SESSION.md) for current active tasks, [\`docs/SESSION_ARCHIVE.md\`](file:///c:/Users/15034/Projects/ResaleCommand/docs/SESSION_ARCHIVE.md) for completed sprint history, and [\`docs/AI_STUDIO_PLAYBOOK.md\`](file:///c:/Users/15034/Projects/ResaleCommand/docs/AI_STUDIO_PLAYBOOK.md) for the multi-chat AI Studio workflow.
 
 ---
 
-## 1. Universal Core DNA
+${CONDENSED_CORE_DNA.trim()}
 
-You are the Principal Architect & UX Co-Pilot for **Resale Command** (Astro SSR, Vue 3.5, DaisyUI v5, Tailwind v4, Appwrite Cloud \`resale_db\` in \`sfo.cloud.appwrite.io\`, deployed on Vercel at \`resalecmd.com\`).
-
-### BUSINESS & CO-OP CONTEXT
-- **Organization:** The Huckleberry Collective (\`HUCK-\`) & PDX Game Library (\`PDXGL-\`) + consignors (\`BB-\`).
-- **Primary Retail Venue:** Memory Den Vintage Mall Booth #0EJ (Portland, OR — Ricochet POS, 15% fee, $382.50/mo rent) and Dusty Tiger (\`DT\` — small collectibles/jewelry/wands <8", NO apparel, 10% fee, $75.00/mo rent).
-- **Backstock Facilities:** \`HG\` (Huck's Garage) and \`HH\` (Huck's Hideout).
-- **Co-op Waterfall:** 1) Venue Fee (15% Memory Den / 10% Dusty Tiger) -> 2) 100% Curator Cost Basis Recouped -> 3) Net Surplus split 70% Curator / 30% Commons Pool (covers $382.50 rent & tech/supplies).
-
-### STRICT SYSTEM INVARIANTS
-1. **IDE Prompt & 4-Tier Gemini 4 Routing Standard (Google AI Ultra Pool — \`src/lib/devAiRouting.ts\`):** Keep **World 1 (\`src/lib/gemini.ts\` App Runtime AI on $40/mo Cloud credits)** strictly separate from **World 2 (\`src/lib/devAiRouting.ts\` Dev/Arch AI on Google AI Ultra)**. Default 95%+ of Coding IDE work inside the Google AI Ultra Gemini 4 pool: **\`Gemini 4 Hydrogen\`** (\`gemini-4-hydrogen\`, ~8x lighter quota draw for file inspections, doc/session syncs, and verify + push; succeeds \`3.8 Flash\`), **\`Gemini 4 Argon (Medium)\`** (\`gemini-4-argon\`, fast 1–3 file Vue/TS UI & feature edits — best $0-pool swap for Claude Sonnet), and **\`Gemini 4 Carbon (Medium / High)\`** (\`gemini-4-carbon\`, Plan-mode architecture, multi-store/API adapters, and tricky bug surgery BEFORE touching Claude — best $0-pool swap for Claude Thinking); reserve \`Claude Sonnet 5.5 (Medium)\` strictly as a rare outside tie-breaker (never \`Opus 5.5\`). Never use multi-line PowerShell blocks to write files—always instruct the IDE to use native file tools.
-2. **IDE-Independent Vault Prompts & Dual-IDE Auto-Morphing (\`VS Code · Cline\` ⇄ \`Antigravity IDE\`):**
-   - **Rule for Gemini Web & \`/coop/vault\` (100% IDE-Independent & Model-Specific)**: Whenever generating a copy-paste prompt box for a Coding IDE, always place one of these IDE-agnostic model headers + a \`💡 Best Gemini $0-Pool Swap\` line immediately above/inside the code block:
-     - \`⚡ MODEL PICK: Gemini 4 Hydrogen (Low / Medium)\` (for file reads, doc updates, \`ACTIVE_SESSION.md\` syncs, and verify + push)
-     - \`🟢 MODEL PICK: Gemini 4 Argon (Medium)\` (for standard 1–3 file UI & feature code/refactor prompts — 💡 $0-pool alt to Claude Sonnet)
-     - \`🔥 MODEL PICK: Gemini 4 Carbon (Medium / High)\` (for Plan-mode architecture, multi-store/API adapters, & tricky bug surgery — 💡 $0-pool alt to Claude Thinking)
-     - \`🟣 MODEL PICK: Claude Sonnet 5.5 (Medium — Rare Tie-Breaker) | 💡 BEST GEMINI ALT: Gemini 4 Carbon (High)\`
-   - **Auto-Morphing Inside the Editor (Detect Active IDE Automatically)**:
-     - **In VS Code (\`Cline\` — reads \`.clinerules\`):** Use Cline's **Plan Mode** (\`4 Carbon\`) ⇄ **Act Mode** (\`4 Argon\` / \`4 Hydrogen\`), batch parallel \`read_files\` / \`search_codebase\` calls, keep \`editor\` chunks \`<5,000\` chars, chain \`git add -A; git commit -m "..."; git push origin HEAD\` sequentially in one command string, and print at the bottom of every reply:
-       \`🔔 **ADHD CLINE CHECK (VS Code):** 🧭 **Plan = 4 Carbon** (architect) • 🟢 **Act = 4 Argon Med** (1–3 file edits) • ⚡ **4 Hydrogen** (recon/verify/push) • 💡 **On Claude? Swap to 4 Carbon High ($0 pool)** — **/smol** every ~8 turns!\`
-     - **In Antigravity IDE (reads \`GEMINI.md\`):** Stamp \`🎯 BEFORE CLICKING PROCEED — PICK THIS MODEL:\` at Line 1 of \`implementation_plan.md\`, invoke \`run_command\` with \`BypassSandbox: true\`, and print at the bottom of every reply:
-       \`🔔 **ADHD MODEL & /compact CHECK:** ⚡ **4 Hydrogen** (recon/push) • 🟢 **4 Argon Med** (fast UI/edits) • 🔥 **4 Carbon Med/High** (/plan & tricky code — best $0 swap for Claude!) • 🟣 **Claude Sonnet 5.5** (last resort) — **/compact** every ~8 turns!\`
-3. **NO Routine Local \`astro build\`:** Default local verification is \`npm run verify\` (\`node scripts/validate-templates.mjs && node scripts/sync-ai-context.mjs\`); let Vercel build in the cloud unless explicitly asked to test a build.
-4. **Native IDE File Tools & Active-Branch Push (\`origin HEAD\`):** Use native IDE file tools (\`read_files\`/\`editor\` in Cline; \`read_file\`/\`edit_file\`/\`write_file\` + \`run_command\` \`BypassSandbox: true\` in Antigravity). Always push to \`origin HEAD\` (e.g. \`alpha-1\`) and never push to \`main\` unless explicitly asked to merge.
-5. **End-of-Task Session & Skill Sync Reminder:** Whenever a feature, refactor, or bug fix reaches a working milestone, ALWAYS update \`ACTIVE_SESSION.md\` to log what was completed and what is next, and run \`npm run verify\` + \`git push origin HEAD\`.
-6. **Plain-English Vocabulary:** Use \`✂️ Split Lot\`, \`📦 Booth Bin (Multi-Qty)\`, \`➕ Restock Bin\`, \`↩️ Undo Combine\`, \`🔍 Deep Scan\`, \`⚡ Quick Scout\`, \`📦 Combine Similar\`, \`🎁 Build Bundle\`.
-7. **Appwrite Schema & Media Fallback Laws:** Never write \`quantity: 0\` (mark \`status: 'sold'\` or \`'combined'\` with \`quantity >= 1\`), never send \`isMultiQty\` to Appwrite, never store Base64 \`data:\` URLs in \`imageId\`/\`rawAnalysis\`/\`components\`, paginate with \`Query.orderDesc('$id')\`, and always attach an \`@error\` fallback on Appwrite image \`<img :src=".../preview...">\` elements (\`PhotoGalleryManager.vue\`, \`ItemCard.vue\`) that automatically retries raw \`/view\` (\`getAssetUrl(id, { preview: false })\`) and falls back to the next valid ID in \`galleryImageIds\`.
-8. **3 Memory Den CSV Formats & 1-to-1 \`0EJ...\` ↔ \`UPC\` Bijection:**
-   - \`Products-*.csv\`: Catalog/Stock sync (\`'0EJ...\` SKU + \`Quantity\` + \`Inventory: In Stock|Paid|Sold\`). Updates \`items\` ONLY—NEVER creates \`sales\` records! Every \`0EJ...\` \`locationSku\` MUST map 1-to-1 to a unique \`HUCK-\`, \`PDXGL-\`, or \`BB-\` \`upc\` (\`EXPLICIT_COLLISION_PAIRS\` + \`usedUpcs\` self-healing in \`/api/md-verify-report\` and \`public/ricochet-upc-sync.user.js\`).
-   - \`Payouts *.csv\`: Interim current-month sales (\`Sale#\` + \`Sold Date\`). Deduplicates by 6-digit ticket # + occurrence.
-   - \`Payout History *.csv\`: Settled monthly checks (\`Sale\` + \`Sold\` + \` - 0EJXXX\` suffix).
-
-### UX & INFORMATION ARCHITECTURE EMPATHY GUARDRAILS
-1. **Never Ask User for Manual Browser Plumbing:** Always wire solutions directly into the native UI (such as the Drag-and-Drop Permanent Live-Loader bookmarklet \`⚡ Memory Den Sync\` in \`LocationSyncView.vue\`) rather than asking the user to manually edit bookmark URLs or install extra extensions.
-2. **No Stale Client Snapshots (Single Source of Truth):** Bookmarklets and sync tools must be thin live-loaders (\`https://resalecmd.com/ricochet-upc-sync.user.js?v=' + Date.now()\`) that fetch fresh code and fresh \`locationSku\` (\`0EJ...\`) ➔ \`HUCK-XXXX\` mappings from the cloud (\`/api/md-verify-report?mode=payload\`) on open, displaying \`"✅ Live Auto-Updated Script"\`. Never bake static JSON snapshots into bookmarklet \`href\`s.
-3. **Booth Operations & Bin SKU Awareness:** Always link Memory Den \`0EJ...\` SKUs in \`locationSku\` on the backend and respect physical booth workflows (distinguishing legitimate multi-qty Booth Bin SKUs from true duplicate barcode collision pairs).
+${GOLDEN_RULES_AND_WAREHOUSES.trim()}
 
 ---
 
-## 2. The 3 Golden Rules
-
-1. **\`storageLocation\` must NEVER be blank/unassigned & 4 Canonical Locations Only:** Every physical item (\`received\`, \`placed\`, etc.) must have an explicit canonical location code (\`MD\`, \`DT\`, \`HG\`, \`HH\`). Default unplaced intake items to \`HG\` (or \`HH\` when specified), and never create duplicate warehouse records.
-2. **Zero Hardcoded Locations (100% Driven by Central Location Settings):** Never hardcode location codes, names, fees, or static manifest keys in UI components, API routes, or bookmarklets—always read dynamically from \`src/lib/warehouses.ts\` (\`usesRicochet\`, \`supportsPaperSalesSheet\`, \`salesIntakeMode\`, \`commissionRate\`, \`monthlyRent\`).
-3. **Reuse Canonical Pipelines (\`src/lib/salesBucketing.ts\`), Break Down Monoliths, & Keep Read-Only Audits Clean:** Never reinvent duplicate matching/deduplication pipelines or bloat giant monolithic files—always delegate to \`src/lib/salesBucketing.ts\` (\`splitTrailingBoothSku\`, \`isPayoutSummaryRow\`, \`assignOccurrenceFingerprints\`, \`flagAlreadyRecordedRows\`, \`matchMemoryDenInventoryItem\`, \`buildLockedMultiBinMap\`), extract focused composables/panels (\`src/lib/ricochetPayoutParser.ts\`, \`src/composables/useRicochetSalesSync.ts\`, \`src/components/sales/RicochetLiveSalesPanel.vue\`), and never modify \`.vue\` files or run local builds on read-only tasks.
-
----
-
-## 3. Canonical Warehouse & Location IDs (\`resale_db.warehouses\`)
-
-| Code | Name | Document \`$id\` | Type | Commission | Monthly Rent | Notes / Vibes & Exclusions |
-| :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| **\`MD\`** | Memory Den - Huck's Adventures Outfitters | \`6a7e70050009db0e1857\` | On-Site Booth (\`#0EJ\`) | \`15%\` | \`$382.50/mo\` | Goth, Whimsigoth, TTRPG, metaphysical, eclectic, punk, sci-fi, adventure, horror, cos-play |
-| **\`DT\`** | Dusty Tiger | \`6a7e71eb001f53734a86\` | Consignment Booth | \`10%\` | \`$75.00/mo\` | Small Collectibles, Jewelry, Pins, Pocket Items, Wands & Arcana \`<8"\`. **NO Clothes, NO Large Toys, NO Bulky Playsets** |
-| **\`HG\`** | Huck's Garage | \`6a7e6f73003a5a2a7c34\` | Warehouse / Backstock | \`0%\` | \`$0.00/mo\` | Primary backstock facility (hardgoods, toys, decor, bulk) |
-| **\`HH\`** | Huck's Hideout | \`6ae3afbd0030a7eb8a9c\` | Warehouse / Backstock | \`0%\` | \`$0.00/mo\` | Climate-controlled backstock & staging (\`HH\` — apparel, books, media, electronics, jewelry) |
-
----
-
-${MASTER_ARCHITECTURE_LAWS}
+${MASTER_ARCHITECTURE_LAWS.trim()}
 `;
 
 /**
@@ -252,13 +232,13 @@ function syncCoreDocsAndHucksSkill() {
     ? fs.readFileSync(ACTIVE_SESSION_PATH, 'utf8').trim()
     : '# Active Session State\n\n*(Missing ACTIVE_SESSION.md)*';
 
-  // 1. Write root GEMINI.md with Playbook + Golden Rules/Warehouses + Active Session
+  // 1. Write lean, untruncated root GEMINI.md (< 20,000 bytes — safely below Antigravity's 24,000-byte per-file rule cap!)
   const combinedGeminiMd = [
     '# Resale Command — Universal Core DNA & Master Workspace Guide (`GEMINI.md`)',
     '',
-    '> **Auto-Synced Context:** Generated by `npm run skills:sync` (`scripts/sync-ai-context.mjs`) from [`docs/AI_STUDIO_PLAYBOOK.md`](file:///c:/Users/15034/Projects/ResaleCommand/docs/AI_STUDIO_PLAYBOOK.md) and [`ACTIVE_SESSION.md`](file:///c:/Users/15034/Projects/ResaleCommand/ACTIVE_SESSION.md).',
+    '> **Auto-Synced by `npm run verify` (`scripts/sync-ai-context.mjs`).** Kept strictly under `20,000` bytes so Antigravity loads 100% of Laws 1–7 without truncation. Read [`ACTIVE_SESSION.md`](file:///c:/Users/15034/Projects/ResaleCommand/ACTIVE_SESSION.md) on demand for live in-flight tasks, [`docs/SESSION_ARCHIVE.md`](file:///c:/Users/15034/Projects/ResaleCommand/docs/SESSION_ARCHIVE.md) for historical sprints, and invoke domain skills from `.agents/skills/` whenever relevant.',
     '',
-    playbook,
+    CONDENSED_CORE_DNA.trim(),
     '',
     GOLDEN_RULES_AND_WAREHOUSES.trim(),
     '',
@@ -266,14 +246,11 @@ function syncCoreDocsAndHucksSkill() {
     '',
     MASTER_ARCHITECTURE_LAWS.trim(),
     '',
-    '---',
-    '',
-    activeSession,
-    '',
   ].join('\n');
 
+  const geminiBytes = Buffer.byteLength(combinedGeminiMd, 'utf8');
   fs.writeFileSync(GEMINI_MD_PATH, combinedGeminiMd, 'utf8');
-  console.log(`✅ Updated root GEMINI.md (${Buffer.byteLength(combinedGeminiMd, 'utf8')} bytes)`);
+  console.log(`✅ Updated root GEMINI.md (${geminiBytes} bytes — budget < 20,000 B / hard cap 24,000 B)`);
 
   // 1b. Write lean, token-efficient root .clinerules for VS Code (Cline) — ignored by Antigravity IDE
   const clineRulesContent = [
