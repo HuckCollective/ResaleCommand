@@ -41,6 +41,9 @@ export const DEV_AI_HEADER_CARBON =
 export const DEV_AI_HEADER_CLAUDE =
   '🟣 MODEL PICK: Claude Sonnet 5.5 (Medium — Rare Tie-Breaker) | 💡 BEST GEMINI $0-POOL ALT: Gemini 4 Carbon (High) — switch back to 4 Argon / 4 Hydrogen right after!';
 
+export const DEV_AI_CLAUDE_PLAN_AUDIT_HEADER =
+  '🟣 MODEL PICK: Claude Sonnet 5.5 (Medium — 1-Turn Deep Plan Red-Team Audit) | 💡 SWITCH BACK TO: 🔥 Gemini 4 Carbon (Medium) or 🟢 Gemini 4 Argon (Medium) ($0 Pool) BEFORE CLICKING PROCEED!';
+
 export const DEV_AI_TIERS: readonly DevAiTierRule[] = [
   {
     id: 'fast_scout',
@@ -90,8 +93,8 @@ export const DEV_AI_TIERS: readonly DevAiTierRule[] = [
     thinkingLevels: 'Medium',
     pickerHeader: DEV_AI_HEADER_CLAUDE,
     whenToUse:
-      'Rare outside tie-breaker after compacting context (/smol or /compact) ONLY if an isolated bug needs a second model family opinion (never Opus 5.5).',
-    geminiAlternative: '💡 Best Gemini $0-Pool Swap: Gemini 4 Carbon (High) for deep bugs, or 4 Argon (Med) for UI edits.',
+      'Optional 1-Turn Deep Plan Red-Team Audit (money/payout math, POS/sales sync, Appwrite schema/migrations, or 4+ file plans) OR rare outside bug tie-breaker after /smol or /compact (never Opus 5.5; keep 100% of recon & code writing on $0 Gemini 4).',
+    geminiAlternative: '💡 Best Gemini $0-Pool Swap: Gemini 4 Carbon (High) for deep plans/bugs, or 4 Argon (Med) for UI edits.',
     quotaPool: 'partner_credits',
   },
 ] as const;

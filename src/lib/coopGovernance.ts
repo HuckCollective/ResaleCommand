@@ -2,10 +2,14 @@ import { databases, Query } from './appwrite';
 import { Permission, Role } from 'appwrite';
 import { getDatabaseId } from './appwriteEnv';
 import { cleanEscapedCurrency } from './safeMarkdown';
+import { calendarMonthKeyFromDateString, pacificMonthKey } from './salesBucketing';
+import { mutateCoopLabor } from './coopLedgerClient';
+import type { SweatSalesPoolMode } from '../types/coop';
 
 export type LoomioSignal = 'agree' | 'abstain' | 'disagree' | 'block';
 export type SurplusPolicyMode = 'patronage_90_10' | 'cap_100' | 'reserve_100';
 export type SurplusSplitBasis = 'volume' | 'equal';
+export type { SweatSalesPoolMode };
 
 export interface ProposalVote {
   signal: LoomioSignal;
@@ -45,9 +49,43 @@ export interface CoopProposal {
 }
 
 /**
+ * Pacific calendar date (`YYYY-MM-DD`, America/Los_Angeles) so evening logs after 4 PM PT
+ * never roll forward into tomorrow or the next calendar month (Law 7).
+ */
+export function pacificTodayYmd(now: Date = new Date()): string {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/Los_Angeles',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(now);
+  const y = parts.find((p) => p.type === 'year')?.value || '2026';
+  const m = parts.find((p) => p.type === 'month')?.value || '01';
+  const d = parts.find((p) => p.type === 'day')?.value || '01';
+  return `${y}-${m}-${d}`;
+}
+
+export function currentPacificMonthKey(now: Date = new Date()): string {
+  return pacificTodayYmd(now).slice(0, 7);
+}
+
+/**
+ * Law 7 1-indexed month key (`YYYY-MM`) for labor work dates using string parsing
+ * (`calendarMonthKeyFromDateString` -> `pacificMonthKey`). Returns `''` when missing/invalid.
+ */
+export function laborEntryMonthKey(dateStr?: string | null): string {
+  const raw = String(dateStr ?? '').trim();
+  if (!raw) return '';
+  const written = calendarMonthKeyFromDateString(raw);
+  if (/^\d{4}-(0[1-9]|1[0-2])$/.test(written)) return written;
+  const pac = pacificMonthKey(raw);
+  return /^\d{4}-(0[1-9]|1[0-2])$/.test(pac) ? pac : '';
+}
+
+/**
  * Author & Steward Ownership Guard:
  * Allows the original proposer (matched by Appwrite User ID, email, or member persona name)
- * OR a Founder/Steward hat to unlock and edit/amend a proposal.
+ * OR a Founder/Steward to unlock and edit/amend a proposal.
  */
 export function canUserEditProposal(
   proposal: CoopProposal | null | undefined,
@@ -100,7 +138,6 @@ import { MEMBER_HAT_META, type MemberHat } from './memberHats';
 export { MEMBER_HAT_META, canSeeCollectiveFinancials } from './memberHats';
 export type { MemberHat, MemberHatMeta } from './memberHats';
 
-
 /** Barcode prefixes printed on physical booth tags. Never editable or removable once registered. */
 export const PROTECTED_BARCODE_PREFIXES: readonly string[] = ['HUCK-', 'PDXGL-', 'BB-'];
 
@@ -109,12 +146,16 @@ export function isProtectedPrefix(prefix: string, usedPrefixes: string[] = []): 
   return PROTECTED_BARCODE_PREFIXES.includes(key) || usedPrefixes.map((p) => p.toUpperCase()).includes(key);
 }
 
-/** Only a member wearing the Founder hat (or the team owner) may save global financial settings. */
+/**
+ * UI display hint for global financial controls.
+ * Real authorization is enforced server-side via Appwrite Team roles (`owner` | `founder`) in `/api/coop/me`.
+ */
 export function canMemberEditGlobalFinancials(
   member: { hats?: MemberHat[] } | undefined | null,
-  isTeamOwner = false
+  isServerFounderOrTeamOwner = false
 ): boolean {
-  return isTeamOwner || !!member?.hats?.includes('founder');
+  if (isServerFounderOrTeamOwner) return true;
+  return !!member?.hats?.includes('founder');
 }
 
 function defaultHatsFor(partner: string, role?: string): MemberHat[] {
@@ -124,12 +165,42 @@ function defaultHatsFor(partner: string, role?: string): MemberHat[] {
   return ['founder', 'curator', 'promoter'];
 }
 
+/**
+ * Derives display-only WSDE hats from live Appwrite Team membership roles when an account is linked (§8.4).
+ */
+export function deriveMemberHatsFromRoles(
+  roles: readonly string[] | undefined | null,
+  fallbackMember?: Pick<CoopMemberProfile, 'partner' | 'role' | 'hats'>
+): MemberHat[] {
+  if (Array.isArray(roles) && roles.length > 0) {
+    const derived = new Set<MemberHat>();
+    for (const r of roles) {
+      const clean = String(r || '').trim().toLowerCase();
+      if (clean === 'owner' || clean === 'founder') derived.add('founder');
+      else if (clean === 'curator') derived.add('curator');
+      else if (clean === 'promoter') derived.add('promoter');
+      else if (clean === 'enabler') derived.add('enabler');
+      else if (clean === 'consignor') derived.add('consignor');
+    }
+    if (derived.size > 0) return Array.from(derived);
+  }
+  const validFallback = (Array.isArray(fallbackMember?.hats) ? fallbackMember!.hats : []).filter(
+    (h): h is MemberHat => h in MEMBER_HAT_META
+  );
+  if (validFallback.length > 0) return validFallback;
+  return defaultHatsFor(fallbackMember?.partner || 'HUCK', fallbackMember?.role);
+}
+
 export interface CoopMemberProfile {
   name: string;
   partner: 'HUCK' | 'PDXGL' | 'SWEAT' | 'BB';
   role: 'Co-op Member' | 'Partner Curator' | 'Marketing & Social Enabler' | 'Consignor';
   canVote: boolean;
-  /** Combinable WSDE hats. Derived from partner/role for legacy records. */
+  /** Optional linked Appwrite Auth User ID (set by Founder/Owner in Roles panel; server re-verifies JWT) */
+  userId?: string;
+  /** Optional display email hint for matching */
+  email?: string;
+  /** Combinable WSDE hats (display-only; server security uses Appwrite Team roles). */
   hats?: MemberHat[];
   /** Physical barcode prefix for Curator/Consignor hats (e.g. 'HUCK-'). */
   inventoryPrefix?: string;
@@ -196,32 +267,42 @@ export interface ConsignorSettlementResult {
 /** Single shared consignor payout formula for /coop/settlements and the PDF statement. */
 export function calculateConsignorSettlement(input: ConsignorSettlementInput): ConsignorSettlementResult {
   const { agreement, netStoreDeposit, grossRatio, boothRent, isMonthInProgress } = input;
-  const net = Math.max(0, Number(netStoreDeposit) || 0);
+  const netCents = Math.max(0, Math.round((Number(netStoreDeposit) || 0) * 100));
   const pct = Math.min(60, Math.max(0, Number(agreement.coopCommissionPct) || 0)) / 100;
-  const round = (n: number) => Number(n.toFixed(2));
+  const boothRentCents = Math.max(0, Math.round((Number(boothRent) || 0) * 100));
 
-  let rent = 0;
-  let commission = 0;
+  let rentCents = 0;
+  let commissionCents = 0;
   let formulaLabel = '';
 
   if (agreement.mode === 'flat_commission') {
-    commission = round(net * pct);
-    formulaLabel = `Straight Consignment Split (${round(100 - pct * 100)}% Consignor / ${round(pct * 100)}% Co-op)`;
+    commissionCents = Math.round(netCents * pct);
+    const consignorPctLabel = Math.round((1 - pct) * 10000) / 100;
+    const coopPctLabel = Math.round(pct * 10000) / 100;
+    formulaLabel = `Straight Consignment Split (${consignorPctLabel}% Consignor / ${coopPctLabel}% Co-op)`;
   } else if (agreement.mode === 'fixed_shelf_rent') {
-    const fixed = isMonthInProgress ? 0 : Math.max(0, Number(agreement.fixedMonthlyRent) || 0);
-    rent = agreement.capRentAtNetSales ? Math.min(fixed, net) : fixed;
-    commission = round(Math.max(0, net - rent) * pct);
-    formulaLabel = `Fixed Shelf Rent ($${round(Number(agreement.fixedMonthlyRent) || 0).toFixed(2)}/mo)${pct > 0 ? ` + ${round(pct * 100)}% Co-op` : ''}`;
+    const fixedCents = isMonthInProgress
+      ? 0
+      : Math.max(0, Math.round((Number(agreement.fixedMonthlyRent) || 0) * 100));
+    rentCents = agreement.capRentAtNetSales ? Math.min(fixedCents, netCents) : fixedCents;
+    commissionCents = Math.round(Math.max(0, netCents - rentCents) * pct);
+    const fixedDollars = (Math.round((Number(agreement.fixedMonthlyRent) || 0) * 100) / 100).toFixed(2);
+    const coopPctLabel = Math.round(pct * 10000) / 100;
+    formulaLabel = `Fixed Shelf Rent ($${fixedDollars}/mo)${pct > 0 ? ` + ${coopPctLabel}% Co-op` : ''}`;
   } else {
-    const share = round(grossRatio * boothRent);
-    rent = agreement.capRentAtNetSales ? Math.min(share, net) : share;
+    const shareCents = Math.round(grossRatio * boothRentCents);
+    rentCents = agreement.capRentAtNetSales ? Math.min(shareCents, netCents) : shareCents;
     formulaLabel = 'Pro-Rata Booth Rent Share';
   }
 
-  rent = round(rent);
-  const rawPayout = round(net - rent - commission);
-  const payout = agreement.capRentAtNetSales ? Math.max(0, rawPayout) : rawPayout;
-  return { rentDeduction: rent, coopCommission: commission, payout, formulaLabel };
+  const rawPayoutCents = netCents - rentCents - commissionCents;
+  const payoutCents = agreement.capRentAtNetSales ? Math.max(0, rawPayoutCents) : rawPayoutCents;
+  return {
+    rentDeduction: rentCents / 100,
+    coopCommission: commissionCents / 100,
+    payout: payoutCents / 100,
+    formulaLabel,
+  };
 }
 
 export function findConsignorAgreement(
@@ -248,6 +329,10 @@ export interface CoopPolicyConfig {
   currentReserveBalance: number;
   /** Prior month carried-over shortfall ($) that must be repaid 100% first in Gate 4A before Gate 4B dividends unlock */
   carriedOverShortfall: number;
+  /** Mondragon ICA retained % of Gate 4B bonus (0–50, default 0 = 100% monthly cash check) */
+  icaRetainedPct: number;
+  /** $0-Inventory Enabler Sales Pool Scope ('labor_only' default vs 'equal_all' in equal mode) */
+  sweatSalesPoolMode: SweatSalesPoolMode;
   /** Mondragon ICA annual target cash bonus yield % on retained member capital balances (default 7%) */
   icaAnnualYieldRatePct: number;
   /** Mondragon pay/bounty ratio compression cap (default 4.5:1 standard, max 6.5:1) */
@@ -269,29 +354,75 @@ export type CoopLaborCategory =
   | 'Tech & Admin'
   | 'Sourcing';
 
+export const COOP_LABOR_CATEGORIES: readonly CoopLaborCategory[] = [
+  'Booth Restock',
+  'Photography & Staging',
+  'Social & Marketing',
+  'Online Fulfillment & Shipping',
+  'Pop-Up & Event Staffing',
+  'Tech & Admin',
+  'Sourcing',
+] as const;
+
 export type WsdeSurplusLaborRole = 'Producer of Surplus' | 'Enabler of Surplus';
+
+export type LaborApprovalStatus = 'pending' | 'approved' | 'rejected';
 
 export interface CoopLaborEntry {
   id: string;
   date: string;
   member: string;
+  memberUserId?: string;
   partner: 'HUCK' | 'PDXGL' | 'SWEAT';
   category: CoopLaborCategory;
   hours: number;
   notes: string;
   /** Optional proof link or deliverable reference (e.g. Dropcast ID, Instagram/TikTok Reel URL, Booth Photo batch) */
   deliverableRef?: string;
+  /** Missing = legacy entry (treated as 'pending' until Founder approves; never auto-approved) */
+  approval?: LaborApprovalStatus;
+  approvedBy?: string;
+  approvedByUserId?: string;
+  /** ISO instant (audit trail only; never used for month bucketing) */
+  approvedAt?: string;
+  /** Required on reject/unapprove, optional on approve */
+  decisionNote?: string;
+  /** Flagged when the sole confirmed Founder approves their own logged hours */
+  selfApproved?: boolean;
+  loggedByUserId?: string;
+  loggedByName?: string;
+  updatedAt?: string;
 }
 
 export interface MemberLaborShareSummary {
   member: string;
   partner: 'HUCK' | 'PDXGL' | 'SWEAT';
   roleLabel: string;
+  /** Approved hours (basis for Gate 4B Sweat-Equity share) */
   hours: number;
+  approvedHours: number;
+  pendingHours: number;
+  rejectedHours: number;
   sharePct: number;
   deliverableCount: number;
+  deliverableRefs: string[];
   enablerHours: number;
   producerHours: number;
+  entries: CoopLaborEntry[];
+  approvedByNames: string[];
+  latestApprovedAt?: string;
+}
+
+export interface LaborApprovalSummary {
+  approvedHours: number;
+  pendingHours: number;
+  rejectedHours: number;
+  approvedCount: number;
+  pendingCount: number;
+  rejectedCount: number;
+  legacyPendingCount: number;
+  invalidExcludedCount: number;
+  latestApprovedAt?: string;
 }
 
 export interface CoopGovernanceCloudState {
@@ -299,7 +430,9 @@ export interface CoopGovernanceCloudState {
   surplusPolicyMode: SurplusPolicyMode;
   surplusSplitBasis: SurplusSplitBasis;
   policyConfig: CoopPolicyConfig;
+  /** Legacy field preserved read-only for 1-time migration into coop_ledger; no longer written from browser */
   laborEntries: CoopLaborEntry[];
+  laborMigratedAt?: string;
   updatedAt: string;
 }
 
@@ -324,6 +457,8 @@ export const DEFAULT_COOP_POLICY_CONFIG: CoopPolicyConfig = {
   reserveCapTarget: 500,
   currentReserveBalance: 0,
   carriedOverShortfall: 0,
+  icaRetainedPct: 0,
+  sweatSalesPoolMode: 'labor_only',
   icaAnnualYieldRatePct: 7,
   payRatioCapStandard: 4.5,
   minAgreeVotes: 2,
@@ -336,36 +471,40 @@ export const DEFAULT_COOP_POLICY_CONFIG: CoopPolicyConfig = {
   ],
 };
 
+/** Demo-only charter seed entries for public `/coop` preview. Never eligible for real settlements (§5 item 24). */
 export const DEFAULT_COOP_LABOR_ENTRIES: CoopLaborEntry[] = [
   {
     id: 'labor-seed-1',
-    date: new Date().toISOString().slice(0, 10),
+    date: pacificTodayYmd(),
     member: 'Mike (HUCK)',
     partner: 'HUCK',
     category: 'Booth Restock',
     hours: 2.0,
     notes: 'Restocked booth #0EJ, staged vintage pieces & verified Ricochet tags.',
     deliverableRef: 'Booth #0EJ Drop',
+    approval: 'approved',
   },
   {
     id: 'labor-seed-2',
-    date: new Date(Date.now() - 86400000 * 2).toISOString().slice(0, 10),
+    date: pacificTodayYmd(new Date(Date.now() - 86400000 * 2)),
     member: 'PDX Partner (PDXGL)',
     partner: 'PDXGL',
     category: 'Photography & Staging',
     hours: 1.5,
     notes: 'Deep Scan photo enrichment on tabletop games & cataloged SKUs.',
     deliverableRef: '18 RPG SKUs Scanned',
+    approval: 'approved',
   },
   {
     id: 'labor-seed-3',
-    date: new Date(Date.now() - 86400000 * 4).toISOString().slice(0, 10),
+    date: pacificTodayYmd(new Date(Date.now() - 86400000 * 4)),
     member: 'Jesse (Social & Ops)',
     partner: 'SWEAT',
     category: 'Social & Marketing',
     hours: 1.5,
     notes: 'Filmed & edited Dropcast social reel showcasing new Memory Den booth drop.',
     deliverableRef: 'IG/TikTok Dropcast Reel #12',
+    approval: 'approved',
   },
 ];
 
@@ -376,7 +515,6 @@ const LOCAL_STORAGE_PROPOSALS_KEY = 'huck_coop_proposals_v1';
 const LOCAL_STORAGE_POLICY_MODE_KEY = 'rc_coop_surplus_policy_mode';
 const LOCAL_STORAGE_SPLIT_BASIS_KEY = 'rc_coop_surplus_split_basis';
 const LOCAL_STORAGE_POLICY_CONFIG_KEY = 'rc_coop_policy_config_v1';
-const LOCAL_STORAGE_LABOR_KEY = 'huck_coop_labor_logs';
 
 function sanitizeStorageIds(ids?: string[]): string[] {
   if (!Array.isArray(ids)) return [];
@@ -415,9 +553,9 @@ function docToCoopProposal(doc: any): CoopProposal {
     rationale: cleanEscapedCurrency(doc.rationale || ''),
     financialImpact: doc.financialImpact ? cleanEscapedCurrency(doc.financialImpact) : undefined,
     presetAction: doc.presetAction ? (doc.presetAction as CoopProposal['presetAction']) : undefined,
-    deadline: String(doc.deadline || new Date().toISOString().slice(0, 10)),
+    deadline: String(doc.deadline || pacificTodayYmd()),
     status: doc.status === 'passed' || doc.status === 'blocked' ? doc.status : 'active',
-    createdAt: String(doc.createdAt || doc.$createdAt || new Date().toISOString().slice(0, 10)).slice(0, 10),
+    createdAt: String(doc.createdAt || doc.$createdAt || pacificTodayYmd()).slice(0, 10),
     updatedAt: doc.updatedAt || doc.$updatedAt || undefined,
     lastEditKind: doc.lastEditKind === 'formatting' || doc.lastEditKind === 'amendment' ? doc.lastEditKind : undefined,
     imageId: cover,
@@ -452,15 +590,28 @@ function proposalToDocPayload(proposal: CoopProposal, tenantId = 'huck_collectiv
     votesJson: JSON.stringify(proposal.votes || {}).slice(0, 65000),
     presetAction: proposal.presetAction ? String(proposal.presetAction).slice(0, 64) : null,
     lastEditKind: proposal.lastEditKind ? String(proposal.lastEditKind).slice(0, 32) : null,
-    createdAt: String(proposal.createdAt || new Date().toISOString().slice(0, 10)).slice(0, 64),
+    createdAt: String(proposal.createdAt || pacificTodayYmd()).slice(0, 64),
     updatedAt: new Date().toISOString(),
     tenantId: String(tenantId || 'huck_collective').slice(0, 64),
   };
 }
 
-function inferPartnerFromMemberName(member: string, explicit?: string): 'HUCK' | 'PDXGL' | 'SWEAT' {
-  if (explicit === 'SWEAT' || /social|sweat|marketing|enabler/i.test(member)) return 'SWEAT';
-  if (explicit === 'PDXGL' || /pdx/i.test(member)) return 'PDXGL';
+/**
+ * Explicit partner ALWAYS wins first (§5 item 26); name-keyword heuristic applies ONLY when explicit is absent.
+ */
+export function inferPartnerFromMemberName(
+  member: string,
+  explicit?: string
+): 'HUCK' | 'PDXGL' | 'SWEAT' {
+  const exp = String(explicit || '')
+    .trim()
+    .toUpperCase()
+    .replace(/[-_]+$/, '');
+  if (exp === 'HUCK' || exp === 'PDXGL' || exp === 'SWEAT') {
+    return exp;
+  }
+  if (/social|sweat|marketing|enabler/i.test(member)) return 'SWEAT';
+  if (/pdx/i.test(member)) return 'PDXGL';
   return 'HUCK';
 }
 
@@ -488,6 +639,8 @@ export function normalizePolicyConfig(raw?: Partial<CoopPolicyConfig>): CoopPoli
     const usesPrefix = hats.some((h) => MEMBER_HAT_META[h].usesPrefix);
     return {
       ...m,
+      userId: m.userId ? String(m.userId).trim() : undefined,
+      email: m.email ? String(m.email).trim().toLowerCase() : undefined,
       hats,
       inventoryPrefix: usesPrefix ? m.inventoryPrefix || (m.partner === 'SWEAT' ? undefined : `${m.partner}-`) : undefined,
       canVote: hats.some((h) => MEMBER_HAT_META[h].canVote),
@@ -512,6 +665,10 @@ export function normalizePolicyConfig(raw?: Partial<CoopPolicyConfig>): CoopPoli
       };
     });
 
+  const icaRetainedPct = Math.min(50, Math.max(0, Math.round(Number(base.icaRetainedPct ?? 0))));
+  const sweatSalesPoolMode: SweatSalesPoolMode =
+    base.sweatSalesPoolMode === 'equal_all' ? 'equal_all' : 'labor_only';
+
   return {
     consignors,
     curatorSharePct,
@@ -522,6 +679,8 @@ export function normalizePolicyConfig(raw?: Partial<CoopPolicyConfig>): CoopPoli
     reserveCapTarget: Math.max(0, Number(base.reserveCapTarget ?? 500)),
     currentReserveBalance: Math.max(0, Number(base.currentReserveBalance ?? 0)),
     carriedOverShortfall: Math.max(0, Number(base.carriedOverShortfall ?? 0)),
+    icaRetainedPct,
+    sweatSalesPoolMode,
     icaAnnualYieldRatePct: Math.min(25, Math.max(0, Number(base.icaAnnualYieldRatePct ?? 7))),
     payRatioCapStandard: Math.min(6.5, Math.max(1, Number(base.payRatioCapStandard ?? 4.5))),
     minAgreeVotes: Math.max(1, Math.round(Number(base.minAgreeVotes ?? 2))),
@@ -530,34 +689,156 @@ export function normalizePolicyConfig(raw?: Partial<CoopPolicyConfig>): CoopPoli
   };
 }
 
+export function effectiveLaborApproval(entry?: Pick<CoopLaborEntry, 'approval'> | null): LaborApprovalStatus {
+  if (!entry) return 'pending';
+  if (entry.approval === 'approved' || entry.approval === 'rejected') return entry.approval;
+  return 'pending';
+}
+
+export function isDemoSeedLaborEntry(entry?: Pick<CoopLaborEntry, 'id'> | null): boolean {
+  return String(entry?.id || '').startsWith('labor-seed-');
+}
+
+export function isValidLaborEntryData(entry?: Pick<CoopLaborEntry, 'date' | 'hours'> | null): boolean {
+  if (!entry) return false;
+  const monthKey = laborEntryMonthKey(entry.date);
+  if (!monthKey) return false;
+  const hrs = Number(entry.hours);
+  return Number.isFinite(hrs) && hrs > 0 && hrs <= 24;
+}
+
+/**
+ * Settlement Eligibility Gate (§5 items 24–25 & §6):
+ * Must NOT be a demo seed row, MUST have valid calendar date + hours > 0, and MUST be explicitly 'approved'.
+ */
+export function isSettlementEligibleLabor(entry?: CoopLaborEntry | null): boolean {
+  if (!entry) return false;
+  return (
+    !isDemoSeedLaborEntry(entry) &&
+    isValidLaborEntryData(entry) &&
+    entry.approval === 'approved'
+  );
+}
+
+/**
+ * Normalizes cloud/legacy labor entries WITHOUT fabricating dates, hours, or demo seed rows (§5 items 24–25 & §6).
+ */
 export function normalizeLaborEntries(raw?: any[]): CoopLaborEntry[] {
   if (!Array.isArray(raw) || raw.length === 0) {
-    return [...DEFAULT_COOP_LABOR_ENTRIES];
+    return [];
   }
   return raw.map((entry, idx) => {
-    const member = String(entry?.member || 'Mike (HUCK)').replace('Tyler (Core)', 'Mike (HUCK)');
+    const member = String(entry?.member || '').trim().replace('Tyler (Core)', 'Mike (HUCK)');
+    const rawHours = Number(entry?.hours);
+    const hours = Number.isFinite(rawHours) ? Number(rawHours.toFixed(2)) : 0;
+    const rawApproval = entry?.approval;
+    const approval: LaborApprovalStatus | undefined =
+      rawApproval === 'approved' || rawApproval === 'pending' || rawApproval === 'rejected'
+        ? rawApproval
+        : undefined;
+    const catCandidate = String(entry?.category || 'Booth Restock') as CoopLaborCategory;
+    const category: CoopLaborCategory = COOP_LABOR_CATEGORIES.includes(catCandidate)
+      ? catCandidate
+      : 'Booth Restock';
+
     return {
       id: String(entry?.id || `labor-${idx + 1}`),
-      date: String(entry?.date || new Date().toISOString().slice(0, 10)).slice(0, 10),
-      member,
-      partner: inferPartnerFromMemberName(member, entry?.partner),
-      category: (entry?.category as CoopLaborCategory) || 'Booth Restock',
-      hours: Math.max(0.25, Number(entry?.hours || 1)),
+      date: String(entry?.date ?? '').trim().slice(0, 10),
+      member: member || 'Member',
+      memberUserId: entry?.memberUserId ? String(entry.memberUserId).trim() : undefined,
+      partner: inferPartnerFromMemberName(member || 'Member', entry?.partner),
+      category,
+      hours,
       notes: String(entry?.notes || ''),
-      deliverableRef: entry?.deliverableRef ? String(entry.deliverableRef) : undefined,
+      deliverableRef: entry?.deliverableRef ? String(entry.deliverableRef).trim() : undefined,
+      approval,
+      approvedBy: entry?.approvedBy ? String(entry.approvedBy).trim() : undefined,
+      approvedByUserId: entry?.approvedByUserId ? String(entry.approvedByUserId).trim() : undefined,
+      approvedAt: entry?.approvedAt ? String(entry.approvedAt).trim() : undefined,
+      decisionNote: entry?.decisionNote ? String(entry.decisionNote).trim() : undefined,
+      selfApproved: entry?.selfApproved === true ? true : undefined,
+      loggedByUserId: entry?.loggedByUserId ? String(entry.loggedByUserId).trim() : undefined,
+      loggedByName: entry?.loggedByName ? String(entry.loggedByName).trim() : undefined,
+      updatedAt: entry?.updatedAt ? String(entry.updatedAt).trim() : undefined,
     };
   });
 }
 
-export function getLaborHoursByPartnerForMonth(
+export function summarizeLaborApproval(
   entries: CoopLaborEntry[],
   monthKey: string
-): Record<'HUCK' | 'PDXGL' | 'SWEAT', number> {
-  const totals: Record<'HUCK' | 'PDXGL' | 'SWEAT', number> = { HUCK: 0, PDXGL: 0, SWEAT: 0 };
+): LaborApprovalSummary {
+  let approvedHours = 0;
+  let pendingHours = 0;
+  let rejectedHours = 0;
+  let approvedCount = 0;
+  let pendingCount = 0;
+  let rejectedCount = 0;
+  let legacyPendingCount = 0;
+  let invalidExcludedCount = 0;
+  let latestApprovedAt: string | undefined;
+
   for (const entry of entries || []) {
-    if (monthKey !== 'all' && !String(entry.date || '').startsWith(monthKey)) {
+    if (isDemoSeedLaborEntry(entry)) continue;
+
+    const entryMonth = laborEntryMonthKey(entry.date);
+    if (!isValidLaborEntryData(entry)) {
+      if (monthKey === 'all' || !entryMonth || entryMonth === monthKey) {
+        invalidExcludedCount += 1;
+      }
       continue;
     }
+
+    if (monthKey !== 'all' && entryMonth !== monthKey) continue;
+
+    const hrs = Number(entry.hours) || 0;
+    const status = effectiveLaborApproval(entry);
+    if (status === 'approved') {
+      approvedHours = Number((approvedHours + hrs).toFixed(2));
+      approvedCount += 1;
+      if (entry.approvedAt && (!latestApprovedAt || entry.approvedAt > latestApprovedAt)) {
+        latestApprovedAt = entry.approvedAt;
+      }
+    } else if (status === 'rejected') {
+      rejectedHours = Number((rejectedHours + hrs).toFixed(2));
+      rejectedCount += 1;
+    } else {
+      pendingHours = Number((pendingHours + hrs).toFixed(2));
+      pendingCount += 1;
+      if (!entry.approval) legacyPendingCount += 1;
+    }
+  }
+
+  return {
+    approvedHours,
+    pendingHours,
+    rejectedHours,
+    approvedCount,
+    pendingCount,
+    rejectedCount,
+    legacyPendingCount,
+    invalidExcludedCount,
+    latestApprovedAt,
+  };
+}
+
+export function getLaborHoursByPartnerForMonth(
+  entries: CoopLaborEntry[],
+  monthKey: string,
+  opts: { status?: 'approved' | 'all' | 'pending' } = { status: 'approved' }
+): Record<'HUCK' | 'PDXGL' | 'SWEAT', number> {
+  const mode = opts.status || 'approved';
+  const totals: Record<'HUCK' | 'PDXGL' | 'SWEAT', number> = { HUCK: 0, PDXGL: 0, SWEAT: 0 };
+  for (const entry of entries || []) {
+    if (isDemoSeedLaborEntry(entry) || !isValidLaborEntryData(entry)) continue;
+    const entryMonth = laborEntryMonthKey(entry.date);
+    if (monthKey !== 'all' && entryMonth !== monthKey) continue;
+
+    const status = effectiveLaborApproval(entry);
+    if (mode === 'approved' && status !== 'approved') continue;
+    if (mode === 'pending' && status !== 'pending') continue;
+    if (mode === 'all' && status === 'rejected') continue;
+
     const partner = inferPartnerFromMemberName(entry.member, entry.partner);
     totals[partner] = Number((totals[partner] + (Number(entry.hours) || 0)).toFixed(2));
   }
@@ -567,70 +848,133 @@ export function getLaborHoursByPartnerForMonth(
 export function getLaborHoursByMemberForMonth(
   entries: CoopLaborEntry[],
   monthKey: string,
-  roster: CoopMemberProfile[] = DEFAULT_COOP_POLICY_CONFIG.members
+  roster: CoopMemberProfile[] = DEFAULT_COOP_POLICY_CONFIG.members,
+  opts: { status?: 'approved' | 'all' | 'pending' } = { status: 'approved' }
 ): MemberLaborShareSummary[] {
+  const mode = opts.status || 'approved';
   const map = new Map<
     string,
     {
       member: string;
       partner: 'HUCK' | 'PDXGL' | 'SWEAT';
       roleLabel: string;
-      hours: number;
-      deliverableCount: number;
+      approvedHours: number;
+      pendingHours: number;
+      rejectedHours: number;
+      deliverableRefsSet: Set<string>;
       enablerHours: number;
       producerHours: number;
+      entries: CoopLaborEntry[];
+      approvedBySet: Set<string>;
+      latestApprovedAt?: string;
     }
   >();
 
-  let totalHours = 0;
+  let totalApprovedHours = 0;
 
   for (const entry of entries || []) {
-    if (monthKey !== 'all' && !String(entry.date || '').startsWith(monthKey)) {
-      continue;
-    }
+    if (isDemoSeedLaborEntry(entry) || !isValidLaborEntryData(entry)) continue;
+    const entryMonth = laborEntryMonthKey(entry.date);
+    if (monthKey !== 'all' && entryMonth !== monthKey) continue;
+
+    const status = effectiveLaborApproval(entry);
+    if (mode === 'approved' && status !== 'approved') continue;
+    if (mode === 'pending' && status !== 'pending') continue;
+    if (mode === 'all' && status === 'rejected') continue;
+
     const hrs = Math.max(0, Number(entry.hours) || 0);
     if (hrs <= 0) continue;
 
-    totalHours += hrs;
     const memberName = String(entry.member || 'Member').trim();
+    const mapKey = memberName.toLowerCase();
     const partner = inferPartnerFromMemberName(memberName, entry.partner);
-    const rosterMatch = roster.find(
-      (r) => r.name.toLowerCase() === memberName.toLowerCase() || r.partner === partner
-    );
+    const exactRosterMatch = roster.find((r) => r.name.trim().toLowerCase() === mapKey);
+    const partnerRosterFallback = roster.find((r) => r.partner === partner);
+    const rosterMatch = exactRosterMatch || partnerRosterFallback;
+
     const roleLabel =
       partner === 'SWEAT' || rosterMatch?.role === 'Marketing & Social Enabler'
         ? 'Marketing & Social Enabler'
         : rosterMatch?.role || 'Curator Worker-Member';
 
     const laborRole = classifySurplusLaborRole(entry.category);
-    const existing = map.get(memberName);
-    if (existing) {
-      existing.hours = Number((existing.hours + hrs).toFixed(2));
-      if (entry.deliverableRef) existing.deliverableCount += 1;
-      if (laborRole === 'Enabler of Surplus') {
-        existing.enablerHours = Number((existing.enablerHours + hrs).toFixed(2));
-      } else {
-        existing.producerHours = Number((existing.producerHours + hrs).toFixed(2));
-      }
-    } else {
-      map.set(memberName, {
-        member: memberName,
+
+    let bucket = map.get(mapKey);
+    if (!bucket) {
+      bucket = {
+        member: exactRosterMatch?.name || memberName,
         partner,
         roleLabel,
-        hours: Number(hrs.toFixed(2)),
-        deliverableCount: entry.deliverableRef ? 1 : 0,
-        enablerHours: laborRole === 'Enabler of Surplus' ? Number(hrs.toFixed(2)) : 0,
-        producerHours: laborRole === 'Producer of Surplus' ? Number(hrs.toFixed(2)) : 0,
-      });
+        approvedHours: 0,
+        pendingHours: 0,
+        rejectedHours: 0,
+        deliverableRefsSet: new Set<string>(),
+        enablerHours: 0,
+        producerHours: 0,
+        entries: [],
+        approvedBySet: new Set<string>(),
+      };
+      map.set(mapKey, bucket);
+    }
+
+    bucket.entries.push(entry);
+
+    if (status === 'approved') {
+      totalApprovedHours += hrs;
+      bucket.approvedHours = Number((bucket.approvedHours + hrs).toFixed(2));
+      if (entry.deliverableRef) bucket.deliverableRefsSet.add(entry.deliverableRef);
+      if (laborRole === 'Enabler of Surplus') {
+        bucket.enablerHours = Number((bucket.enablerHours + hrs).toFixed(2));
+      } else {
+        bucket.producerHours = Number((bucket.producerHours + hrs).toFixed(2));
+      }
+      if (entry.approvedBy) bucket.approvedBySet.add(entry.approvedBy);
+      if (entry.approvedAt && (!bucket.latestApprovedAt || entry.approvedAt > bucket.latestApprovedAt)) {
+        bucket.latestApprovedAt = entry.approvedAt;
+      }
+    } else if (status === 'pending') {
+      bucket.pendingHours = Number((bucket.pendingHours + hrs).toFixed(2));
+      if (mode === 'pending' && entry.deliverableRef) {
+        bucket.deliverableRefsSet.add(entry.deliverableRef);
+      }
+    } else {
+      bucket.rejectedHours = Number((bucket.rejectedHours + hrs).toFixed(2));
     }
   }
 
   return Array.from(map.values())
-    .sort((a, b) => b.hours - a.hours)
-    .map((item) => ({
-      ...item,
-      sharePct: totalHours > 0 ? Number(((item.hours / totalHours) * 100).toFixed(1)) : 0,
-    }));
+    .sort((a, b) => {
+      if (b.approvedHours !== a.approvedHours) return b.approvedHours - a.approvedHours;
+      if (b.pendingHours !== a.pendingHours) return b.pendingHours - a.pendingHours;
+      return a.member.localeCompare(b.member);
+    })
+    .map((item) => {
+      const sortedEntries = item.entries
+        .slice()
+        .sort((x, y) => String(y.date || '').localeCompare(String(x.date || '')));
+      const deliverableRefs = Array.from(item.deliverableRefsSet);
+      const basisHours = mode === 'pending' ? item.pendingHours : item.approvedHours;
+      return {
+        member: item.member,
+        partner: item.partner,
+        roleLabel: item.roleLabel,
+        hours: basisHours,
+        approvedHours: item.approvedHours,
+        pendingHours: item.pendingHours,
+        rejectedHours: item.rejectedHours,
+        sharePct:
+          totalApprovedHours > 0 && mode !== 'pending'
+            ? Number(((item.approvedHours / totalApprovedHours) * 100).toFixed(1))
+            : 0,
+        deliverableCount: deliverableRefs.length,
+        deliverableRefs,
+        enablerHours: item.enablerHours,
+        producerHours: item.producerHours,
+        entries: sortedEntries,
+        approvedByNames: Array.from(item.approvedBySet),
+        latestApprovedAt: item.latestApprovedAt,
+      };
+    });
 }
 
 function readLocalGovernanceFallback(defaultProposals: CoopProposal[]): CoopGovernanceCloudState {
@@ -638,7 +982,6 @@ function readLocalGovernanceFallback(defaultProposals: CoopProposal[]): CoopGove
   let surplusPolicyMode: SurplusPolicyMode = 'patronage_90_10';
   let surplusSplitBasis: SurplusSplitBasis = 'volume';
   let policyConfig: CoopPolicyConfig = { ...DEFAULT_COOP_POLICY_CONFIG };
-  let laborEntries: CoopLaborEntry[] = [...DEFAULT_COOP_LABOR_ENTRIES];
 
   if (typeof window !== 'undefined') {
     try {
@@ -647,7 +990,12 @@ function readLocalGovernanceFallback(defaultProposals: CoopProposal[]): CoopGove
         const parsed = JSON.parse(savedProposals);
         if (Array.isArray(parsed) && parsed.length > 0) {
           const hasSurplusProp = parsed.some((p: CoopProposal) => p.id === 'prop-surplus-policy');
-          proposals = hasSurplusProp && defaultProposals[0] ? parsed : defaultProposals.length > 0 ? [defaultProposals[0], ...parsed] : parsed;
+          proposals =
+            hasSurplusProp && defaultProposals[0]
+              ? parsed
+              : defaultProposals.length > 0
+                ? [defaultProposals[0], ...parsed]
+                : parsed;
         }
       }
       const savedMode = localStorage.getItem(LOCAL_STORAGE_POLICY_MODE_KEY);
@@ -662,10 +1010,6 @@ function readLocalGovernanceFallback(defaultProposals: CoopProposal[]): CoopGove
       if (savedPolicyConfig) {
         policyConfig = normalizePolicyConfig(JSON.parse(savedPolicyConfig));
       }
-      const savedLabor = localStorage.getItem(LOCAL_STORAGE_LABOR_KEY);
-      if (savedLabor) {
-        laborEntries = normalizeLaborEntries(JSON.parse(savedLabor));
-      }
     } catch (err) {
       console.warn('[coopGovernance] LocalStorage fallback read warning:', err);
     }
@@ -676,7 +1020,7 @@ function readLocalGovernanceFallback(defaultProposals: CoopProposal[]): CoopGove
     surplusPolicyMode,
     surplusSplitBasis,
     policyConfig,
-    laborEntries,
+    laborEntries: [],
     updatedAt: new Date().toISOString(),
   };
 }
@@ -695,9 +1039,6 @@ function mirrorToLocalStorage(state: Partial<CoopGovernanceCloudState>): void {
     }
     if (state.policyConfig) {
       localStorage.setItem(LOCAL_STORAGE_POLICY_CONFIG_KEY, JSON.stringify(state.policyConfig));
-    }
-    if (state.laborEntries) {
-      localStorage.setItem(LOCAL_STORAGE_LABOR_KEY, JSON.stringify(state.laborEntries));
     }
   } catch (err) {
     console.warn('[coopGovernance] LocalStorage mirror warning:', err);
@@ -766,7 +1107,6 @@ export async function loadCoopGovernanceState(
   const mergedProposals = (collectionLoaded && collectionProposals.length > 0 ? collectionProposals : legacyProposals)
     .slice()
     .sort((a, b) => {
-      // Keep newest createdAt proposals first; preserve prop-surplus-policy near top if tied
       const dateCmp = String(b.createdAt || '').localeCompare(String(a.createdAt || ''));
       if (dateCmp !== 0) return dateCmp;
       return String(b.id || '').localeCompare(String(a.id || ''));
@@ -788,17 +1128,21 @@ export async function loadCoopGovernanceState(
     ? normalizePolicyConfig(parsedSnapshot.policyConfig)
     : localState.policyConfig;
 
-  const laborEntries =
-    Array.isArray(parsedSnapshot.laborEntries) && parsedSnapshot.laborEntries.length > 0
+  // After server migration (`laborMigratedAt` set), ignore legacy manifest laborEntries forever (§7.3)
+  const legacyLaborEntries =
+    !parsedSnapshot.laborMigratedAt &&
+    Array.isArray(parsedSnapshot.laborEntries) &&
+    parsedSnapshot.laborEntries.length > 0
       ? normalizeLaborEntries(parsedSnapshot.laborEntries)
-      : localState.laborEntries;
+      : [];
 
   const cloudState: CoopGovernanceCloudState = {
     proposals: mergedProposals,
     surplusPolicyMode,
     surplusSplitBasis,
     policyConfig,
-    laborEntries,
+    laborEntries: legacyLaborEntries,
+    laborMigratedAt: parsedSnapshot.laborMigratedAt ? String(parsedSnapshot.laborMigratedAt) : undefined,
     updatedAt: manifestUpdatedAt || parsedSnapshot.updatedAt || new Date().toISOString(),
   };
 
@@ -825,7 +1169,6 @@ export async function saveSingleCoopProposal(
     updatedAt: new Date().toISOString(),
   };
 
-  // Update local cache immediately
   const local = readLocalGovernanceFallback([]);
   const idx = local.proposals.findIndex((p) => p.id === docId);
   const nextLocalProposals =
@@ -878,20 +1221,23 @@ export async function deleteCoopProposal(
     }
   }
 
-  // Also prune from legacy manifest snapshot so auto-migration doesn't resurrect a deleted proposal
   await saveCoopGovernanceState({ proposals: nextLocalProposals }, tenantId).catch(() => {});
   return deletedFromCol;
 }
 
+/**
+ * Saves governance proposals & policy dials ONLY.
+ * Browser writes NEVER modify `laborEntries` (§7.3 — labor lives in server-only `coop_ledger`).
+ */
 export async function saveCoopGovernanceState(
-  partial: Partial<CoopGovernanceCloudState>,
+  partial: Partial<Omit<CoopGovernanceCloudState, 'laborEntries'>>,
   tenantId = 'huck_collective'
 ): Promise<boolean> {
   mirrorToLocalStorage(partial);
   const dbId = getDatabaseId();
 
   try {
-    let existing: Partial<CoopGovernanceCloudState> = readLocalGovernanceFallback([]);
+    let existing: any = readLocalGovernanceFallback([]);
     try {
       const currentDoc: any = await databases.getDocument(dbId, MANIFESTS_COL_ID, COOP_GOVERNANCE_DOC_ID);
       if (typeof currentDoc.itemsSnapshot === 'string' && currentDoc.itemsSnapshot.trim().startsWith('{')) {
@@ -901,18 +1247,29 @@ export async function saveCoopGovernanceState(
       // Document doesn't exist yet; will create below
     }
 
-    const nextState: CoopGovernanceCloudState = {
+    const nextPolicy = normalizePolicyConfig(partial.policyConfig ?? existing.policyConfig);
+    const preservedLegacyLabor = Array.isArray(existing.laborEntries) ? existing.laborEntries : [];
+
+    const nextSnapshot: Record<string, any> = {
       proposals: partial.proposals ?? existing.proposals ?? [],
       surplusPolicyMode: partial.surplusPolicyMode ?? existing.surplusPolicyMode ?? 'patronage_90_10',
       surplusSplitBasis: partial.surplusSplitBasis ?? existing.surplusSplitBasis ?? 'volume',
-      policyConfig: normalizePolicyConfig(partial.policyConfig ?? existing.policyConfig),
-      laborEntries: normalizeLaborEntries(partial.laborEntries ?? existing.laborEntries),
+      policyConfig: nextPolicy,
+      laborEntries: preservedLegacyLabor,
       updatedAt: new Date().toISOString(),
     };
+    if (existing.laborMigratedAt) {
+      nextSnapshot.laborMigratedAt = existing.laborMigratedAt;
+    }
 
-    mirrorToLocalStorage(nextState);
+    mirrorToLocalStorage({
+      proposals: nextSnapshot.proposals,
+      surplusPolicyMode: nextSnapshot.surplusPolicyMode,
+      surplusSplitBasis: nextSnapshot.surplusSplitBasis,
+      policyConfig: nextPolicy,
+    });
 
-    const serialized = JSON.stringify(nextState);
+    const serialized = JSON.stringify(nextSnapshot);
     const docPayload = {
       name: 'Co-op Democratic Governance & Surplus Policy Ledger',
       tenantId: tenantId || 'huck_collective',
@@ -920,19 +1277,20 @@ export async function saveCoopGovernanceState(
       locationName: 'Huckleberry Co-op Governance',
       status: 'governance_state',
       itemsSnapshot: serialized,
-      itemCount: nextState.proposals.length,
+      itemCount: nextSnapshot.proposals.length,
       notes: JSON.stringify({
-        surplusPolicyMode: nextState.surplusPolicyMode,
-        surplusSplitBasis: nextState.surplusSplitBasis,
-        curatorSharePct: nextState.policyConfig.curatorSharePct,
-        commonsSharePct: nextState.policyConfig.commonsSharePct,
-        reserveSharePct: nextState.policyConfig.reserveSharePct,
-        salesPatronagePct: nextState.policyConfig.salesPatronagePct,
-        laborPatronagePct: nextState.policyConfig.laborPatronagePct,
-        carriedOverShortfall: nextState.policyConfig.carriedOverShortfall,
-        laborCount: nextState.laborEntries.length,
-        proposalCount: nextState.proposals.length,
-        updatedAt: nextState.updatedAt,
+        surplusPolicyMode: nextSnapshot.surplusPolicyMode,
+        surplusSplitBasis: nextSnapshot.surplusSplitBasis,
+        curatorSharePct: nextPolicy.curatorSharePct,
+        commonsSharePct: nextPolicy.commonsSharePct,
+        reserveSharePct: nextPolicy.reserveSharePct,
+        salesPatronagePct: nextPolicy.salesPatronagePct,
+        laborPatronagePct: nextPolicy.laborPatronagePct,
+        icaRetainedPct: nextPolicy.icaRetainedPct,
+        sweatSalesPoolMode: nextPolicy.sweatSalesPoolMode,
+        carriedOverShortfall: nextPolicy.carriedOverShortfall,
+        proposalCount: nextSnapshot.proposals.length,
+        updatedAt: nextSnapshot.updatedAt,
       }).slice(0, 4900),
     };
 
@@ -956,6 +1314,9 @@ export async function saveCoopGovernanceState(
   }
 }
 
+/**
+ * Logs Sweat-Equity / Dropcast labor strictly through the server-enforced `/api/coop/labor` endpoint (§7.3).
+ */
 export async function logSweatEquityLaborEntry(
   input: {
     member?: string;
@@ -967,7 +1328,7 @@ export async function logSweatEquityLaborEntry(
     date?: string;
   },
   tenantId = 'huck_collective'
-): Promise<{ entry: CoopLaborEntry; syncedToCloud: boolean }> {
+): Promise<{ entry: CoopLaborEntry; syncedToCloud: boolean; error?: string }> {
   const { state } = await loadCoopGovernanceState([], tenantId);
   const sweatMember =
     state.policyConfig.members.find((m) => m.partner === 'SWEAT') ||
@@ -979,19 +1340,56 @@ export async function logSweatEquityLaborEntry(
   const memberName = (input.member || sweatMember.name).trim();
   const partnerPrefix =
     input.partner || inferPartnerFromMemberName(memberName, sweatMember.partner);
+  const workDate = (input.date || pacificTodayYmd()).slice(0, 10);
+  const hours = Math.min(24, Math.max(0.25, Number(input.hours || 1)));
+  const category = input.category || 'Social & Marketing';
+  const notes = input.notes?.trim() || 'Dropcast social reel & marketing contribution';
+  const deliverableRef = input.deliverableRef?.trim() || undefined;
 
-  const entry: CoopLaborEntry = {
-    id: `labor-${Date.now()}`,
-    date: (input.date || new Date().toISOString().slice(0, 10)).slice(0, 10),
+  try {
+    const res = await mutateCoopLabor({
+      mode: 'log',
+      date: workDate,
+      member: memberName,
+      partner: partnerPrefix,
+      category,
+      hours,
+      notes,
+      deliverableRef,
+    });
+    if (res.entry) {
+      return { entry: res.entry, syncedToCloud: true };
+    }
+  } catch (err: any) {
+    console.warn('[coopGovernance] Server labor log rejected:', err?.message || err);
+    const fallbackEntry: CoopLaborEntry = {
+      id: `labor-unsynced-${Date.now()}`,
+      date: workDate,
+      member: memberName,
+      partner: partnerPrefix,
+      category,
+      hours,
+      deliverableRef,
+      notes,
+      approval: 'pending',
+    };
+    return {
+      entry: fallbackEntry,
+      syncedToCloud: false,
+      error: err?.message || 'Unable to save labor entry to server ledger.',
+    };
+  }
+
+  const fallbackEntry: CoopLaborEntry = {
+    id: `labor-unsynced-${Date.now()}`,
+    date: workDate,
     member: memberName,
     partner: partnerPrefix,
-    category: input.category || 'Social & Marketing',
-    hours: Math.max(0.25, Number(input.hours || 1)),
-    deliverableRef: input.deliverableRef?.trim() || undefined,
-    notes: input.notes?.trim() || 'Dropcast social reel & marketing contribution',
+    category,
+    hours,
+    deliverableRef,
+    notes,
+    approval: 'pending',
   };
-
-  const nextEntries = [entry, ...(state.laborEntries || [])];
-  const syncedToCloud = await saveCoopGovernanceState({ laborEntries: nextEntries }, tenantId);
-  return { entry, syncedToCloud };
+  return { entry: fallbackEntry, syncedToCloud: false };
 }

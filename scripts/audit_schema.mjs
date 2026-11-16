@@ -118,6 +118,17 @@ const COOP_PROPOSALS_ATTRIBUTES = [
     { key: 'tenantId', type: 'string', size: 128, required: true }
 ];
 
+const COOP_LEDGER_ATTRIBUTES = [
+    { key: 'kind', type: 'string', size: 32, required: true },
+    { key: 'monthKey', type: 'string', size: 16, required: true },
+    { key: 'status', type: 'string', size: 32, required: true },
+    { key: 'version', type: 'integer', required: true },
+    { key: 'payloadJson', type: 'string', size: 500000, required: true },
+    { key: 'snapshotHash', type: 'string', size: 128, required: false },
+    { key: 'updatedBy', type: 'string', size: 128, required: false },
+    { key: 'updatedAt', type: 'string', size: 64, required: true }
+];
+
 const EXPECTED_SCHEMAS = {
     'items_dev': { name: 'Resale Items (Development)', attributes: ITEM_ATTRIBUTES },
     'items': { name: 'Resale Items (Production)', attributes: ITEM_ATTRIBUTES },
@@ -126,7 +137,8 @@ const EXPECTED_SCHEMAS = {
     'purchases_dev': { name: 'Purchases (Development)', attributes: PURCHASES_ATTRIBUTES },
     'purchases': { name: 'Purchases (Production)', attributes: PURCHASES_ATTRIBUTES },
     'warehouses': { name: 'Warehouses / Selling Locations', attributes: WAREHOUSES_ATTRIBUTES },
-    'coop_proposals': { name: 'Co-op Governance Proposals', attributes: COOP_PROPOSALS_ATTRIBUTES }
+    'coop_proposals': { name: 'Co-op Governance Proposals', attributes: COOP_PROPOSALS_ATTRIBUTES },
+    'coop_ledger': { name: 'Co-op Labor & Month Lock Ledger (server-only)', attributes: COOP_LEDGER_ATTRIBUTES }
 };
 
 const EXPECTED_BUCKETS = [
@@ -182,7 +194,7 @@ async function generateAuditReport() {
             'items_dev', 'items',
             'sales_dev', 'sales',
             'purchases_dev', 'purchases',
-            'warehouses', 'coop_proposals'
+            'warehouses', 'coop_proposals', 'coop_ledger'
         ];
 
         // Add any remaining live collections to order
