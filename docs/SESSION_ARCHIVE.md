@@ -4,6 +4,10 @@
 
 ---
 
+## ✅ BULLETPROOF RICOCHET CLOUD STAGING + ZERO JS `alert()`/`confirm()` `<SlideOverDrawer>` CONFIRMATION ON THE WORKS (`alpha-1` — Nov 15, 2026)
+- **Staging & Hydration Fixes + `<SlideOverDrawer>` Commit (`src/lib/ricochetPayoutParser.ts`, `src/pages/api/sales/ricochet-sync.ts`, `src/composables/useRicochetSalesSync.ts`, `public/ricochet-upc-sync.user.js`, `src/components/sales/SalesList.vue`)**:
+  - Fixed `FingerprintAccessors` runtime `HTTP 500`, Appwrite `401` on manifest updates, client hydration fallback, and replaced browser JS popups with stage-only bookmarklet handoff (`↗ Review & Confirm N New Sales on The Works`) into `<SlideOverDrawer>` on `/sales?confirmRicochet=1&location=MD`.
+
 ## ✅ `11-14-2026` RICOCHET POS SALES LEDGER TRANSFER UNBLOCK, `PDXGL-` PARTNER ATTRIBUTION, DETERMINISTIC `$id` IDEMPOTENCY & 1-CLICK COMMIT BANNER (`alpha-1` — Nov 15, 2026)
 - **Root Causes Verified Against Live `resale_db` (`manifests/md_ricochet_sales_sync_latest` vs `sales` & `items`)**:
   - **262 of 270** staged Ricochet lines were in `resale_db.sales` (`20` Nov sales = `$626.00` gross / `$532.10` net), while **8 actionable November 2026 sales** (`$330.00` gross / `$280.50` net — reconciling penny-exact `$532.10 + $280.50 = $812.60` to Ricochet's `Total Payout: 812.60`) were stuck in dry-run staging (`5` from `11-14-2026` + `3` from `11-13-2026`):

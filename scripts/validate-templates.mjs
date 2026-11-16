@@ -803,9 +803,90 @@ const transportContracts = [
     },
     {
         file: 'src/components/sales/CoopSettlementView.vue',
+        mustContain: [
+            { pattern: /\bbuildMonthlySettlementFromInputs\s*\(/, label: 'Delegation of 4-Gate settlement math to buildMonthlySettlementFromInputs' },
+        ],
         mustNotContain: [
             { pattern: /\.getMonth\s*\(/, label: 'Date#getMonth() (0-indexed) month bucketing' },
             { pattern: /FIXED_BOOTH_RENT\s*=\s*\d/, label: 'hardcoded booth rent (resolve from the live warehouse document)' },
+            { pattern: /\?\?\s*382\.5\b/, label: 'hardcoded 382.5 booth rent fallback (Law 2)' },
+            { pattern: /15%/, label: 'hardcoded 15% venue fee string in CoopSettlementView (use dynamic venueFeePct)' },
+            { pattern: /\bDEFAULT_COOP_LABOR_ENTRIES\b/, label: 'demo seed labor entries inside CoopSettlementView' },
+            { pattern: /\bgetLaborHoursByMemberForMonth\s*\(/, label: 'direct getLaborHoursByMemberForMonth call in CoopSettlementView (must come via settlementInputs with status filter)' },
+        ],
+    },
+    {
+        file: 'src/lib/coop/settlementEngine.ts',
+        mustNotContain: [
+            { pattern: /\b85\.41\b/, label: 'hardcoded 85.41 consignor rent default in settlementEngine (Law 2)' },
+            { pattern: /=\s*0\.15\b/, label: 'hardcoded 0.15 venueFeeRate fallback in settlementEngine (Law 2)' },
+            { pattern: /=\s*0\.70?\b/, label: 'hardcoded 0.70 curatorSplitRate fallback in settlementEngine (Law 2)' },
+            { pattern: /=\s*0\.30?\b/, label: 'hardcoded 0.30 commonsSplitRate fallback in settlementEngine (Law 2)' },
+            { pattern: /\.getMonth\s*\(/, label: 'Date#getMonth() (0-indexed) month bucketing' },
+        ],
+    },
+    {
+        file: 'src/lib/coop/settlementInputs.ts',
+        mustContain: [
+            { pattern: /\bisSettlementEligibleLabor\s*\(/, label: 'isSettlementEligibleLabor gate before weighting labor hours' },
+            { pattern: /getLaborHoursByMemberForMonth\([\s\S]*?\{\s*status:/, label: 'explicit status option on getLaborHoursByMemberForMonth' },
+        ],
+        mustNotContain: [
+            { pattern: /\b85\.41\b/, label: 'hardcoded 85.41 consignor rent default in settlementInputs (Law 2)' },
+            { pattern: /=\s*0\.15\b/, label: 'hardcoded 0.15 venueFeeRate fallback in settlementInputs (Law 2)' },
+            { pattern: /=\s*0\.70?\b/, label: 'hardcoded 0.70 curatorSplitRate fallback in settlementInputs (Law 2)' },
+            { pattern: /=\s*0\.30?\b/, label: 'hardcoded 0.30 commonsSplitRate fallback in settlementInputs (Law 2)' },
+            { pattern: /\.getMonth\s*\(/, label: 'Date#getMonth() (0-indexed) month bucketing' },
+        ],
+    },
+    {
+        file: 'src/lib/coopSettlementPdf.ts',
+        mustNotContain: [
+            { pattern: /\b(?:70|30)%/, label: 'hardcoded 70% / 30% strings in coopSettlementPdf (use dynamic curatorSharePct / commonsSharePct)' },
+            { pattern: /\.(?:getMonth|getUTCMonth)\s*\(/, label: 'Date#getMonth() / getUTCMonth() date formatting in coopSettlementPdf (Law 7)' },
+        ],
+    },
+    {
+        file: 'src/components/coop/CoopLaborView.vue',
+        mustContain: [
+            { pattern: /\buseCoopFounderGate\s*\(/, label: 'server-backed useCoopFounderGate role check in CoopLaborView' },
+        ],
+        mustNotContain: [
+            { pattern: /\bsaveCoopGovernanceState\b/, label: 'direct client saveCoopGovernanceState labor writes in CoopLaborView (must route via /api/coop/labor)' },
+            { pattern: /\bDEFAULT_COOP_LABOR_ENTRIES\b/, label: 'demo seed labor entries in CoopLaborView' },
+            { pattern: /\.getMonth\s*\(/, label: 'Date#getMonth() (0-indexed) month bucketing' },
+        ],
+    },
+    {
+        file: 'src/pages/api/coop/me.ts',
+        mustContain: [
+            { pattern: /\brequireCoopRole\b/, label: 'requireCoopRole live Appwrite Team role verification' },
+        ],
+        mustNotContain: [
+            { pattern: /\btenantId\b/, label: 'client-supplied tenantId in /api/coop/me (must use server COOP_TEAM_ID)' },
+        ],
+    },
+    {
+        file: 'src/pages/api/coop/labor.ts',
+        mustContain: [
+            { pattern: /\brequireCoopRole\b/, label: 'requireCoopRole live Appwrite Team role verification' },
+            { pattern: /\brequireCoopFounder\b/, label: 'requireCoopFounder approval gate' },
+            { pattern: /\brequireCoopMember\b/, label: 'requireCoopMember member gate' },
+            { pattern: /\bassertMonthUnlocked\b/, label: 'assertMonthUnlocked month-lock check before writes' },
+        ],
+        mustNotContain: [
+            { pattern: /\btenantId\b/, label: 'client-supplied tenantId in /api/coop/labor (must use server COOP_TEAM_ID)' },
+        ],
+    },
+    {
+        file: 'src/pages/api/coop/month-lock.ts',
+        mustContain: [
+            { pattern: /\brequireCoopRole\b/, label: 'requireCoopRole live Appwrite Team role verification' },
+            { pattern: /\brequireCoopFounder\b/, label: 'requireCoopFounder lock/unlock gate' },
+            { pattern: /\bassertMonthUnlocked\b/, label: 'month-lock enforcement reference' },
+        ],
+        mustNotContain: [
+            { pattern: /\btenantId\b/, label: 'client-supplied tenantId in /api/coop/month-lock (must use server COOP_TEAM_ID)' },
         ],
     },
     {
@@ -870,6 +951,11 @@ for (const contract of transportContracts) {
         'public/ricochet-upc-sync.user.js',
         'src/components/sales/SalesList.vue',
         'src/components/sales/RicochetLiveSalesPanel.vue',
+        'src/components/sales/CoopSettlementView.vue',
+        'src/components/coop/CoopLaborView.vue',
+        'src/components/coop/CoopMonthLockBar.vue',
+        'src/components/coop/CoopSweatEquityDrawer.vue',
+        'src/components/coop/CoopRolesPanel.vue',
         'src/composables/useRicochetSalesSync.ts',
     ];
     for (const relFile of noNativeDialogFiles) {
@@ -887,6 +973,24 @@ for (const contract of transportContracts) {
                 `❌ UX Law Violation in ${relFile}: Native browser JS dialog (${match[0].trim()}) is strictly forbidden — use canonical SlideOverDrawer / DaisyUI UI on The Works.`
             );
             hasErrors = true;
+        }
+    }
+
+    // 11C. Server-Only coop_ledger Guard: Ban direct client SDK writes to coop_ledger / coop_labor_* / coop_lock_*
+    const clientCheckDirs = ['src/components', 'src/composables', 'src/lib'];
+    for (const dir of clientCheckDirs) {
+        if (!fs.existsSync(dir)) continue;
+        const files = getFiles(dir, ['.ts', '.js', '.vue']);
+        for (const fPath of files) {
+            const rel = path.relative(process.cwd(), fPath).replace(/\\/g, '/');
+            if (rel === 'src/lib/coopLedgerServer.ts' || rel === 'src/lib/generatedSkillBundles.ts') continue;
+            const txt = fs.readFileSync(fPath, 'utf8');
+            if (/databases\.(?:create|update|delete)Document\s*\([^)]*(?:coop_ledger|coop_labor_|coop_lock_|COOP_LEDGER_COL_ID)/s.test(txt)) {
+                console.error(
+                    `❌ Security Violation in ${rel}: Direct client SDK write to coop_ledger / coop_labor_* / coop_lock_* is forbidden — route all writes via /api/coop/labor or /api/coop/month-lock.`
+                );
+                hasErrors = true;
+            }
         }
     }
 }

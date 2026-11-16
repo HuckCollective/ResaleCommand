@@ -1,4 +1,7 @@
 import { jsPDF } from 'jspdf';
+import { classifySurplusLaborRole, type CoopLaborEntry } from './coopGovernance';
+import type { MonthlySettlementSubtotal } from './coop/settlementInputs';
+import type { PartnerRole } from '../types/coop';
 
 export interface SettlementLineItem {
   date: string;
@@ -10,17 +13,27 @@ export interface SettlementLineItem {
   costBasis: number;
   netSurplus: number;
   curatorTake: number;
+  unrecoupedCost?: number;
 }
 
 export interface PartnerStatementData {
   statementDate: string;
   periodLabel: string;
+  periodKey?: string;
   partnerName: string;
   prefix: string;
+  role?: PartnerRole;
+  isSweatEnabler?: boolean;
+  isConsignor?: boolean;
+  isVenueScopedPreview?: boolean;
+  curatorSharePct: number;
+  commonsSharePct: number;
+  venueFeePct?: number;
   items: SettlementLineItem[];
   totalGross: number;
   totalVenueFee: number;
   totalCostBasis: number;
+  unrecoupedCost?: number;
   totalNetSurplus: number;
   totalCuratorProfit: number;
   totalPayoutCheck: number;
@@ -29,37 +42,63 @@ export interface PartnerStatementData {
   rentDeduction?: number;
   coopCommission?: number;
   dealFormulaLabel?: string;
-  isConsignor?: boolean;
+  laborHoursLogged?: number;
+  laborLogs?: CoopLaborEntry[];
+  salesPatronageBonus?: number;
+  laborBountyBonus?: number;
+  icaRetainedCredit?: number;
+  cashBonusPaid?: number;
+  icaAnnualYieldRatePct?: number;
+  monthlySubtotals?: MonthlySettlementSubtotal[];
+  lockedInfo?: {
+    lockedAt: string;
+    lockedByName: string;
+    snapshotHash: string;
+    revision?: number;
+  };
 }
 
+export function slugifyMemberForFilename(raw: string): string {
+  const slug = String(raw || 'partner')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 32);
+  return slug || 'partner';
+}
+
+export function buildPartnerPdfFilename(
+  partnerName: string,
+  prefix: string,
+  periodOrDate: string
+): string {
+  const cleanPrefix = String(prefix || 'COOP')
+    .replace(/[-_]+$/, '')
+    .replace(/[^A-Za-z0-9]/g, '')
+    .toUpperCase();
+  const slug = slugifyMemberForFilename(partnerName);
+  const safePeriod = String(periodOrDate || 'statement').replace(/[^A-Za-z0-9_-]/g, '');
+  return `Settlement_${cleanPrefix}_${slug}_${safePeriod}.pdf`;
+}
+
+/**
+ * Law 7 pure string date formatter — zero `new Date()` or `getMonth()` timezone drift.
+ */
 function formatPdfDate(dateStr: string | null | undefined): string {
   if (!dateStr) return '-';
-  try {
-    const raw = String(dateStr).trim();
-    const datePart = raw.includes('T') ? raw.split('T')[0] : raw.split(' ')[0];
-    const parts = datePart.split(/[-/]/);
-    if (parts.length === 3) {
-      if (parts[0].length === 4) {
-        // YYYY-MM-DD
-        const [yyyy, mm, dd] = parts;
-        return `${mm.padStart(2, '0')}/${dd.padStart(2, '0')}/${yyyy.slice(-2)}`;
-      } else if (parts[2].length === 4) {
-        // MM-DD-YYYY or MM/DD/YYYY
-        const [mm, dd, yyyy] = parts;
-        return `${mm.padStart(2, '0')}/${dd.padStart(2, '0')}/${yyyy.slice(-2)}`;
-      }
-    }
-    const d = new Date(raw);
-    if (!isNaN(d.getTime())) {
-      const mm = String(d.getUTCMonth() + 1).padStart(2, '0');
-      const dd = String(d.getUTCDate()).padStart(2, '0');
-      const yy = String(d.getUTCFullYear()).slice(-2);
-      return `${mm}/${dd}/${yy}`;
-    }
-    return datePart.slice(0, 10);
-  } catch {
-    return String(dateStr).slice(0, 10);
+  const raw = String(dateStr).replace(/['"]/g, '').trim();
+  if (!raw) return '-';
+  const datePart = raw.includes('T') ? raw.split('T')[0] : raw.split(' ')[0];
+
+  let m = datePart.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})$/);
+  if (m) {
+    return `${m[2].padStart(2, '0')}/${m[3].padStart(2, '0')}/${m[1].slice(-2)}`;
   }
+  m = datePart.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})$/);
+  if (m) {
+    return `${m[1].padStart(2, '0')}/${m[2].padStart(2, '0')}/${m[3].slice(-2)}`;
+  }
+  return datePart.slice(0, 10);
 }
 
 function formatPdfSku(skuStr: string | null | undefined): string {
@@ -68,17 +107,17 @@ function formatPdfSku(skuStr: string | null | undefined): string {
   return clean.length > 13 ? clean.slice(0, 12) + '…' : clean;
 }
 
-function formatPdfTitle(titleStr: string | null | undefined): string {
+function formatPdfTitle(titleStr: string | null | undefined, maxLen = 36): string {
   if (!titleStr) return 'Sold Item';
   const clean = String(titleStr).trim();
-  return clean.length > 36 ? clean.substring(0, 34) + '...' : clean;
+  return clean.length > maxLen ? clean.substring(0, maxLen - 2) + '...' : clean;
 }
 
 export function generatePartnerSettlementPdf(data: PartnerStatementData): jsPDF {
   const doc = new jsPDF({
     orientation: 'portrait',
     unit: 'pt',
-    format: 'letter' // 612 x 792 pt
+    format: 'letter', // 612 x 792 pt
   });
 
   const margin = 36;
@@ -86,9 +125,17 @@ export function generatePartnerSettlementPdf(data: PartnerStatementData): jsPDF 
   const pageHeight = 792;
   let y = margin;
 
+  const curatorPct = Number(data.curatorSharePct || 0);
+  const commonsPct = Number(data.commonsSharePct || 0);
+  const approvedLaborLogs = (data.laborLogs || []).filter(
+    (entry) => entry && entry.approval === 'approved'
+  );
+  const isLaborOnlyStatement =
+    data.items.length === 0 && (Boolean(data.isSweatEnabler) || approvedLaborLogs.length > 0);
+
   // Header Bar (Emerald accent)
   doc.setFillColor(16, 185, 129);
-  doc.rect(margin, y, pageWidth - (margin * 2), 4, 'F');
+  doc.rect(margin, y, pageWidth - margin * 2, 4, 'F');
   y += 24;
 
   // Title
@@ -96,132 +143,307 @@ export function generatePartnerSettlementPdf(data: PartnerStatementData): jsPDF 
   doc.setFontSize(17);
   doc.setTextColor(30, 41, 59);
   doc.text('HUCKLEBERRY COLLECTIVE COOPERATIVE', margin, y);
-  
+
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(9.5);
   doc.setTextColor(100, 116, 139);
-  doc.text('Worker Self-Directed Consortium • Multi-Channel Retail Commons', margin, y + 14);
+  doc.text(
+    'Worker Self-Directed Enterprise • Multi-Channel Retail Commons',
+    margin,
+    y + 14
+  );
 
   // Statement Meta on Right
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(11);
   doc.setTextColor(16, 185, 129);
-  doc.text('PARTNER SETTLEMENT', pageWidth - margin, y, { align: 'right' });
+  doc.text(
+    data.isSweatEnabler ? 'SWEAT-EQUITY STATEMENT' : 'PARTNER SETTLEMENT',
+    pageWidth - margin,
+    y,
+    { align: 'right' }
+  );
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(8.5);
   doc.setTextColor(71, 85, 105);
-  doc.text(`Period: ${data.periodLabel || 'Monthly Settlement'}`, pageWidth - margin, y + 14, { align: 'right' });
-  doc.text(`Date: ${data.statementDate}`, pageWidth - margin, y + 26, { align: 'right' });
+  doc.text(
+    `Period: ${data.periodLabel || 'Monthly Settlement'}`,
+    pageWidth - margin,
+    y + 14,
+    { align: 'right' }
+  );
+  doc.text(`Date: ${data.statementDate}`, pageWidth - margin, y + 26, {
+    align: 'right',
+  });
   y += 42;
 
   // Partner Info Box
   doc.setFillColor(248, 250, 252);
   doc.setDrawColor(226, 232, 240);
-  doc.roundedRect(margin, y, pageWidth - (margin * 2), 46, 6, 6, 'FD');
+  doc.roundedRect(margin, y, pageWidth - margin * 2, 46, 6, 6, 'FD');
 
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(11);
   doc.setTextColor(15, 23, 42);
-  doc.text(`Partner: ${data.partnerName}`, margin + 14, y + 18);
-  
+  doc.text(`Member / Partner: ${data.partnerName}`, margin + 14, y + 18);
+
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(8.5);
   doc.setTextColor(100, 116, 139);
-  doc.text(`Barcode Prefix: [ ${data.prefix} ] • Venue: ${data.boothLocation || 'Memory Den (Booth 0EJ)'}`, margin + 14, y + 32);
+  const roleLabel =
+    data.role ||
+    (data.isConsignor
+      ? 'Consignor'
+      : data.isSweatEnabler
+        ? 'Marketing & Social Enabler'
+        : 'Co-op Partner');
+  doc.text(
+    `Prefix: [ ${data.prefix} ] • Role: ${roleLabel} • Scope: ${data.boothLocation || 'All Co-op Channels'}`,
+    margin + 14,
+    y + 32
+  );
 
   // Financial Highlight on Right of Info Box
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(15);
   doc.setTextColor(16, 185, 129);
-  doc.text(`$${data.totalPayoutCheck.toFixed(2)}`, pageWidth - margin - 14, y + 20, { align: 'right' });
+  doc.text(`$${data.totalPayoutCheck.toFixed(2)}`, pageWidth - margin - 14, y + 20, {
+    align: 'right',
+  });
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(8);
   doc.setTextColor(100, 116, 139);
-  doc.text('Total Net Payout Check', pageWidth - margin - 14, y + 32, { align: 'right' });
+  doc.text('Total Net Cash Payout Check', pageWidth - margin - 14, y + 32, {
+    align: 'right',
+  });
 
   y += 60;
 
-  // Table Column Coordinates (Optimized to prevent text collisions)
-  const colX = {
-    date: margin + 4,         // 40
-    sku: margin + 50,         // 86
-    title: margin + 116,      // 152
-    gross: margin + 344,      // 380 (right-align)
-    fee: margin + 392,        // 428 (right-align)
-    cost: margin + 438,       // 474 (right-align)
-    profit: margin + 486,     // 522 (right-align)
-    take: pageWidth - margin - 4 // 572 (right-align)
-  };
+  if (isLaborOnlyStatement) {
+    // Official VERIFIED SWEAT-EQUITY & ENABLING LABOR LEDGER table (§2 & §6)
+    const laborColX = {
+      date: margin + 6,
+      category: margin + 56,
+      wsde: margin + 184,
+      proof: margin + 286,
+      hours: pageWidth - margin - 6,
+    };
 
-  const drawTableHeader = (currY: number) => {
-    doc.setFillColor(241, 245, 249);
-    doc.rect(margin, currY, pageWidth - (margin * 2), 20, 'F');
+    const drawLaborHeader = (currY: number) => {
+      doc.setFillColor(241, 245, 249);
+      doc.rect(margin, currY, pageWidth - margin * 2, 20, 'F');
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(7.5);
+      doc.setTextColor(71, 85, 105);
+      doc.text('Date', laborColX.date, currY + 13);
+      doc.text('Category', laborColX.category, currY + 13);
+      doc.text('WSDE Surplus Role', laborColX.wsde, currY + 13);
+      doc.text('Deliverable Proof / Contribution Notes', laborColX.proof, currY + 13);
+      doc.text('Approved Hrs', laborColX.hours, currY + 13, { align: 'right' });
+    };
+
     doc.setFont('helvetica', 'bold');
+    doc.setFontSize(9);
+    doc.setTextColor(15, 23, 42);
+    doc.text('VERIFIED SWEAT-EQUITY & ENABLING LABOR LEDGER', margin, y);
+    y += 8;
+
+    drawLaborHeader(y);
+    y += 24;
+
+    doc.setFont('helvetica', 'normal');
     doc.setFontSize(7.5);
-    doc.setTextColor(71, 85, 105);
+    doc.setTextColor(51, 65, 85);
 
-    doc.text('Date', colX.date, currY + 13);
-    doc.text('SKU / Code', colX.sku, currY + 13);
-    doc.text('Item Description', colX.title, currY + 13);
-    doc.text('Gross', colX.gross, currY + 13, { align: 'right' });
-    doc.text('Venue Fee', colX.fee, currY + 13, { align: 'right' });
-    doc.text('Cost Back', colX.cost, currY + 13, { align: 'right' });
-    doc.text('Surplus', colX.profit, currY + 13, { align: 'right' });
-    doc.text('Curator (70%)', colX.take, currY + 13, { align: 'right' });
-  };
+    if (approvedLaborLogs.length === 0) {
+      doc.text(
+        'No approved Sweat-Equity labor entries in this period (pending entries earn $0 until Founder-approved).',
+        margin + 6,
+        y + 4
+      );
+      y += 20;
+    } else {
+      for (let i = 0; i < approvedLaborLogs.length; i++) {
+        const lg = approvedLaborLogs[i];
+        if (y > pageHeight - 110) {
+          doc.addPage();
+          y = margin;
+          drawLaborHeader(y);
+          y += 24;
+          doc.setFont('helvetica', 'normal');
+          doc.setFontSize(7.5);
+          doc.setTextColor(51, 65, 85);
+        }
 
-  drawTableHeader(y);
-  y += 24;
+        if (i % 2 === 1) {
+          doc.setFillColor(248, 250, 252);
+          doc.rect(margin, y - 9, pageWidth - margin * 2, 15, 'F');
+        }
 
-  // Item Rows
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(7.5);
-  doc.setTextColor(51, 65, 85);
+        const wsdeRole = classifySurplusLaborRole(lg.category);
+        const proofStr = [lg.deliverableRef ? `[${lg.deliverableRef}]` : '', lg.notes || '']
+          .filter(Boolean)
+          .join(' — ');
 
-  for (let i = 0; i < data.items.length; i++) {
-    const item = data.items[i];
+        doc.text(formatPdfDate(lg.date), laborColX.date, y + 2);
+        doc.text(formatPdfTitle(lg.category, 24), laborColX.category, y + 2);
+        doc.text(wsdeRole, laborColX.wsde, y + 2);
+        doc.text(formatPdfTitle(proofStr || 'Verified contribution', 46), laborColX.proof, y + 2);
+        doc.setFont('helvetica', 'bold');
+        doc.setTextColor(15, 23, 42);
+        doc.text(`${Number(lg.hours || 0).toFixed(2)}h`, laborColX.hours, y + 2, {
+          align: 'right',
+        });
+        doc.setFont('helvetica', 'normal');
+        doc.setTextColor(51, 65, 85);
+        y += 15;
+      }
+    }
+  } else {
+    // Sold-Items Ledger Table
+    const colX = {
+      date: margin + 4,
+      sku: margin + 50,
+      title: margin + 116,
+      gross: margin + 344,
+      fee: margin + 392,
+      cost: margin + 438,
+      profit: margin + 486,
+      take: pageWidth - margin - 4,
+    };
 
-    // Page Break Check
-    if (y > pageHeight - 90) {
+    const drawTableHeader = (currY: number) => {
+      doc.setFillColor(241, 245, 249);
+      doc.rect(margin, currY, pageWidth - margin * 2, 20, 'F');
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(7.5);
+      doc.setTextColor(71, 85, 105);
+
+      doc.text('Date', colX.date, currY + 13);
+      doc.text('SKU / Code', colX.sku, currY + 13);
+      doc.text('Item Description', colX.title, currY + 13);
+      doc.text('Gross', colX.gross, currY + 13, { align: 'right' });
+      doc.text('Venue Fee', colX.fee, currY + 13, { align: 'right' });
+      doc.text('Cost Back', colX.cost, currY + 13, { align: 'right' });
+      doc.text('Surplus', colX.profit, currY + 13, { align: 'right' });
+      doc.text(
+        data.isConsignor ? 'Net Deposit' : `Curator (${curatorPct}%)`,
+        colX.take,
+        currY + 13,
+        { align: 'right' }
+      );
+    };
+
+    drawTableHeader(y);
+    y += 24;
+
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(7.5);
+    doc.setTextColor(51, 65, 85);
+
+    for (let i = 0; i < data.items.length; i++) {
+      const item = data.items[i];
+
+      if (y > pageHeight - 90) {
+        doc.addPage();
+        y = margin;
+        drawTableHeader(y);
+        y += 24;
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(7.5);
+        doc.setTextColor(51, 65, 85);
+      }
+
+      if (i % 2 === 1) {
+        doc.setFillColor(248, 250, 252);
+        doc.rect(margin, y - 9, pageWidth - margin * 2, 15, 'F');
+      }
+
+      doc.text(formatPdfDate(item.date), colX.date, y + 2);
+      doc.text(formatPdfSku(item.sku), colX.sku, y + 2);
+      doc.text(formatPdfTitle(item.title), colX.title, y + 2);
+
+      doc.text(`$${item.grossPrice.toFixed(2)}`, colX.gross, y + 2, { align: 'right' });
+      doc.text(`-$${item.venueFee.toFixed(2)}`, colX.fee, y + 2, { align: 'right' });
+
+      doc.setTextColor(16, 185, 129);
+      doc.text(`+$${item.costBasis.toFixed(2)}`, colX.cost, y + 2, { align: 'right' });
+
+      doc.setTextColor(51, 65, 85);
+      doc.text(`$${item.netSurplus.toFixed(2)}`, colX.profit, y + 2, { align: 'right' });
+
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(15, 23, 42);
+      doc.text(`$${item.curatorTake.toFixed(2)}`, colX.take, y + 2, { align: 'right' });
+      doc.setFont('helvetica', 'normal');
+      doc.setTextColor(51, 65, 85);
+
+      y += 15;
+    }
+
+    // Compact labor summary block for hybrid Producer-Enablers (HUCK- / PDXGL-) with approved hours (§2)
+    if (approvedLaborLogs.length > 0 && !data.isVenueScopedPreview) {
+      y += 6;
+      if (y > pageHeight - 100) {
+        doc.addPage();
+        y = margin;
+      }
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(8);
+      doc.setTextColor(30, 41, 59);
+      doc.text(
+        `Verified Sweat-Equity Contributions (${Number(data.laborHoursLogged || 0).toFixed(2)}h across ${approvedLaborLogs.length} approved log${approvedLaborLogs.length === 1 ? '' : 's'}):`,
+        margin,
+        y
+      );
+      y += 12;
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(7);
+      doc.setTextColor(71, 85, 105);
+      for (const lg of approvedLaborLogs.slice(0, 6)) {
+        if (y > pageHeight - 90) {
+          doc.addPage();
+          y = margin;
+        }
+        const refPart = lg.deliverableRef ? ` [${lg.deliverableRef}]` : '';
+        doc.text(
+          `• ${formatPdfDate(lg.date)} — ${lg.member}: ${Number(lg.hours).toFixed(2)}h (${lg.category})${refPart}`,
+          margin + 6,
+          y
+        );
+        y += 11;
+      }
+    }
+  }
+
+  // Optional All-Time Monthly Subtotals (§5 item 11)
+  if (data.monthlySubtotals && data.monthlySubtotals.length > 1) {
+    y += 8;
+    if (y > pageHeight - 110) {
       doc.addPage();
       y = margin;
-      drawTableHeader(y);
-      y += 24;
-      doc.setFont('helvetica', 'normal');
-      doc.setFontSize(7.5);
-      doc.setTextColor(51, 65, 85);
     }
-
-    // Alternating Zebra Row Background
-    if (i % 2 === 1) {
-      doc.setFillColor(248, 250, 252);
-      doc.rect(margin, y - 9, pageWidth - (margin * 2), 15, 'F');
-    }
-
-    const cleanDate = formatPdfDate(item.date);
-    const cleanSku = formatPdfSku(item.sku);
-    const cleanTitle = formatPdfTitle(item.title);
-
-    doc.text(cleanDate, colX.date, y + 2);
-    doc.text(cleanSku, colX.sku, y + 2);
-    doc.text(cleanTitle, colX.title, y + 2);
-
-    doc.text(`$${item.grossPrice.toFixed(2)}`, colX.gross, y + 2, { align: 'right' });
-    doc.text(`-$${item.venueFee.toFixed(2)}`, colX.fee, y + 2, { align: 'right' });
-    
-    doc.setTextColor(16, 185, 129);
-    doc.text(`+$${item.costBasis.toFixed(2)}`, colX.cost, y + 2, { align: 'right' });
-    
-    doc.setTextColor(51, 65, 85);
-    doc.text(`$${item.netSurplus.toFixed(2)}`, colX.profit, y + 2, { align: 'right' });
-    
     doc.setFont('helvetica', 'bold');
-    doc.setTextColor(15, 23, 42);
-    doc.text(`$${item.curatorTake.toFixed(2)}`, colX.take, y + 2, { align: 'right' });
+    doc.setFontSize(8);
+    doc.setTextColor(30, 41, 59);
+    doc.text('Per-Month Settlement Subtotals:', margin, y);
+    y += 12;
     doc.setFont('helvetica', 'normal');
-    doc.setTextColor(51, 65, 85);
-
-    y += 15;
+    doc.setFontSize(7.2);
+    doc.setTextColor(71, 85, 105);
+    for (const ms of data.monthlySubtotals) {
+      if (y > pageHeight - 85) {
+        doc.addPage();
+        y = margin;
+      }
+      const lockBadge = ms.isLocked ? ' [LOCKED]' : ms.isMonthInProgress ? ' [OPEN]' : '';
+      doc.text(
+        `• ${ms.monthLabel}${lockBadge}: ${ms.itemsSold} sold · Gross $${ms.grossSales.toFixed(2)} · Bonus +$${(ms.salesBonus + ms.laborBonus).toFixed(2)} · Check $${ms.payoutCheck.toFixed(2)}`,
+        margin + 6,
+        y
+      );
+      y += 11;
+    }
   }
 
   y += 10;
@@ -229,22 +451,35 @@ export function generatePartnerSettlementPdf(data: PartnerStatementData): jsPDF 
   doc.line(margin, y, pageWidth - margin, y);
   y += 16;
 
-  // Summary Totals Box
-  if (y > pageHeight - 120) {
+  // Summary Totals Box (dynamic height based on active Gate 4B & ICA lines)
+  const includeBonuses = !data.isVenueScopedPreview && !data.isConsignor;
+  const salesBonus = includeBonuses ? Number(data.salesPatronageBonus || 0) : 0;
+  const laborBonus = includeBonuses ? Number(data.laborBountyBonus || 0) : 0;
+  const icaRetained = includeBonuses ? Number(data.icaRetainedCredit || 0) : 0;
+  const hasSalesBonus = salesBonus > 0;
+  const hasLaborBonus = laborBonus > 0 || Boolean(data.isSweatEnabler && includeBonuses);
+  const hasIcaRetained = icaRetained > 0;
+  const hasReimbursement = Boolean(data.reimbursements && data.reimbursements > 0);
+  const hasRentDeduction = Boolean(data.rentDeduction && data.rentDeduction > 0);
+  const hasCoopCommission = Boolean(data.coopCommission && data.coopCommission > 0);
+
+  let summaryLinesCount = data.isSweatEnabler ? 2 : 4;
+  if (data.isConsignor && data.dealFormulaLabel) summaryLinesCount += 1;
+  if (hasRentDeduction) summaryLinesCount += 1;
+  if (hasCoopCommission) summaryLinesCount += 1;
+  if (hasReimbursement) summaryLinesCount += 1;
+  if (hasSalesBonus) summaryLinesCount += 1;
+  if (hasLaborBonus) summaryLinesCount += 1;
+  if (hasIcaRetained) summaryLinesCount += 1;
+
+  const summaryBoxHeight = 36 + summaryLinesCount * 14;
+  if (y + summaryBoxHeight > pageHeight - 60) {
     doc.addPage();
     y = margin;
   }
 
-  const summaryBoxWidth = 260;
+  const summaryBoxWidth = 276;
   const summaryBoxX = pageWidth - margin - summaryBoxWidth;
-  const hasReimbursement = Boolean(data.reimbursements && data.reimbursements > 0);
-  const hasRentDeduction = Boolean(data.rentDeduction && data.rentDeduction > 0);
-  const hasCoopCommission = Boolean(data.coopCommission && data.coopCommission > 0);
-  let summaryBoxHeight = 90;
-  if (hasReimbursement) summaryBoxHeight += 14;
-  if (hasRentDeduction) summaryBoxHeight += 14;
-  if (hasCoopCommission) summaryBoxHeight += 14;
-  if (data.isConsignor && data.dealFormulaLabel) summaryBoxHeight += 14;
 
   doc.setFillColor(248, 250, 252);
   doc.setDrawColor(226, 232, 240);
@@ -255,34 +490,75 @@ export function generatePartnerSettlementPdf(data: PartnerStatementData): jsPDF 
   doc.setFontSize(8);
   doc.setTextColor(71, 85, 105);
 
-  doc.text('Total Items Sold:', summaryBoxX + 14, sy);
-  doc.text(`${data.items.length}`, summaryBoxX + summaryBoxWidth - 14, sy, { align: 'right' });
-  sy += 14;
+  if (data.isSweatEnabler) {
+    doc.text('Approved Sweat-Equity Hours:', summaryBoxX + 14, sy);
+    doc.text(
+      `${Number(data.laborHoursLogged || 0).toFixed(2)} hrs`,
+      summaryBoxX + summaryBoxWidth - 14,
+      sy,
+      { align: 'right' }
+    );
+    sy += 14;
+  } else {
+    doc.text('Total Items Sold:', summaryBoxX + 14, sy);
+    doc.text(`${data.items.length}`, summaryBoxX + summaryBoxWidth - 14, sy, {
+      align: 'right',
+    });
+    sy += 14;
 
-  doc.text('Gross Register Sales:', summaryBoxX + 14, sy);
-  doc.text(`$${data.totalGross.toFixed(2)}`, summaryBoxX + summaryBoxWidth - 14, sy, { align: 'right' });
-  sy += 14;
+    doc.text('Gross Register Sales:', summaryBoxX + 14, sy);
+    doc.text(`$${data.totalGross.toFixed(2)}`, summaryBoxX + summaryBoxWidth - 14, sy, {
+      align: 'right',
+    });
+    sy += 14;
 
-  doc.text('100% Cost Basis Recouped (Tier 2):', summaryBoxX + 14, sy);
-  doc.setTextColor(16, 185, 129);
-  doc.text(`+$${data.totalCostBasis.toFixed(2)}`, summaryBoxX + summaryBoxWidth - 14, sy, { align: 'right' });
-  doc.setTextColor(71, 85, 105);
-  sy += 14;
+    doc.text('100% Cost Basis Recouped (Gate 3):', summaryBoxX + 14, sy);
+    doc.setTextColor(16, 185, 129);
+    doc.text(
+      `+$${data.totalCostBasis.toFixed(2)}`,
+      summaryBoxX + summaryBoxWidth - 14,
+      sy,
+      { align: 'right' }
+    );
+    doc.setTextColor(71, 85, 105);
+    sy += 14;
 
-  doc.text('70% Curator Net Profit Share:', summaryBoxX + 14, sy);
-  doc.text(`+$${data.totalCuratorProfit.toFixed(2)}`, summaryBoxX + summaryBoxWidth - 14, sy, { align: 'right' });
-  sy += 14;
+    doc.text(
+      data.isConsignor
+        ? 'Net Deposit Before Deal:'
+        : `${curatorPct}% Curator Base Share:`,
+      summaryBoxX + 14,
+      sy
+    );
+    doc.text(
+      `+$${data.totalCuratorProfit.toFixed(2)}`,
+      summaryBoxX + summaryBoxWidth - 14,
+      sy,
+      { align: 'right' }
+    );
+    sy += 14;
+  }
 
   if (data.isConsignor && data.dealFormulaLabel) {
     doc.text('Consignment Deal:', summaryBoxX + 14, sy);
-    doc.text(data.dealFormulaLabel.slice(0, 44), summaryBoxX + summaryBoxWidth - 14, sy, { align: 'right' });
+    doc.text(
+      data.dealFormulaLabel.slice(0, 44),
+      summaryBoxX + summaryBoxWidth - 14,
+      sy,
+      { align: 'right' }
+    );
     sy += 14;
   }
 
   if (hasRentDeduction && data.rentDeduction) {
     doc.text('Booth / Shelf Rent Share:', summaryBoxX + 14, sy);
     doc.setTextColor(220, 38, 38);
-    doc.text(`-$${data.rentDeduction.toFixed(2)}`, summaryBoxX + summaryBoxWidth - 14, sy, { align: 'right' });
+    doc.text(
+      `-$${data.rentDeduction.toFixed(2)}`,
+      summaryBoxX + summaryBoxWidth - 14,
+      sy,
+      { align: 'right' }
+    );
     doc.setTextColor(71, 85, 105);
     sy += 14;
   }
@@ -290,7 +566,12 @@ export function generatePartnerSettlementPdf(data: PartnerStatementData): jsPDF 
   if (hasCoopCommission && data.coopCommission) {
     doc.text('Co-op Commons Commission:', summaryBoxX + 14, sy);
     doc.setTextColor(220, 38, 38);
-    doc.text(`-$${data.coopCommission.toFixed(2)}`, summaryBoxX + summaryBoxWidth - 14, sy, { align: 'right' });
+    doc.text(
+      `-$${data.coopCommission.toFixed(2)}`,
+      summaryBoxX + summaryBoxWidth - 14,
+      sy,
+      { align: 'right' }
+    );
     doc.setTextColor(71, 85, 105);
     sy += 14;
   }
@@ -298,29 +579,130 @@ export function generatePartnerSettlementPdf(data: PartnerStatementData): jsPDF 
   if (hasReimbursement && data.reimbursements) {
     doc.text('Approved Expense Reimbursements:', summaryBoxX + 14, sy);
     doc.setTextColor(16, 185, 129);
-    doc.text(`+$${data.reimbursements.toFixed(2)}`, summaryBoxX + summaryBoxWidth - 14, sy, { align: 'right' });
+    doc.text(
+      `+$${data.reimbursements.toFixed(2)}`,
+      summaryBoxX + summaryBoxWidth - 14,
+      sy,
+      { align: 'right' }
+    );
     doc.setTextColor(71, 85, 105);
     sy += 14;
-  } else if (!hasRentDeduction) {
-    sy += 4;
+  }
+
+  if (hasSalesBonus) {
+    doc.text('Gate 4B Sales Patronage Bonus:', summaryBoxX + 14, sy);
+    doc.setTextColor(16, 185, 129);
+    doc.text(`+$${salesBonus.toFixed(2)}`, summaryBoxX + summaryBoxWidth - 14, sy, {
+      align: 'right',
+    });
+    doc.setTextColor(71, 85, 105);
+    sy += 14;
+  }
+
+  if (hasLaborBonus) {
+    doc.text(
+      `Gate 4B Sweat-Equity Dividend (${Number(data.laborHoursLogged || 0).toFixed(1)}h):`,
+      summaryBoxX + 14,
+      sy
+    );
+    doc.setTextColor(16, 185, 129);
+    doc.text(`+$${laborBonus.toFixed(2)}`, summaryBoxX + summaryBoxWidth - 14, sy, {
+      align: 'right',
+    });
+    doc.setTextColor(71, 85, 105);
+    sy += 14;
+  }
+
+  if (hasIcaRetained) {
+    const yieldPct = Number(data.icaAnnualYieldRatePct ?? 7);
+    doc.text(
+      `Mondragon ICA Credit (retained @ ${yieldPct}%/yr est.):`,
+      summaryBoxX + 14,
+      sy
+    );
+    doc.setTextColor(14, 116, 144);
+    doc.text(`-$${icaRetained.toFixed(2)}`, summaryBoxX + summaryBoxWidth - 14, sy, {
+      align: 'right',
+    });
+    doc.setTextColor(71, 85, 105);
+    sy += 14;
   }
 
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(10.5);
+  doc.setFontSize(10);
   doc.setTextColor(15, 23, 42);
-  doc.text('FINAL PAYOUT CHECK:', summaryBoxX + 14, sy);
+  doc.text('FINAL CASH PAYOUT CHECK:', summaryBoxX + 14, sy + 4);
   doc.setTextColor(16, 185, 129);
-  doc.text(`$${data.totalPayoutCheck.toFixed(2)}`, summaryBoxX + summaryBoxWidth - 14, sy, { align: 'right' });
+  doc.text(
+    `$${data.totalPayoutCheck.toFixed(2)}`,
+    summaryBoxX + summaryBoxWidth - 14,
+    sy + 4,
+    { align: 'right' }
+  );
 
-  // Charter Guarantee Footer on Left
+  // Left-side Charter Guarantee + Audit / Lock Footer (§6 & §7.5)
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(7.5);
-  doc.setTextColor(148, 163, 184);
-  doc.text('Worker Self-Directed Enterprise Guarantee:', margin, y + 20);
-  doc.text('• 100% of purchase capital is returned dollar-for-dollar.', margin, y + 32);
-  doc.text('• 70% of net surplus profit is distributed to curator.', margin, y + 44);
-  doc.text('• 30% commons pool pays booth rent, hosting, and labels.', margin, y + 56);
-  doc.text('Governed democratically by the Huckleberry Collective Charter.', margin, y + 68);
+  doc.setTextColor(100, 116, 139);
+  doc.text('Worker Self-Directed Enterprise Guarantee:', margin, y + 16);
+  doc.text(
+    '• 100% of verified purchase & shipping capital is returned dollar-for-dollar.',
+    margin,
+    y + 28
+  );
+  doc.text(
+    `• ${curatorPct}% of net item surplus is distributed to Curator; ${commonsPct}% funds Commons Pool.`,
+    margin,
+    y + 40
+  );
+  doc.text(
+    '• Gate 4B Sweat-Equity & Sales Patronage bonuses distribute above monthly breakeven.',
+    margin,
+    y + 52
+  );
+
+  let footerY = y + 66;
+  if (approvedLaborLogs.length > 0) {
+    const approvers = Array.from(
+      new Set(approvedLaborLogs.map((l) => l.approvedBy).filter(Boolean))
+    );
+    const dates = Array.from(
+      new Set(
+        approvedLaborLogs
+          .map((l) => (l.approvedAt ? String(l.approvedAt).slice(0, 10) : ''))
+          .filter(Boolean)
+      )
+    );
+    if (approvers.length > 0) {
+      doc.setTextColor(71, 85, 105);
+      doc.text(
+        `Approved by: ${approvers.join(', ')}${dates.length ? ` on ${dates.join(', ')}` : ''}`,
+        margin,
+        footerY
+      );
+      footerY += 12;
+    }
+  }
+
+  if (data.lockedInfo && data.lockedInfo.snapshotHash) {
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(15, 118, 110);
+    const lockDate = String(data.lockedInfo.lockedAt || '').slice(0, 10);
+    const shortHash = String(data.lockedInfo.snapshotHash).slice(0, 8);
+    doc.text(
+      `LOCKED — ${lockDate} — snapshot ${shortHash}${data.lockedInfo.revision && data.lockedInfo.revision > 1 ? ` (rev ${data.lockedInfo.revision})` : ''}`,
+      margin,
+      footerY
+    );
+  } else if (data.isVenueScopedPreview) {
+    doc.setFont('helvetica', 'italic');
+    doc.setTextColor(180, 83, 9);
+    doc.text(
+      'Venue-scoped preview (Gates 1-3 only) — collective Gate 4B bonuses settle on All Venues.',
+      margin,
+      footerY
+    );
+  }
 
   return doc;
 }

@@ -470,15 +470,24 @@ export async function listIndexedLaborMonths(ctx: CoopServerContext): Promise<st
   }
 
   try {
-    const list = await ctx.databases.listDocuments(ctx.dbId, ctx.ledgerColId, [
-      Query.orderDesc('$id'),
-      Query.limit(100),
-    ]);
-    for (const doc of list.documents || []) {
-      const mk = String((doc as any).monthKey || '');
-      if (/^\d{4}-(0[1-9]|1[0-2])$/.test(mk) && (doc as any).kind === 'labor_month') {
-        monthSet.add(mk);
+    let cursor: string | null = null;
+    while (true) {
+      const queries = [Query.orderDesc('$id'), Query.limit(100)];
+      if (cursor) queries.push(Query.cursorAfter(cursor));
+      const list = await ctx.databases.listDocuments(
+        ctx.dbId,
+        ctx.ledgerColId,
+        queries
+      );
+      const docs = list.documents || [];
+      for (const doc of docs) {
+        const mk = String((doc as any).monthKey || '');
+        if (/^\d{4}-(0[1-9]|1[0-2])$/.test(mk) && (doc as any).kind === 'labor_month') {
+          monthSet.add(mk);
+        }
       }
+      if (docs.length < 100) break;
+      cursor = docs[docs.length - 1].$id;
     }
   } catch {
     // Ignore
@@ -582,25 +591,37 @@ export async function listAllMonthLockDocs(
   ctx: CoopServerContext
 ): Promise<Record<string, CoopMonthLockSnapshot>> {
   const locksByMonth: Record<string, CoopMonthLockSnapshot> = {};
-  const list = await ctx.databases.listDocuments(ctx.dbId, ctx.ledgerColId, [
-    Query.orderDesc('$id'),
-    Query.limit(100),
-  ]);
-  for (const doc of list.documents || []) {
-    if ((doc as any).kind !== 'month_lock') continue;
-    const mk = String((doc as any).monthKey || '');
-    if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(mk)) continue;
-    if (typeof (doc as any).payloadJson === 'string') {
-      const snap = JSON.parse((doc as any).payloadJson) as CoopMonthLockSnapshot;
-      if (!verifySnapshotHash(snap) || ((doc as any).snapshotHash && (doc as any).snapshotHash !== snap.snapshotHash)) {
-        throw new CoopHttpError(
-          500,
-          `Snapshot hash verification failed for ${mk} — tamper detected.`,
-          'SNAPSHOT_HASH_MISMATCH'
-        );
+  let cursor: string | null = null;
+  while (true) {
+    const queries = [Query.orderDesc('$id'), Query.limit(100)];
+    if (cursor) queries.push(Query.cursorAfter(cursor));
+    const list = await ctx.databases.listDocuments(
+      ctx.dbId,
+      ctx.ledgerColId,
+      queries
+    );
+    const docs = list.documents || [];
+    for (const doc of docs) {
+      if ((doc as any).kind !== 'month_lock') continue;
+      const mk = String((doc as any).monthKey || '');
+      if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(mk)) continue;
+      if (typeof (doc as any).payloadJson === 'string') {
+        const snap = JSON.parse((doc as any).payloadJson) as CoopMonthLockSnapshot;
+        if (
+          !verifySnapshotHash(snap) ||
+          ((doc as any).snapshotHash && (doc as any).snapshotHash !== snap.snapshotHash)
+        ) {
+          throw new CoopHttpError(
+            500,
+            `Snapshot hash verification failed for ${mk} — tamper detected.`,
+            'SNAPSHOT_HASH_MISMATCH'
+          );
+        }
+        locksByMonth[mk] = snap;
       }
-      locksByMonth[mk] = snap;
     }
+    if (docs.length < 100) break;
+    cursor = docs[docs.length - 1].$id;
   }
   return locksByMonth;
 }

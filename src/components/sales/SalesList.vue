@@ -295,6 +295,13 @@
               :class="partnerFilter === 'PDXGL' ? 'btn-accent shadow-xs' : 'btn-ghost opacity-75'"
               @click="partnerFilter = 'PDXGL'"
             >🎲 PDXGL <span class="badge badge-xs badge-ghost font-mono">{{ partnerCounts.PDXGL }}</span></button>
+            <button
+              v-if="salesViewTab === 'coop' || partnerCounts.SWEAT > 0 || partnerFilter === 'SWEAT'"
+              type="button"
+              class="btn btn-xs sm:btn-sm join-item rounded-lg font-bold gap-1 whitespace-nowrap"
+              :class="partnerFilter === 'SWEAT' ? 'btn-info shadow-xs' : 'btn-ghost opacity-75'"
+              @click="partnerFilter = 'SWEAT'"
+            >⚡ Sweat-Equity <span class="badge badge-xs badge-ghost font-mono">{{ partnerCounts.SWEAT }}</span></button>
           </div>
 
           <!-- Search Omnibox (Shown on Ledger Tab) -->
@@ -711,6 +718,7 @@
           @update:location="locationFilter = $event"
           @link-sale="openLinkTicketModal"
           @inspect-item="openItemInspectorById"
+          @sweat-count="activeSweatWorkerCount = $event"
         />
       </div>
 
@@ -1013,8 +1021,9 @@ const loading = ref(true);
 const error = ref('');
 const searchQuery = ref('');
 const locationFilter = ref('all');
-type PartnerKey = 'all' | 'HUCK' | 'BB' | 'PDXGL' | 'COMMONS';
+type PartnerKey = 'all' | 'HUCK' | 'BB' | 'PDXGL' | 'SWEAT' | 'COMMONS';
 const partnerFilter = ref<PartnerKey>('all');
+const activeSweatWorkerCount = ref<number>(0);
 const monthFilter = ref<string>('all');
 let monthDefaulted = false;
 const showBarcodeScanner = ref(false);
@@ -1232,9 +1241,25 @@ const formatCurrency = (value: number) => {
 
 const formatDate = (dateStr?: string) => {
   if (!dateStr) return 'N/A';
+  const s = String(dateStr).trim();
+  const ymd = s.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})(?:$|T00:00:00(?:\.0+)?Z$|\s)/i);
+  if (ymd) {
+    return `${Number(ymd[2])}/${Number(ymd[3])}/${ymd[1]}`;
+  }
+  const mdy = s.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})(?:$|\s)/);
+  if (mdy) {
+    return `${Number(mdy[1])}/${Number(mdy[2])}/${mdy[3]}`;
+  }
   try {
-    const d = new Date(dateStr);
-    return isNaN(d.getTime()) ? dateStr : d.toLocaleDateString('en-US', { month: 'numeric', day: 'numeric', year: 'numeric' });
+    const d = new Date(s);
+    return isNaN(d.getTime())
+      ? dateStr
+      : d.toLocaleDateString('en-US', {
+          timeZone: 'America/Los_Angeles',
+          month: 'numeric',
+          day: 'numeric',
+          year: 'numeric',
+        });
   } catch {
     return dateStr;
   }
@@ -1610,6 +1635,7 @@ const PARTNER_LABELS: Record<Exclude<PartnerKey, 'all'>, string> = {
   HUCK: 'Huck (HUCK-)',
   BB: 'B&B (BB-)',
   PDXGL: 'PDXGL (PDXGL-)',
+  SWEAT: 'Sweat-Equity (SWEAT-)',
   COMMONS: 'Commons Pool (COMMONS-)'
 };
 
@@ -1636,7 +1662,14 @@ const monthLocationSales = computed(() => {
 });
 
 const partnerCounts = computed(() => {
-  const c: Record<string, number> = { all: monthLocationSales.value.length, HUCK: 0, BB: 0, PDXGL: 0 };
+  const sweatCnt = activeSweatWorkerCount.value || 0;
+  const c: Record<string, number> = {
+    all: monthLocationSales.value.length + (salesViewTab.value === 'coop' ? sweatCnt : 0),
+    HUCK: 0,
+    BB: 0,
+    PDXGL: 0,
+    SWEAT: sweatCnt,
+  };
   monthLocationSales.value.forEach(s => { c[s.partner] = (c[s.partner] || 0) + 1; });
   return c;
 });

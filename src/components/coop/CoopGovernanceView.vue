@@ -322,6 +322,7 @@
                   referrerpolicy="no-referrer"
                   alt="Proposal cover"
                   class="w-full h-full object-cover"
+                  @error="handleProposalThumbError($event, p)"
                 />
               </div>
             </div>
@@ -955,6 +956,7 @@ import {
   saveSingleCoopProposal,
   deleteCoopProposal,
   canUserEditProposal,
+  pacificTodayYmd,
   DEFAULT_COOP_POLICY_CONFIG,
   CONSIGNOR_DEAL_MODE_LABELS,
   MEMBER_HAT_META,
@@ -1035,9 +1037,9 @@ const defaultProposals: CoopProposal[] = [
     rationale:
       'Ensures Operating Costs and 100% Cost Basis are always covered first while rewarding active Co-op Partners with real profit sharing whenever the booth beats monthly operating expenses.',
     financialImpact: 'Distributes 90% of Commons Surplus above Operating Costs to Partners (10% to Reserve)',
-    deadline: new Date(Date.now() + 86400000 * 7).toISOString().slice(0, 10),
+    deadline: pacificTodayYmd(new Date(Date.now() + 86400000 * 7)),
     status: 'active',
-    createdAt: new Date().toISOString().slice(0, 10),
+    createdAt: pacificTodayYmd(),
     votes: {
       mike: {
         signal: 'agree',
@@ -1069,7 +1071,7 @@ const newProposal = ref<{
   description: '',
   rationale: '',
   financialImpact: '',
-  deadline: new Date(Date.now() + 86400000 * 14).toISOString().slice(0, 10),
+  deadline: pacificTodayYmd(new Date(Date.now() + 86400000 * 14)),
 });
 
 const newProposalExistingImages = ref<string[]>([]);
@@ -1096,6 +1098,32 @@ function proposalCoverThumb(p: CoopProposal): string {
   const firstId = p.imageId || p.galleryImageIds?.[0];
   if (!firstId || firstId.startsWith('data:')) return '';
   return getCoopMediaUrl(firstId, { preview: true, width: 200, height: 200, quality: 80 });
+}
+
+function handleProposalThumbError(ev: Event, p: CoopProposal) {
+  const img = ev.target as HTMLImageElement | null;
+  if (!img) return;
+  const candidates = Array.from(
+    new Set([p.imageId, ...(p.galleryImageIds || [])].filter((id): id is string => Boolean(id && !id.startsWith('data:'))))
+  );
+  if (candidates.length === 0) return;
+
+  const idx = Number(img.dataset.fallbackIdx || '0');
+  const stage = img.dataset.fallbackStage || 'preview';
+  const currentId = candidates[idx];
+
+  if (stage === 'preview' && currentId) {
+    img.dataset.fallbackStage = 'raw';
+    img.src = getCoopMediaUrl(currentId, { preview: false });
+    return;
+  }
+
+  const nextIdx = idx + 1;
+  if (nextIdx < candidates.length) {
+    img.dataset.fallbackIdx = String(nextIdx);
+    img.dataset.fallbackStage = 'raw';
+    img.src = getCoopMediaUrl(candidates[nextIdx], { preview: false });
+  }
 }
 
 const selectedProposal = computed(
@@ -1535,9 +1563,9 @@ async function createProposal() {
       description: cleanEscapedCurrency(newProposal.value.description.trim()),
       rationale: cleanEscapedCurrency(newProposal.value.rationale.trim()),
       financialImpact: cleanEscapedCurrency(newProposal.value.financialImpact.trim()) || undefined,
-      deadline: newProposal.value.deadline || new Date(Date.now() + 86400000 * 14).toISOString().slice(0, 10),
+      deadline: newProposal.value.deadline || pacificTodayYmd(new Date(Date.now() + 86400000 * 14)),
       status: 'active',
-      createdAt: new Date().toISOString().slice(0, 10),
+      createdAt: pacificTodayYmd(),
       updatedAt: new Date().toISOString(),
       imageId: galleryIds[0] || undefined,
       galleryImageIds: galleryIds,
@@ -1637,7 +1665,7 @@ const exportProposalsCsv = () => {
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
   link.setAttribute('href', url);
-  link.setAttribute('download', `Coop_Governance_Proposals_${new Date().toISOString().slice(0, 10)}.csv`);
+  link.setAttribute('download', `Coop_Governance_Proposals_${pacificTodayYmd()}.csv`);
   document.body.appendChild(link);
   link.click();
   document.body.removeChild(link);
