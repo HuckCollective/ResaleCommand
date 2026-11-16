@@ -61,8 +61,8 @@ description: Industry-standard mobile UX/UI rules for Resale Command, synthesizi
 
 ## 6. Strict Zero Native Browser Dialogs (NN/g & Modern Web Standards)
 - **NEVER Use Native Dialogs**: `window.confirm()`, `window.alert()`, and `window.prompt()` are strictly forbidden across the codebase. They block the single JS execution thread, look outdated, and destroy mobile PWA experiences.
-- **Confirmation Modals**: Always use `confirmDialog(message, title, confirmText, cancelText, confirmClass)` from `@stores/confirm` (rendered globally via `ConfirmContainer.vue`).
-- **Notifications & Errors**: Always use `addToast(message, type)` from `@stores/toast` for non-blocking feedback.
+- **Confirmation Modals**: Always use `askConfirm(...)` from `src/stores/confirm.ts` (use relative imports like `../../stores/confirm` because `tsconfig.json` only aliases `@lib/*`, NOT `@stores/*`; rendered globally via `ConfirmContainer.vue`).
+- **Notifications & Errors**: Always use `addToast(message, type)` from `src/stores/toast.ts` (relative import `../../stores/toast`) for non-blocking feedback.
 
 ## 7. The Contextual Command Dock & Interactive Bottom Sheet (NN/g & Apple HIG)
 - **The Pattern**: Pair persistent thumb-level telemetry (pages, items per page) with interactive action tabs (`[ ⚙ Filters (N) ]`, `[ ⚡ N Actions ]`, `[ + Add ]`).

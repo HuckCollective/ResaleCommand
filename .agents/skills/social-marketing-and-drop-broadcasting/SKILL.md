@@ -30,7 +30,7 @@ Social marketing in Resale Command is not limited to product drops. The studio s
 
 | Campaign Type | Objective | Source in App | Key Information Needed | Example |
 | :--- | :--- | :--- | :--- | :--- |
-| **1. Fresh Drop & Restock** | Drive foot traffic to physical booths; clear newly placed inventory fast. | Active Drop Manifests (Memory Den, Dusty Tiger) | Selling location, booth number, item titles, prices, shelf photos. | *"🚨 15 fresh gothic & dark academia pieces just landed at Memory Den Booth 42!"* |
+| **1. Fresh Drop & Restock** | Drive foot traffic to physical booths; clear newly placed inventory fast. | Active Drop Manifests (Memory Den, Dusty Tiger) | Selling location, booth number, item titles, prices, shelf photos. | *"🚨 15 fresh gothic & dark academia pieces just landed at Memory Den Booth #0EJ!"* |
 | **2. Latest Finds & Hero Grails** | Spotlight exceptional high-ticket or rare treasures; build collector credibility. | Active Inventory Search / High-Value Filter | Maker provenance, era, construction details, condition notes. | *"1993 Tim Burton Nightmare Before Christmas Velvet Jacket — an authentic relic of 90s gothic cinema."* |
 | **3. Popups, Conventions & Markets** | Rally local followers to attend in-person events; generate weekend hype. | Event Date / Location Inputs | Event name, venue address, dates/hours, booth/table number. | *"We're setting up at the Portland Oddities & Curiosities Expo this Saturday! Table 14."* |
 | **4. Culture, Fashion & Vibe (Ad-Hoc)** | Build community, educate on subcultures, showcase styling, and entertain. | Ad-Hoc Photo Drop / Camera (No DB SKU required) | Theme topic (e.g. 90s Whimsigoth, TTRPG history, styling velvet). | *"Why 1990s velvet outerwear hits differently: a visual breakdown of decadent layering."* |
@@ -83,15 +83,11 @@ Resale social campaigns only ever deal with two types of visual assets:
 * **The Rule**: All booth display galleries and location intake MUST reuse `PhotoGalleryManager.vue` (the canonical component from `/scout` and `ItemDrawer`).
 * **Why**: Users expect the exact same tactile dropzone, cover-photo starring (⭐), thumbnail reordering, zoom lightbox, and prominent camera trigger across every view.
 
-### C. The Edit Drawer Pattern for Products (No Heavy Canvas Modals)
-* **Anti-Pattern**: Do NOT build bespoke, heavy client-side canvas crop/editor modals for items.
-* **Canonical Pattern**: Clicking "Edit Item & Photos" on any product card slides open the standard **`ItemDrawer.vue`**.
-* Inside `ItemDrawer`, the user gets the full, battle-tested `PhotoGalleryManager.vue` with:
-  - Setting the **Main Cover Photo (⭐)**.
-  - Multi-photo gallery thumbnail strip.
-  - Camera capture and high-res zoom lightbox.
+### C. Product Editing (`ItemDrawer.vue`) & Social Slide Framing (`SlideImageEditorModal.vue`)
+* **Inventory Item Editing**: Clicking "Edit Item & Photos" on any product card slides open the standard **`ItemDrawer.vue`** (embedding `PhotoGalleryManager.vue` for ⭐ Main Cover Photo selection, camera capture, and Appwrite gallery persistence).
+* **Social Slide Framing & Overlays**: Per-slide social framing, aspect-ratio crops, and text overlays in Dropcast Studio use the shared **`SlideImageEditorModal.vue`** + **`src/lib/slideCanvasEngine.ts`** pipeline (never invent duplicate one-off crop widgets outside `SlideImageEditorModal.vue`).
 
-### C. Social Grid Presentation
+### D. Social Grid Presentation
 * Each product card on the social grid displays its **set Main Cover Photo (⭐)**.
 * Cards include:
   - High-contrast multi-select checkbox (top-left).
@@ -99,9 +95,9 @@ Resale social campaigns only ever deal with two types of visual assets:
   - Retail price badge (`$xx.xx`).
   - Action buttons: `✏️ Edit Item & Photos` (opens `ItemDrawer`), `📸 Camera`, `💾 Download Single`.
 
-### D. Promotion vs. Logistics Separation & Mutual Exclusivity
+### E. Promotion vs. Logistics Separation & Mutual Exclusivity
 * **Promotion (Dropcasts)** vs. **Logistics (Outbound Drops)**:
-  - **Drop Manifests** (`LocationManifestTray.vue`) handle physical inventory movement: mutating status from `in-stock` $\rightarrow$ `placed`, updating warehouse bins to booth locations, exporting Ricochet CSVs, and driving Rollo label printing.
+  - **Drop Manifests** (`LocationManifestTray.vue`) handle physical inventory movement: mutating status from `received` $\rightarrow$ `placed`, updating warehouse bins to booth locations, exporting Ricochet CSVs, and driving Rollo label printing.
   - **Dropcasts** (`DropcastStagingTray.vue`) handle creative storytelling: bundling photos and AI-crafted captions for Instagram, TikTok, or Threads. **A Dropcast never moves items or modifies database storage locations.**
 * **Mutual Exclusivity of Selection Trays**:
   - Curating a Dropcast tray automatically hides/pauses any open Outbound Drop manifest. The user is strictly focused on creative media selection rather than physical box packing.
@@ -131,7 +127,7 @@ The right column of the studio provides a realistic **Smartphone Simulator Frame
 
 When implementing or modifying social media tools in Resale Command:
 - [ ] Ensure **all 4 Campaign Modes** (Drop, Inventory, Event, Ad-hoc) are accessible.
-- [ ] Wire item editing directly to **`ItemDrawer.vue`**; never introduce separate canvas crop modals.
+- [ ] Wire inventory item editing to **`ItemDrawer.vue`** and social slide framing/overlays to **`SlideImageEditorModal.vue`** (`slideCanvasEngine.ts`).
 - [ ] Provide high-contrast **multi-select checkboxes** on all cards with batch ZIP download.
 - [ ] Use **IP-safe Aesthetic Archetypes** in persona pickers (Gothic Decadence, Dark Academia, Cyberpunk, Whimsigoth, Heritage).
 - [ ] Actively celebrate genuine **brands** under nominative fair use in prompts and hashtags.

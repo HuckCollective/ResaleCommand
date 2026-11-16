@@ -120,7 +120,7 @@ Before releasing changes to `identify-item.ts` or `ai-inspection.ts`, verify:
 - [ ] Empty boxes or orphan packaging are priced as salvage/packaging, with 'NEGOTIATE' or 'PASS' on complete-set asking prices.
 - [ ] User notes remain strictly separated from scraped titles or internal channel lists.
 - [ ] User notes cleanly override visual guesses.
-- [ ] The app builds cleanly with zero TypeScript errors: `npm run build`.
+- [ ] Templates, TypeScript, and contracts pass `npm run verify` cleanly (never run `npm run build` / `astro build` locally on Windows; let Vercel build in the cloud).
 
 
 ## Image Preview, Gallery Order & Category Detection Rules

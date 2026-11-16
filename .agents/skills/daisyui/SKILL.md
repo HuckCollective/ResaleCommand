@@ -102,49 +102,27 @@ description: Expert guidelines and best practices for building modern, responsiv
 </dialog>
 ```
 
-### Bottom Navigation & Button Docks (`dock`)
-daisyUI v5 replaces `btm-nav` with the official semantic `.dock` component. In Resale Command, all bottom docks follow the **Unified Frozen Command Dock Pattern**:
+### Bottom Navigation & Button Docks (`<BottomActionDock>` & `<PaginationDock>`)
+daisyUI v5 replaces `btm-nav` with the semantic `.dock` component. In Resale Command, **never hand-roll raw `<div class="fixed bottom-0...">` dock wrappers**—always consume the canonical [`BottomActionDock.vue`](file:///c:/Users/15034/Projects/ResaleCommand/src/components/common/BottomActionDock.vue) and [`PaginationDock.vue`](file:///c:/Users/15034/Projects/ResaleCommand/src/components/common/PaginationDock.vue) primitives (`#top`, `#left`, `#center`, `#right` slots), which encapsulate `<Teleport to="body">`, safe-area insets, and automatic `ResizeObserver` `.rc-dock-spacer` clearance (`src/composables/useDockClearance.ts`):
 
-```html
-<!-- Base frozen 2-tier dock pinned at bottom with safe-area insets -->
-<div class="fixed bottom-0 inset-x-0 z-40 bg-base-100/95 dark:bg-base-200/95 backdrop-blur-2xl border-t border-base-300 shadow-[0_-4px_25px_rgba(0,0,0,0.18)] select-none pointer-events-auto flex flex-col pb-[env(safe-area-inset-bottom,0px)]">
-  
-  <!-- Tier 1: Slim Contextual Telemetry / Pager / Manifest Status Strip -->
-  <div class="border-b border-base-content/15 bg-base-200 dark:bg-base-300 py-1 px-3 flex items-center justify-center text-xs shadow-2xs">
-    <div class="max-w-xl w-full mx-auto flex items-center justify-between sm:justify-center gap-1 sm:gap-2">
-      <!-- Pager items or active tracker pill -->
-    </div>
-  </div>
-
-  <!-- Tier 2: DaisyUI Semantic Dock (Thumb Zone) with Solid Tactile Hero Buttons -->
-  <div class="max-w-xl w-full mx-auto">
-    <div class="dock dock-sm !static !bg-transparent !border-t-0 !shadow-none !h-14 px-2 py-1 gap-2">
-      <!-- Neutral Action: New Scout / Cancel -->
-      <button type="button" class="h-11 sm:h-12 my-auto px-2 rounded-2xl flex flex-col items-center justify-center gap-0.5 transition-all duration-200 bg-base-200/80 hover:bg-base-300 text-base-content font-bold border border-base-content/15 shadow-xs active:scale-95">
-        <Icon icon="solar:restart-bold" class="w-4.5 h-4.5" />
-        <span class="font-extrabold uppercase text-[10px] tracking-tight">New Scout</span>
-      </button>
-
-      <!-- Primary Hero CTA (Enabled): Solid High-Contrast Pill -->
-      <button type="button" class="h-11 sm:h-12 my-auto px-4 rounded-2xl flex flex-col items-center justify-center gap-0.5 transition-all duration-200 bg-primary text-primary-content font-black shadow-md border border-primary-content/25 active:scale-95 hover:brightness-110">
-        <Icon icon="solar:magic-stick-3-bold" class="w-4.5 h-4.5 drop-shadow-xs" />
-        <span class="font-black uppercase text-[11px] tracking-wide leading-none">Identify Item</span>
-      </button>
-
-      <!-- Warning Hero CTA (Attention / Re-Action / Re-Identify): Solid Amber Pill -->
-      <button type="button" class="h-11 sm:h-12 my-auto px-4 rounded-2xl flex flex-col items-center justify-center gap-0.5 transition-all duration-200 bg-warning text-warning-content font-black shadow-md border border-warning-content/25 active:scale-95 hover:brightness-110">
-        <Icon icon="solar:magic-stick-3-bold" class="w-4.5 h-4.5 drop-shadow-xs" />
-        <span class="font-black uppercase text-[11px] tracking-wide leading-none">Re-Identify</span>
-      </button>
-
-      <!-- Success Action (Save / Commit): Solid Green Pill -->
-      <button type="button" class="h-11 sm:h-12 my-auto px-3 rounded-2xl flex flex-col items-center justify-center gap-0.5 transition-all duration-200 bg-success text-success-content font-black shadow-md border border-success-content/25 active:scale-95 hover:brightness-110">
-        <Icon icon="lucide:truck" class="w-4.5 h-4.5" />
-        <span class="font-black uppercase text-[10px] truncate max-w-[100px] leading-none">+ Add Item</span>
-      </button>
-    </div>
-  </div>
-</div>
+```vue
+<BottomActionDock>
+  <template #top>
+    <div class="text-xs font-bold">12 items staged • Ready to Sync</div>
+  </template>
+  <template #center>
+    <!-- Primary Hero CTA: Solid High-Contrast Pill -->
+    <button type="button" class="btn btn-sm sm:btn-md btn-primary text-primary-content font-black rounded-2xl shadow-md">
+      <Icon icon="solar:magic-stick-3-bold" class="w-4.5 h-4.5" />
+      <span>Identify Item</span>
+    </button>
+    <!-- Success Action (Save / Commit): Solid Green Pill -->
+    <button type="button" class="btn btn-sm sm:btn-md btn-success text-success-content font-black rounded-2xl shadow-md">
+      <Icon icon="lucide:truck" class="w-4.5 h-4.5" />
+      <span>+ Add Item</span>
+    </button>
+  </template>
+</BottomActionDock>
 ```
 - **Modifiers**: `dock-xs`, `dock-sm`, `dock-md` (default), `dock-lg`, `dock-xl`.
 - **Parts**: `.dock-label` for standard tab text, `.dock-active` for active selection indicator bar.
@@ -181,7 +159,7 @@ daisyUI v5 replaces `btm-nav` with the official semantic `.dock` component. In R
 9. **DROPDOWN & POPOVER AUTO-FIT RULE**: When rendering dropdown menus (`.dropdown-content .menu`) containing dynamic labels and trailing badges, NEVER use fixed narrow widths like `w-64`. Always use `w-max min-w-[280px] max-w-[calc(100vw-2rem)] sm:max-w-md` with `flex-1 min-w-0 truncate` on text and `shrink-0` on badges to guarantee zero pill breakout or text clipping across screen sizes.
 10. **GLOBAL BADGE NOWRAP & MICRO-BADGE UTILITIES (`.badge` + `.badge-2xs` in `src/styles/global.css` — Enforced by `validate-templates.mjs`)**: DaisyUI v5 does not include `badge-2xs`/`btn-2xs`/`input-2xs` or `white-space: nowrap` on `.badge` by default. `src/styles/global.css` enforces `.badge { white-space: nowrap; flex-shrink: 0; }` globally and defines `.badge-2xs`, `.btn-2xs`, `.input-2xs`, and `.select-2xs` so badges never wrap onto 2 lines or overflow into card titles below them. Never cram rich multi-badge/multi-button cards into `xl:grid-cols-5` (use `xl:grid-cols-3` max for action cards).
 11. **LINE-CLAMP + PADDING SEPARATION RULE (Enforced by `validate-templates.mjs`)**: NEVER put `line-clamp-*` and vertical padding (`p-*`, `py-*`, `pb-*`) on the same HTML element! Because `line-clamp-*` sets `overflow: hidden` (which clips at the border edge, not the content edge), any bottom padding reveals the top half of line `N+1` sliced horizontally in half. Always place `p-* bg-* border rounded-*` on an outer `<div>` wrapper and put `line-clamp-*` on an inner `<p>`/`<div>` with zero vertical padding.
-12. **BOTTOM DOCK CLEARANCE RULE (`px-* pt-* pb-*` vs. `md:p-*` — Enforced by `validate-templates.mjs`)**: Never combine responsive shorthand `md:p-*` or `lg:p-*` with `pb-24`/`pb-32`/`pb-36`/`pb-44` on page containers—`md:p-8` resets `padding-bottom` to `2rem` at `>= 768px`, causing fixed `BottomActionDock` bars to overlap bottom cards. Always use `px-4 pt-4 sm:px-6 sm:pt-6 md:px-8 md:pt-8 pb-36` (and `BottomActionDock` also injects an automatic in-flow spacer when `placement="viewport"`).
+12. **SELF-CLEARING BOTTOM DOCK SPACER RULE (`.rc-dock-spacer` / `useDockClearance` — Enforced by `validate-templates.mjs` §8)**: Both `<BottomActionDock>` and `<PaginationDock>` automatically measure their live pixel height via `ResizeObserver` and update `.rc-dock-spacer` (`--rc-dock-clearance`) inside `.rc-page-shell`. **NEVER** add manual `pb-28`..`pb-48` bottom padding to page wrappers (`validate-templates.mjs` §8 fails the build on `pb-28+`); keep normal `px-4 pt-4 sm:px-6 sm:pt-6 md:px-8 md:pt-8 pb-6 sm:pb-8` and pass `hideFooter={true}` to `<Layout>`.
 13. **THE 29-TOKEN DAISYUI V5 THEME SPEC (`src/styles/theme.css` — Enforced by `validate-templates.mjs`)**: Custom themes in `@plugin "daisyui/theme"` do NOT inherit structural tokens from `light`. Every custom theme MUST define all 29 official tokens: `--border: 1px`, `--size-selector: 0.25rem`, `--size-field: 0.25rem`, `--depth: 1`, `--noise: 0`, 3 `--radius-*` tokens, and 20 semantic color tokens (including `--color-info/content`, `--color-success/content`, `--color-warning/content`, `--color-error/content`). Missing `--border: 1px` invalidates DaisyUI v5's `calc(var(--size) / 2 - var(--border))` formula, collapsing badge horizontal padding to 0px across the entire app!
 14. **TAILWIND V4 & VITE PIPELINE VS. POSTCSS & `@apply` (`@reference` RULE — Enforced by `validate-templates.mjs`)**:
     - Our stack uses `@tailwindcss/vite` (Rust Oxide + Lightning CSS). Never create `postcss.config.*` or `tailwind.config.*` files in the project root.

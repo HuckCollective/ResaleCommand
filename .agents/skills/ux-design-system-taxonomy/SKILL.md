@@ -56,7 +56,7 @@ Watch out for these red flags in existing or new code, and refactor them to use 
 
 ---
 
-## 2. Canonical UX Terminology vs. Implementation Jargon
+## 2A. Canonical UX Terminology vs. Implementation Jargon
 
 To ensure design-led, maintainable systems, use formal UX/HCI terms rather than raw implementation language:
 
@@ -71,7 +71,7 @@ To ensure design-led, maintainable systems, use formal UX/HCI terms rather than 
 
 ---
 
-## 2. The 4 Canonical View Archetypes
+## 2B. The 4 Canonical View Archetypes
 
 Every interface in Resale Command belongs to one of four distinct View Archetypes:
 
@@ -285,7 +285,7 @@ Activating a selection tray dynamically tunes the main inventory catalog grid to
 
 | Active Tray Mode | Automatic Grid Filter State | Hidden From View | User Focus |
 | :--- | :--- | :--- | :--- |
-| **📦 Staging an Outbound Drop** | `storageLocation: 'HG'` (Garage backstock), `status: 'in-stock'`, unplaced. | Already placed booth items (`MD`, `DT`), sold items, draft purchases. | Selecting unplaced backstock units to pack into the physical tote. |
+| **📦 Staging an Outbound Drop** | `storageLocation: 'HG'` / `'HH'` (Backstock), `status: 'received'`, unplaced. | Already placed booth items (`MD`, `DT`), sold items, draft purchases. | Selecting unplaced backstock units to pack into the physical tote. |
 | **🎬 Curating a Dropcast** | `hasPhotos: true` (`imageId != null`), prioritizing recent booth placements (`status: 'placed'`). | Unphotographed items, raw unboxed backstock, sold items. | Selecting photo-ready items to feature in social media slides. |
 | **⚡ Generic Bulk Actions** | Standard catalog filters (user controlled). | None (respects current query). | Manual maintenance (status updates, location moves). |
 

@@ -25,8 +25,8 @@ Each sales channel uses distinct register scanning hardware and backend inventor
 | **Online / E-Commerce** | Master UPC-A / Code128 | `item.upc` | Full Item Title & UPC | `4x6"` Shipping / Pack Slip |
 
 > [!IMPORTANT]
-> **The Ricochet POS Invariant**:
-> At Memory Den registers, cashiers scan the **6-character Ricochet SKU** (`locationSku`), NOT the internal HUCK UPC. If `locationSku` is missing, the scanner cannot resolve the item in Ricochet's cloud inventory. Barcode generation MUST prefer `locationSku` whenever present.
+> **The Ricochet POS Dual-Scan Authority (`locationSku` + Synced `UPC`)**:
+> When items are imported via the 9-column Ricochet CSV (`SKU` header) or synced via `⚡ Memory Den Sync`, Ricochet stores our `HUCK-XXXX` / `PDXGL-XXXX` barcode in its scannable **UPC** field alongside its auto-generated 6-character **`0EJ...` SKU** (`item.locationSku`), so Memory Den registers can scan **either** `0EJ...` or a synced `HUCK-XXXX` barcode. On printed Memory Den shelf/butterfly tags, prefer `item.locationSku` (`0EJ...`) as the compact primary barcode when present (with `0EJ... • HUCK-XXXX` human-readable caption), falling back to `item.upc` only after confirming the `UPC` is synced in Ricochet.
 
 ---
 
@@ -134,7 +134,7 @@ The Rollo macOS CUPS driver contains `*LandscapeOrientation: Plus90`. Because a 
 - **Isolated Hardware Test Workbench**: Hosted at `/labels/test` ([`src/components/labels/RolloLabelTestWorkbench.vue`](file:///c:/Users/15034/Projects/ResaleCommand/src/components/labels/RolloLabelTestWorkbench.vue)). Provides:
   - **Location Test Profiles Dropdown**: Rapid profile testing across `Memory Den (MD)`, `Dusty Tiger (DT)`, `Portland Gaming Lib (PDX)`, `Garage Backstock (HG)`, `Online E-Commerce (ONLINE)`, and `Custom`.
   - **Barcode Format Toggle**: Instant switching between 1D Linear (Code 128) and 2D Matrix (Mini QR Code).
-  - **QR Data Format Toggle**: Switch between hardware-scannable Raw SKU (`0EJ0J1`) and customer smartphone Web URL (`https://resalecommand.com/i/HUCK-1490`).
+  - **QR Data Format Toggle**: Switch between hardware-scannable Raw SKU (`0EJ0J1`) and customer smartphone Web URL (`https://works.thehc.llc/item/<id>`).
   - **Live Physical Preview Mockup**: Supports standard rectangle tags (split side-by-side layout in QR mode) and butterfly barbell jewelry tags.
   - **1-Click Test Printing**: Supports direct Rollo thermal printing and vector PDF export with 3-label feed alignment calibration runs.
 
@@ -155,7 +155,7 @@ While 1D Code 128 barcodes remain standard for legacy POS barcode guns (like Mem
 
 ### C. Data Payload Protocols
 1. **Raw SKU Mode**: Encodes `item.locationSku || item.upc` (e.g. `0EJ0J1` or `HUCK-1490`). Recommended for handheld 2D inventory scanners.
-2. **Item Web URL Mode**: Encodes `https://resalecommand.com/i/HUCK-1490`. Enables antique mall shoppers to scan the physical tag with their iPhone/Android camera to view provenance, photos, and historical comps.
+2. **Item Web URL Mode**: Encodes `https://works.thehc.llc/item/<id>` (via `PRIMARY_ORIGIN` in `src/lib/siteConfig.ts`). Enables antique mall shoppers to scan the physical tag with their iPhone/Android camera to view provenance, photos, and item details.
 
 ---
 
@@ -174,7 +174,7 @@ To eliminate repetitive manual configuration at print time, each Location / Venu
 | **`barcodeType`** | Primary barcode symbology | `code128` (1D Laser Gun) or `qr` (2D Mini Matrix) |
 | **`identifierAuthority`** | Barcode derivation logic | `dual_id_ricochet` (MD), `pure_upc` (PDXGL, DT), `warehouse_bin` (HG) |
 | **`qrDataFormat`** | What the QR code encodes | `sku` (POS gun) or `url` (Mobile customer camera) |
-| **`customFooter`** | Optional fixed footer string | `Booth #42 • No Returns`, `Consignor Asset Tag` |
+| **`customFooter`** | Optional fixed footer string | `Booth #0EJ • No Returns`, `Consignor Asset Tag` |
 
 ### C. Zero-Friction Automated Print Dispatch
 When the curator initiates label printing from anywhere in Resale Command:

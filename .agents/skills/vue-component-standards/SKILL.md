@@ -134,9 +134,9 @@ Whenever you encounter recurring UI patterns or structural containers (e.g. bott
 3. **Hardware-Level Mobile Clearances**:
    - Primitives positioned along viewport edges MUST automatically include `env(safe-area-inset-bottom)` or `env(safe-area-inset-top)` so hardware indicators (e.g. iPhone home bar) never collide with action targets.
 4. **Establish & Enforce Page-Level Layout Contracts**:
-   - If a page consumes a fixed bottom dock primitive:
+   - If a page consumes a fixed bottom dock primitive (`<BottomActionDock>` or `<PaginationDock>`):
      - The Astro page layout MUST pass `hideFooter={true}` to `<Layout>` to prevent footer collisions and double-scrollbars.
-     - The page's scrollable container MUST provide bottom clearance padding (`pb-36 sm:pb-44`) so the bottom-most list items can scroll completely above the dock.
+     - Both docks self-measure via `ResizeObserver` (`src/composables/useDockClearance.ts`) and automatically expand `.rc-dock-spacer` inside `.rc-page-shell`. **NEVER** add manual `pb-28`..`pb-48` padding to page wrappers (`validate-templates.mjs` §8 bans `pb-28+`); keep standard `pb-6 sm:pb-8`.
 
 ---
 
@@ -144,7 +144,7 @@ Whenever you encounter recurring UI patterns or structural containers (e.g. bott
 
 Before marking any Vue component task complete, verify:
 - [ ] **Primitive Reusability**: Did you identify any recurring UI patterns that should be extracted to `src/components/common/` rather than hardcoded inline?
-- [ ] **Dock Page Contract**: If using a bottom dock, does the `.astro` page pass `hideFooter={true}` and does the container have `pb-36 sm:pb-44` clearance?
+- [ ] **Dock Page Contract**: If using a bottom dock, does the `.astro` page pass `hideFooter={true}` inside `.rc-page-shell` with **no** manual `pb-28+` bottom padding (relying on `.rc-dock-spacer` / `useDockClearance`)?
 - [ ] Every prop passed in `<ChildComponent :prop="val" />` exists in the child's `defineProps`.
 - [ ] Every event listened to in `<ChildComponent @event="fn" />` exists in the child's `defineEmits`.
 - [ ] No `[Vue warn]` messages appear in the browser console when opening/closing or interacting with the component.

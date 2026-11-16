@@ -34,16 +34,16 @@ Zero paperwork sourcing (Flea markets, garage sales, friend swaps).
   * User inputs: Deal Name (*"Traded Dave for Stereo"*) + Total Cost Basis (*$0* or cash out of pocket).
   * Line items start with $0 or equal split cost basis.
 
-### D. Future Online Sources (In Planning / Scraper Support)
-* **eBay**: URL parser (`/api/identify-item`) can scrape listing title, seller asking price, shipping cost, and high-res image gallery.
-* **Facebook Marketplace**: URL parser extracts title, asking price, and seller location.
-* **HiBid / GovDeals / EstateSales.net**: Currently manual PO or receipt upload; CSV formats pending.
+### D. Multi-Platform Online Auction & Marketplace Scout (`public/auction-scout-sync.user.js` + `src/lib/onlineSourcingAdapters.ts`)
+* **ShopGoodwill, HiBid, EstateSales.net, eBay, & Facebook Marketplace**: Supported via the Evergreen **Auction Scout** bookmarklet (`/scripts/auction-bookmarklet.js` ➔ `public/auction-scout-sync.user.js`), `src/lib/sourcingDomains.ts`, and `src/lib/onlineSourcingAdapters.ts`, extracting listing titles, bid/asking prices, shipping/buyer's premium context, and high-res photo galleries directly into Speed Scout (`/api/identify-item`) and PO intake (`purchasesAPI.savePurchaseOrder`).
 
 ---
 
-## 2. Gemini Multimodal AI Deep Scan Capabilities
+## 2. Gemini Multimodal Speed Scout vs. AI Deep Scan Capabilities
 
-AI Deep Scan (`/api/identify-item.ts`) uses Gemini 2.5 multimodal vision. It takes **physical unboxing photos** and transforms them into commercial boutique inventory.
+Resale Command splits Gemini 2.5 multimodal vision into two dedicated endpoints:
+* **Speed Scout (`/api/identify-item.ts`)**: Pre-acquisition rapid scan (photo or listing URL) returning Fair/Boutique valuation, Max Bid, and `BUY_NOW` / `PASS` / `NEGOTIATE` verdict.
+* **AI Deep Scan (`/api/inspect-lot.ts` + `src/lib/ai-inspection.ts`)**: Post-acquisition multi-photo unboxing & lot decomposition engine transforming owned hauls into commercial boutique inventory with multi-angle `views` + bounding boxes.
 
 ### What AI Deep Scan Extracts:
 1. **Physical Tag Title (`tag_title`)**:

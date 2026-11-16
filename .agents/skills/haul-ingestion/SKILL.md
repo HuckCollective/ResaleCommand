@@ -98,9 +98,9 @@ Resale Command enforces a strict conceptual and operational boundary between mov
 | Dimension | 📦 Outbound Drop (`LocationManifestTray.vue`) | 🎬 Dropcast (`DropcastStagingTray.vue`) |
 | :--- | :--- | :--- |
 | **Domain** | **Physical Logistics & Operations** | **Creative Marketing & Social Broadcasting** |
-| **Core Action** | Moves inventory from Garage (`HG`) to Booth (`MD`, `DT`) or Online. | Packages curated photos, AI copy, and hashtags for social media. |
-| **Database Impact** | **Mutates Inventory State**: `in-stock` $\rightarrow$ `in-transit` $\rightarrow$ `placed`. Updates `storageLocation`. | **Read-Only / Media Only**: Never moves items or alters warehouse bins. |
-| **Grid Auto-Filter** | Auto-filters main grid to **Unplaced Backstock** (`HG`, `status: 'in-stock'`). Hides placed/sold items. | Auto-filters to **Photo-Ready Stock** (`imageId != null`), highlighting fresh booth drops or hero grails. |
+| **Core Action** | Moves inventory from Backstock (`HG`, `HH`) to Booth (`MD`, `DT`) or Online. | Packages curated photos, AI copy, and hashtags for social media. |
+| **Database Impact** | **Mutates Inventory State**: `received` $\rightarrow$ `placed` (or `listed`). Updates `storageLocation` & `warehouseId`. | **Read-Only / Media Only**: Never moves items or alters warehouse bins. |
+| **Grid Auto-Filter** | Auto-filters main grid to **Unplaced Backstock** (`HG` / `HH`, `status: 'received'`). Hides placed/sold items. | Auto-filters to **Photo-Ready Stock** (`imageId != null`), highlighting fresh booth drops or hero grails. |
 | **Primary Output** | Ricochet CSV, Reconciliation Handshake, At-Home Rollo Thermal Print Strip. | Live Phone Simulator Preview, 1-Click Copy Caption, 1-Click ZIP Download of Photos. |
 
 ---
@@ -149,7 +149,7 @@ To permanently eliminate barcode desynchronization, duplicate tag collisions, an
   - Every exported or printed barcode must exist as a persisted `upc` attribute in Appwrite `resale_db.items`.
   - When an export is initiated in `useManifest.ts`, `ensureItemUpc()` scans all staged items and writes true canonical sequential UPCs to any unassigned items in the database before generating the CSV.
 - **Prefix Isolation & True Database Max**:
-  - Barcodes follow strict org prefixes (e.g., `HUCK-` for Memory Den booth items, `PDX-` for Portland Gaming Library co-op).
+  - Barcodes follow strict org prefixes (`HUCK-` for The Huckleberry Collective, `PDXGL-` for PDX Game Library co-op, and `BB-` for consignors). When exporting the 9-column `memoryden_ricochet_import.csv`, placing `item.upc` (`HUCK-XXXX` / `PDXGL-XXXX`) under the `SKU` column header maps directly into Ricochet's scannable **UPC** field while Ricochet auto-generates its internal `0EJ...` SKU.
   - New numbers are computed by querying the true maximum integer suffix across the entire collection (`getTrueMaxUpcIndex()`), completely preventing collisions caused by local 50-item query limits.
 
 ### B. Ricochet Confirmation Loop (`src/lib/manifestReconciliation.ts`)
