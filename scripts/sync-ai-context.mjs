@@ -215,6 +215,24 @@ function sha256(text) {
 }
 
 /**
+ * Writes `nextContent` to `filePath` ONLY if the normalized UTF-8 text actually changed.
+ * Avoids spurious mtime churn and prevents sandbox EPERM errors on protected rule/skill files
+ * (`GEMINI.md`, `.clinerules`, `.agents/skills/**`) when already up to date.
+ */
+function writeIfChanged(filePath, nextContent) {
+  const normalizedNext = nextContent.replace(/\r\n/g, '\n');
+  if (fs.existsSync(filePath)) {
+    const prev = fs.readFileSync(filePath, 'utf8').replace(/\r\n/g, '\n');
+    if (prev === normalizedNext) {
+      return false;
+    }
+  }
+  fs.mkdirSync(path.dirname(filePath), { recursive: true });
+  fs.writeFileSync(filePath, normalizedNext, 'utf8');
+  return true;
+}
+
+/**
  * Strips YAML frontmatter from a markdown file so multiple files can be cleanly combined.
  */
 function stripFrontmatter(rawContent) {
@@ -249,8 +267,10 @@ function syncCoreDocsAndHucksSkill() {
   ].join('\n');
 
   const geminiBytes = Buffer.byteLength(combinedGeminiMd, 'utf8');
-  fs.writeFileSync(GEMINI_MD_PATH, combinedGeminiMd, 'utf8');
-  console.log(`✅ Updated root GEMINI.md (${geminiBytes} bytes — budget < 20,000 B / hard cap 24,000 B)`);
+  const geminiWrote = writeIfChanged(GEMINI_MD_PATH, combinedGeminiMd);
+  console.log(
+    `✅ ${geminiWrote ? 'Updated' : 'Verified up-to-date'} root GEMINI.md (${geminiBytes} bytes — budget < 20,000 B / hard cap 24,000 B)`
+  );
 
   // 1b. Write lean, token-efficient root .clinerules for VS Code (Cline) — ignored by Antigravity IDE
   const clineRulesContent = [
@@ -279,11 +299,12 @@ function syncCoreDocsAndHucksSkill() {
     '',
   ].join('\n');
 
-  fs.writeFileSync(CLINERULES_PATH, clineRulesContent, 'utf8');
-  console.log(`✅ Updated root .clinerules (${Buffer.byteLength(clineRulesContent, 'utf8')} bytes)`);
+  const clineWrote = writeIfChanged(CLINERULES_PATH, clineRulesContent);
+  console.log(
+    `✅ ${clineWrote ? 'Updated' : 'Verified up-to-date'} root .clinerules (${Buffer.byteLength(clineRulesContent, 'utf8')} bytes)`
+  );
 
   // 2. Embed live AI_STUDIO_PLAYBOOK.md + ACTIVE_SESSION.md into .agents/skills/hucks-resale-core/SKILL.md
-  fs.mkdirSync(path.dirname(HUCKS_CORE_SKILL_PATH), { recursive: true });
   const hucksCoreSkillContent = [
     HUCKS_CORE_SKILL_HEADER.trim(),
     '',
@@ -301,9 +322,9 @@ function syncCoreDocsAndHucksSkill() {
     '',
   ].join('\n');
 
-  fs.writeFileSync(HUCKS_CORE_SKILL_PATH, hucksCoreSkillContent, 'utf8');
+  const hucksWrote = writeIfChanged(HUCKS_CORE_SKILL_PATH, hucksCoreSkillContent);
   console.log(
-    `✅ Updated .agents/skills/hucks-resale-core/SKILL.md with live ACTIVE_SESSION.md (${Buffer.byteLength(hucksCoreSkillContent, 'utf8')} bytes)`
+    `✅ ${hucksWrote ? 'Updated' : 'Verified up-to-date'} .agents/skills/hucks-resale-core/SKILL.md with live ACTIVE_SESSION.md (${Buffer.byteLength(hucksCoreSkillContent, 'utf8')} bytes)`
   );
 }
 
@@ -384,14 +405,16 @@ function writeGeneratedSkillBundlesModule(bundles) {
 }
 
 function syncBundledSkills() {
-  // Read previous manifest BEFORE wiping dist-gemini-skills/
+  // Read previous manifest BEFORE pruning stale folders in dist-gemini-skills/
   const prevManifest = loadPreviousManifest();
 
-  // Wipe dist-gemini-skills/ completely so only the 6 bundled folders exist
-  if (fs.existsSync(SKILLS_DIST_DIR)) {
-    fs.rmSync(SKILLS_DIST_DIR, { recursive: true, force: true });
-  }
   fs.mkdirSync(SKILLS_DIST_DIR, { recursive: true });
+  const expectedIds = new Set(GEMINI_WEB_BUNDLES.map((b) => b.id));
+  for (const entry of fs.readdirSync(SKILLS_DIST_DIR, { withFileTypes: true })) {
+    if (entry.isDirectory() && !expectedIds.has(entry.name)) {
+      fs.rmSync(path.join(SKILLS_DIST_DIR, entry.name), { recursive: true, force: true });
+    }
+  }
 
   const nextManifestSkills = {};
   const syncedBundles = [];
@@ -446,7 +469,7 @@ function syncBundledSkills() {
     fs.mkdirSync(targetDir, { recursive: true });
 
     const destSkillPath = path.join(targetDir, 'SKILL.md');
-    fs.writeFileSync(destSkillPath, fullContent, 'utf8');
+    writeIfChanged(destSkillPath, fullContent);
 
     const currentHash = sha256(fullContent);
     const previousHash = prevManifest.skills?.[bundle.id]?.sha256 || null;
@@ -488,11 +511,14 @@ function syncBundledSkills() {
   writeGeneratedSkillBundlesModule(generatedModuleBundles);
 
   const nextManifest = {
-    lastSyncedAt: new Date().toISOString(),
+    lastSyncedAt:
+      changedBundles.length > 0 || !fs.existsSync(MANIFEST_PATH)
+        ? new Date().toISOString()
+        : prevManifest.lastSyncedAt || new Date().toISOString(),
     totalBundles: syncedBundles.length,
     skills: nextManifestSkills,
   };
-  fs.writeFileSync(MANIFEST_PATH, JSON.stringify(nextManifest, null, 2) + '\n', 'utf8');
+  writeIfChanged(MANIFEST_PATH, JSON.stringify(nextManifest, null, 2) + '\n');
 
   return { syncedBundles, changedBundles };
 }
@@ -547,9 +573,19 @@ function main() {
   const siblingSyncScript = path.join(siblingHubDir, 'scripts', 'sync-ai-context.mjs');
   if (fs.existsSync(siblingSyncScript)) {
     try {
-      execFileSync(process.execPath, [siblingSyncScript], { stdio: 'inherit', cwd: siblingHubDir });
+      const siblingOut = execFileSync(process.execPath, [siblingSyncScript], {
+        stdio: ['ignore', 'pipe', 'pipe'],
+        cwd: siblingHubDir,
+        encoding: 'utf8',
+      });
+      if (siblingOut) process.stdout.write(siblingOut);
     } catch (err) {
-      console.warn('⚠️ Could not auto-mirror to sibling thehcllc repo:', err.message);
+      const stderrText = String(err?.stderr || err?.message || '');
+      if (stderrText.includes('EPERM')) {
+        console.log('ℹ️ Skipped sibling `thehcllc` mirror (sandbox read-only outside active workspace).');
+      } else {
+        console.warn('⚠️ Could not auto-mirror to sibling thehcllc repo:', err.message);
+      }
     }
   }
 }

@@ -1602,8 +1602,15 @@ export async function searchItems(queryStr: string) {
     }
 }
 
-export async function linkItemToPurchase(itemId: string, purchaseId: string | null) {
-    return await updateInventoryItem(itemId, { purchaseId: purchaseId || '' });
+export async function linkItemToPurchase(
+    itemId: string,
+    purchaseId: string | null,
+    orderId?: string | null
+) {
+    return await updateInventoryItem(itemId, {
+        purchaseId: purchaseId || '',
+        ...(orderId !== undefined ? { orderId: orderId || '' } : {}),
+    });
 }
 
 export function getAssociatedFileIds(item: any): Map<string, string> {

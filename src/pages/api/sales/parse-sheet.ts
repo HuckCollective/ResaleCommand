@@ -92,7 +92,7 @@ STRICT EXTRACTION RULES:
             sheetTitle?: string;
             detectedRent?: number;
             rows?: ParsedSalesSheetLine[];
-        }>(responseText, 'sales-parse-sheet');
+        }>(responseText, { rows: [] });
 
         const rawRows = Array.isArray(parsed?.rows) ? parsed.rows : [];
         const cleanRows: ParsedSalesSheetLine[] = rawRows

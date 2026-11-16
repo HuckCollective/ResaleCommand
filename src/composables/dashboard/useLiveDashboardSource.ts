@@ -252,7 +252,13 @@ export function useLiveDashboardSource(): DashboardSource {
     const netDeposit = Math.max(0, Number((grossSales - venueFee).toFixed(2)));
     const agreement = findConsignorAgreement(policyConfig.value.consignors, prefix);
     if (agreement) {
-      const settled = calculateConsignorSettlement(agreement, netDeposit, 0, 0, false);
+      const settled = calculateConsignorSettlement({
+        agreement,
+        netStoreDeposit: netDeposit,
+        grossRatio: 0,
+        boothRent: 0,
+        isMonthInProgress: true,
+      });
       return {
         month: curMonth,
         ready: settled.payout > 0,

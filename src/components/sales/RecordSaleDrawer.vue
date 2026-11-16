@@ -567,8 +567,8 @@ import { salesApi, type SaleData, type SaleDocument } from '../../lib/sales';
 import { extractOrgPrefix } from '../../lib/inventoryUpc';
 import {
   getAllLocationSettingMetas,
+  getLocationSettingMeta,
   matchesLocationFilter,
-  findFacility,
   type WarehouseDocument,
 } from '../../lib/warehouses';
 import {
@@ -895,11 +895,11 @@ watch(
 
 const resolveTargetWarehouseId = (): string => {
   if (selectedChannel.value === 'ONLINE') {
-    const hg = findFacility('HG', props.warehouses);
-    return hg?.$id || props.warehouses[0]?.$id || 'General';
+    const hg = getLocationSettingMeta('HG', props.warehouses);
+    return hg.id || props.warehouses[0]?.$id || 'General';
   }
-  const fac = findFacility(selectedChannel.value, props.warehouses);
-  return fac?.$id || selectedChannel.value;
+  const fac = getLocationSettingMeta(selectedChannel.value, props.warehouses);
+  return fac.id || selectedChannel.value;
 };
 
 const checkoutCart = async (keepOpenForNext: boolean) => {

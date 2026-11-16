@@ -103,6 +103,8 @@ export interface FacilityDefinition {
     salesIntakeMode: 'paper_sheet' | 'pos_csv';
     aliases: string[];
     channelName?: string;
+    notes?: string;
+    vibesAndNotes?: string;
 }
 
 export type LocationSettingMeta = FacilityDefinition;
@@ -129,6 +131,7 @@ export const KNOWN_FACILITIES: FacilityDefinition[] = [
         salesIntakeMode: 'pos_csv',
         aliases: ['md', 'memory den', 'memoryden', 'memory_den', '0ej', 'hao', "huck's adventures outfitters", "memory den - huck's adventures outfitters"],
         channelName: 'Memory Den',
+        vibesAndNotes: 'Goth, Whimsigoth, TTRPG, metaphysical, eclectic, punk, sci-fi, adventure, horror, cos-play',
     },
     {
         id: '6a7e71eb001f53734a86',
@@ -150,6 +153,7 @@ export const KNOWN_FACILITIES: FacilityDefinition[] = [
         salesIntakeMode: 'paper_sheet',
         aliases: ['dt', 'dusty tiger', 'dustytiger', 'dusty_tiger', 'tiger'],
         channelName: 'Dusty Tiger',
+        vibesAndNotes: 'Small Collectibles, Jewelry, Pins, Pocket Items, Wands & Arcana <8". NO Clothes, NO Large Toys, NO Bulky Playsets',
     },
     {
         id: '6a7e6f73003a5a2a7c34',
@@ -262,6 +266,8 @@ export function getLocationSettingMeta(locOrStr: any, liveWarehouses?: any[]): L
               ? 'paper_sheet'
               : base.salesIntakeMode;
 
+    const liveNotes = String(liveDoc.vibesAndNotes || liveDoc.notes || '').trim();
+
     return {
         ...base,
         id: String(liveDoc.$id || base.id),
@@ -276,6 +282,8 @@ export function getLocationSettingMeta(locOrStr: any, liveWarehouses?: any[]): L
         usesRicochet,
         supportsPaperSalesSheet,
         salesIntakeMode,
+        notes: liveNotes || base.notes || base.vibesAndNotes,
+        vibesAndNotes: liveNotes || base.vibesAndNotes || base.notes || base.subtitle,
     };
 }
 
@@ -385,11 +393,7 @@ export function getWarehouseFacilityOptions(
 }
 
 export function matchesLocationFilter(
-    item: { 
-        storageLocation?: string | null; 
-        sellingLocations?: string[] | string | null; 
-        purchaseLocation?: string | null;
-    },
+    item: any,
     filterValue: string
 ): boolean {
     if (!filterValue || filterValue === 'all' || filterValue.trim() === '') {

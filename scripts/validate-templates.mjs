@@ -135,8 +135,10 @@ for (const diag of diagnostics) {
     // TS2307: Cannot find module 'x' (catches broken import paths)
     // TS2448: Block-scoped variable 'x' used before its declaration (TDZ)
     // TS2454: Variable 'x' is used before being assigned (TDZ)
+    // TS2554 / TS2555: Wrong function argument count (e.g., passing 5 positional args instead of 1 options object)
+    // TS2559: Incompatible weak/fallback object shape (e.g., passing string label instead of fallback object to parseAiJson)
     // TS1xxx: Any TypeScript/JavaScript syntax error
-    const isCritical = (code === 2304 || code === 2552 || code === 2307 || code === 2448 || code === 2454 || (code >= 1000 && code < 2000));
+    const isCritical = (code === 2304 || code === 2552 || code === 2307 || code === 2448 || code === 2454 || code === 2554 || code === 2555 || code === 2559 || (code >= 1000 && code < 2000));
 
     if (isCritical) {
         // Ignore known benign imports of raw Vue SFC components without shim in virtual TS files

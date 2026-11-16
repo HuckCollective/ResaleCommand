@@ -905,7 +905,7 @@ export const ALL: APIRoute = async ({ request }) => {
         const dynamicBoothChannels = getAllLocationSettingMetas(outerTargetLocations)
             .filter((m) => m.commissionRate > 0)
             .map((m) => {
-                const vibe = m.subtitle || (m as any).vibesAndNotes || m.notes || '';
+                const vibe = m.vibesAndNotes || m.notes || m.subtitle || '';
                 return `${m.name} (${m.code}, ${m.commissionRate}% fee${vibe ? ` — ${vibe}` : ''})`;
             })
             .join('; ');

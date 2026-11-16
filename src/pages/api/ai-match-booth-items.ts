@@ -102,7 +102,7 @@ ${JSON.stringify(compactCandidates)}`;
     const responseText = result.response.text();
     const parsed = parseAiJson<{ matches?: AiStagedMatchResult[] }>(
       responseText,
-      'ai-match-booth-items'
+      { matches: [] }
     );
     const matches = Array.isArray(parsed?.matches) ? parsed.matches : [];
 

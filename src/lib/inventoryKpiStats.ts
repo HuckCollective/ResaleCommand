@@ -1,4 +1,12 @@
-import type { KpiStatItem } from '../components/common/KpiStatGrid.vue';
+export interface KpiStatItem {
+  label: string;
+  value: string;
+  hint?: string;
+  icon?: string;
+  tone?: string;
+  badge?: string;
+  badgeClass?: string;
+}
 
 function parseItemUnitRetail(item: any): number {
   const direct = Number(item?.resalePrice || item?.listPrice || item?.boutiquePrice);

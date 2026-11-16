@@ -538,7 +538,7 @@ const lotSplitterItemData = computed(() => {
     };
 });
 
-const handleOpenSplitter = (payload) => {
+const handleOpenSplitter = (payload = null) => {
     const itemData = {
         ...(lotSplitterItemData.value || props.item),
         exitPlaybook: payload?.exitPlaybook || lotSplitterItemData.value?.exitPlaybook || props.item?.exitPlaybook
