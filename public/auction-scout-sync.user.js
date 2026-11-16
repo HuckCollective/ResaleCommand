@@ -1,6 +1,6 @@
 (function () {
-  var FILE_BUILD = 'v4.4.0';
-  var SCRIPT_VERSION = window.__RC_SCRIPT_VERSION__ || 'v4.4';
+  var FILE_BUILD = 'v4.5.0';
+  var SCRIPT_VERSION = window.__RC_SCRIPT_VERSION__ || 'v4.5';
 
   // Same-version 2nd Bookmarks Bar click: toggle Drawer <-> Pill in place without wiping state!
   try {
@@ -245,7 +245,17 @@
     lastObservedHref: String(window.location.href || ''),
     lastHandledClickSeq: Number(window.__RC_BML_CLICK_SEQ__ || 0),
     sgwApi: {},
-    sgwApiLoading: ''
+    sgwApiLoading: '',
+    // Auction Sweep (v4.5) grid triage state
+    gridCards: [],
+    sweepingGrid: false,
+    sweepProgressMsg: '',
+    sweepData: null,
+    sweepByKey: {},
+    sweepFilter: 'HITS',
+    dimPassedCards: true,
+    quickTrackingKey: '',
+    inspectingGridItem: null
   };
 
   // Rehydrate hot state if an older build was hot-swapped on the exact same URL within 30 minutes
@@ -263,6 +273,10 @@
       if (hot.sgwApi) state.sgwApi = hot.sgwApi;
       if (hot.domainProfiles) state.domainProfiles = hot.domainProfiles;
       if (hot.roiTargets) state.roiTargets = hot.roiTargets;
+      if (hot.sweepData) state.sweepData = hot.sweepData;
+      if (hot.sweepByKey) state.sweepByKey = hot.sweepByKey;
+      if (hot.sweepFilter) state.sweepFilter = hot.sweepFilter;
+      if (hot.dimPassedCards !== undefined) state.dimPassedCards = Boolean(hot.dimPassedCards);
     }
     window.__RC_SCOUT_HOT_STATE__ = null;
   } catch (e) {}
@@ -345,7 +359,11 @@
   }
 
   function isItemScoutMode() {
-    return state.pageType === 'item' || state.pageType === 'external-item';
+    return state.pageType === 'item' || state.pageType === 'external-item' || Boolean(state.inspectingGridItem);
+  }
+
+  function isAuctionSweepMode() {
+    return state.pageType === 'auction-grid' && !state.inspectingGridItem;
   }
 
   function normalizeUrlWatchlistKey(rawUrl) {
@@ -361,7 +379,7 @@
     if (!itemRow || !state.watchlist) return null;
     if (itemRow.itemId && state.watchlist[itemRow.itemId]) return state.watchlist[itemRow.itemId];
     if (itemRow.externalItemId && state.watchlist[itemRow.externalItemId]) return state.watchlist[itemRow.externalItemId];
-    var urlKey = normalizeUrlWatchlistKey(window.location.href);
+    var urlKey = normalizeUrlWatchlistKey(itemRow.sourceUrl || window.location.href);
     if (urlKey && state.watchlist[urlKey]) return state.watchlist[urlKey];
     return null;
   }
@@ -1034,7 +1052,53 @@
     return false;
   }
 
+  function buildItemRowFromGridCard(card) {
+    var c = card || {};
+    var isSgwCard = c.domainKey === 'shopgoodwill' || (isShopGoodwillHost() && /^\d{6,12}$/.test(String(c.itemId || '')));
+    var apiHit = isSgwCard && state.sgwApi && c.itemId ? state.sgwApi[c.itemId] : null;
+    var imgs = [];
+    if (apiHit && !apiHit.failed && Array.isArray(apiHit.images) && apiHit.images.length > 0) {
+      imgs = apiHit.images.slice(0, 24);
+    } else if (c.thumbnailUrl) {
+      imgs = [c.thumbnailUrl];
+    }
+    var curPrice = Number((apiHit && apiHit.currentPrice > 0 ? apiHit.currentPrice : c.currentPrice) || 0);
+    var minBid = Number((apiHit && apiHit.minimumBid > 0 ? apiHit.minimumBid : c.minimumBid) || curPrice);
+    if (minBid < curPrice) minBid = curPrice;
+    var seller = cleanText((apiHit && apiHit.seller) || c.seller || (isSgwCard ? 'ShopGoodwill' : (c.platformName || 'Seller')));
+    var weight = Number((apiHit && apiHit.shippingWeight > 0 ? apiHit.shippingWeight : c.shippingWeightLbs) || 1.5);
+    return {
+      lotKey: c.lotKey || c.itemId,
+      itemId: c.itemId || c.externalItemId || '',
+      externalItemId: c.externalItemId || c.itemId || '',
+      displayBadgeId: isSgwCard ? ('#' + c.itemId) : (c.platformName || 'Lot'),
+      sourceUrl: c.sourceUrl || (isSgwCard ? ('https://shopgoodwill.com/item/' + c.itemId) : window.location.href),
+      domainKey: c.domainKey || (isSgwCard ? 'shopgoodwill' : resolveClientDomainKey(c)),
+      platformName: c.platformName || (isSgwCard ? 'ShopGoodwill' : 'Online Listing'),
+      domainFamily: isSgwCard ? 'shopgoodwill' : (c.domainFamily || ''),
+      listingMode: c.isAuction === false ? 'fixed_online' : (c.isSoftClose ? 'soft_close_auction' : 'auction'),
+      isAuction: c.isAuction !== false,
+      isSoftClose: Boolean(c.isSoftClose),
+      isLocalPickupOnly: Boolean(c.isLocalPickupOnly),
+      buyersPremiumPct: Number(c.buyersPremiumPct || 0),
+      shippingCost: c.shippingCost !== undefined ? c.shippingCost : null,
+      title: (apiHit && apiHit.title) || c.title || ('Listing #' + (c.itemId || '')),
+      currentPrice: curPrice,
+      minimumBid: minBid,
+      seller: seller,
+      sellerId: (apiHit && apiHit.sellerId) || c.sellerId || null,
+      canCombineShipping: apiHit && apiHit.canCombineShipping !== undefined ? Boolean(apiHit.canCombineShipping) : isSgwCard,
+      shippingWeight: weight,
+      endingDate: (apiHit && apiHit.endingDate) || c.timeLeft || '',
+      description: (apiHit && apiHit.description) || '',
+      images: imgs
+    };
+  }
+
   function getActiveItemRow() {
+    if (state.inspectingGridItem) {
+      return buildItemRowFromGridCard(state.inspectingGridItem);
+    }
     if (state.rows && state.rows[0]) {
       if (isShopGoodwillHost()) {
         var curId = (String(window.location.pathname || '').match(/\/item\/(\d+)/i) || [])[1] || '';
@@ -1046,7 +1110,7 @@
       }
     }
     var fresh = isShopGoodwillHost() ? scrapeSingleItemDom() : scrapeExternalListingDom();
-    if (isItemScoutMode()) state.rows = [fresh];
+    if (isItemScoutMode() && !state.inspectingGridItem) state.rows = [fresh];
     return fresh;
   }
 
@@ -1180,27 +1244,30 @@
     };
   }
 
-  // Browser-direct ShopGoodwill Buyer API pre-fetch: authoritative for SPA transitions & never WAF-throttled like datacenter IPs.
-  function hydrateShopGoodwillItemApi(forceRefresh) {
-    if (!isShopGoodwillHost()) return Promise.resolve(null);
+  // Browser-direct ShopGoodwill Buyer API pre-fetch: authoritative for SPA transitions, grid seller combine checks & in-drawer Full Scout.
+  function hydrateShopGoodwillItemApi(forceRefresh, explicitItemIdOpt, silentGridOnly) {
+    if (!isShopGoodwillHost() && !explicitItemIdOpt) return Promise.resolve(null);
     var m = String(window.location.pathname || '').match(/\/item\/(\d+)/i);
-    if (!m) return Promise.resolve(null);
-    var itemId = m[1];
+    var inspectedSgwId = (state.inspectingGridItem && state.inspectingGridItem.domainKey === 'shopgoodwill')
+      ? String(state.inspectingGridItem.itemId || '')
+      : '';
+    var itemId = String(explicitItemIdOpt || (m && m[1]) || inspectedSgwId || '').trim();
+    if (!itemId || !/^\d{6,12}$/.test(itemId)) return Promise.resolve(null);
     state.sgwApi = state.sgwApi || {};
     var existingHit = state.sgwApi[itemId];
-    if (existingHit && !forceRefresh && (Date.now() - Number(existingHit.fetchedAt || 0) < 60000)) {
+    if (existingHit && !forceRefresh && (Date.now() - Number(existingHit.fetchedAt || 0) < 120000)) {
       return Promise.resolve(existingHit);
     }
-    if (state.sgwApiLoading === itemId && state.sgwApiPromise && !forceRefresh) return state.sgwApiPromise;
-    state.sgwApiLoading = itemId;
+    if (!silentGridOnly && state.sgwApiLoading === itemId && state.sgwApiPromise && !forceRefresh) return state.sgwApiPromise;
+    if (!silentGridOnly) state.sgwApiLoading = itemId;
     try {
-      state.sgwApiPromise = fetch('https://buyerapi.shopgoodwill.com/api/ItemDetail/GetItemDetailModelByItemId/' + itemId, {
+      var reqPromise = fetch('https://buyerapi.shopgoodwill.com/api/ItemDetail/GetItemDetailModelByItemId/' + itemId, {
         method: 'GET',
         headers: { Accept: 'application/json, text/plain, */*' }
       })
         .then(function (res) { return res.ok ? res.json() : null; })
         .then(function (json) {
-          if (state.sgwApiLoading === itemId) state.sgwApiLoading = '';
+          if (!silentGridOnly && state.sgwApiLoading === itemId) state.sgwApiLoading = '';
           if (!json || !(json.title || json.itemName)) {
             state.sgwApi[itemId] = { images: [], failed: true, fetchedAt: Date.now() };
             return state.sgwApi[itemId];
@@ -1239,9 +1306,13 @@
             title: cleanText(String(json.title || json.itemName || '')),
             description: cleanText(String(json.description || '').replace(/<[^>]*>/g, ' ')).slice(0, 4000)
           };
-          // Only mutate active UI gallery if user is STILL on this itemId
+          if (silentGridOnly) {
+            return state.sgwApi[itemId];
+          }
+          // Mutate active UI gallery if user is on this /item/:id OR inspecting this exact grid card
           var activeMatch = String(window.location.pathname || '').match(/\/item\/(\d+)/i);
-          if (activeMatch && activeMatch[1] === itemId) {
+          var isInspectingThis = Boolean(state.inspectingGridItem && String(state.inspectingGridItem.itemId || '') === itemId);
+          if ((activeMatch && activeMatch[1] === itemId) || isInspectingThis) {
             if (cleanUrls.length > 0) {
               state.galleryUrls = cleanUrls.slice();
               var allowed = {};
@@ -1261,7 +1332,7 @@
                 state.coverPhotoUrl = cleanUrls[0] || '';
               }
             }
-            detectPageAndRows();
+            if (!isInspectingThis) detectPageAndRows();
             syncGalleryStateForItem(getActiveItemRow());
             maybeRestoreSavedReport();
             renderUI();
@@ -1269,13 +1340,14 @@
           return state.sgwApi[itemId];
         })
         .catch(function () {
-          if (state.sgwApiLoading === itemId) state.sgwApiLoading = '';
+          if (!silentGridOnly && state.sgwApiLoading === itemId) state.sgwApiLoading = '';
           state.sgwApi[itemId] = { images: [], failed: true, fetchedAt: Date.now() };
           return state.sgwApi[itemId];
         });
-      return state.sgwApiPromise;
+      if (!silentGridOnly) state.sgwApiPromise = reqPromise;
+      return reqPromise;
     } catch (e) {
-      state.sgwApiLoading = '';
+      if (!silentGridOnly) state.sgwApiLoading = '';
       return Promise.resolve(null);
     }
   }
@@ -1348,6 +1420,384 @@
     return out;
   }
 
+  // Universal Active Auction Grid / Table / List Harvester (ShopGoodwill, eBay, HiBid, CTBids, LiveAuctioneers, MaxSold, Proxibid)
+  function scrapeActiveAuctionGridDom() {
+    var host = String(window.location.hostname || '').toLowerCase();
+    var isSgw = isShopGoodwillHost();
+    var isEbay = /(^|\.)ebay\./i.test(host);
+    var isHibid = /hibid\.com/i.test(host);
+    var isCtbids = /ctbids\.com/i.test(host);
+    var isLiveAuc = /liveauctioneers\.com/i.test(host);
+    var isMaxSold = /maxsold\.com/i.test(host);
+    var isProxibid = /proxibid\.com/i.test(host);
+    var isEstateHost = isHibid || isCtbids || isLiveAuc || isMaxSold || isProxibid || /estatesales\.net/i.test(host);
+
+    var domainKey = isSgw
+      ? 'shopgoodwill'
+      : isEbay
+      ? 'ebay'
+      : isEstateHost
+      ? 'estate_bp'
+      : /facebook\.com|craigslist\.org|offerup\.com/i.test(host)
+      ? 'local_cash'
+      : /poshmark\.com|mercari\.com|depop\.com|etsy\.com|whatnot\.com/i.test(host)
+      ? 'fixed_marketplace'
+      : 'generic_url';
+
+    var platformName = isSgw
+      ? 'ShopGoodwill'
+      : isEbay
+      ? 'eBay'
+      : isHibid
+      ? 'HiBid'
+      : isCtbids
+      ? 'CTBids'
+      : isLiveAuc
+      ? 'LiveAuctioneers'
+      : isMaxSold
+      ? 'MaxSold'
+      : isProxibid
+      ? 'Proxibid'
+      : host.replace(/^www\./i, '');
+
+    function extractCardIdentityFromHref(rawHref) {
+      var h = String(rawHref || '').trim();
+      if (!h || h.indexOf('javascript:') === 0 || h === '#') return null;
+      var absUrl = '';
+      try {
+        absUrl = new URL(h, window.location.origin).toString();
+      } catch (e) {
+        absUrl = h;
+      }
+      if (isSgw) {
+        var sgwM = absUrl.match(/\/item\/(\d{6,12})(?:[/?#]|$)/i);
+        if (!sgwM) return null;
+        return {
+          lotKey: sgwM[1],
+          itemId: sgwM[1],
+          externalItemId: sgwM[1],
+          sourceUrl: 'https://shopgoodwill.com/item/' + sgwM[1]
+        };
+      }
+      if (isEbay) {
+        var ebM = absUrl.match(/\/itm\/(?:[^/?#]+\/)?(\d{9,15})/i) || absUrl.match(/[?&]item=(\d{9,15})/i);
+        if (!ebM || ebM[1] === '123456') return null;
+        return {
+          lotKey: 'ebay:' + ebM[1],
+          itemId: 'ebay:' + ebM[1],
+          externalItemId: 'ebay:' + ebM[1],
+          sourceUrl: 'https://www.ebay.com/itm/' + ebM[1]
+        };
+      }
+      if (isHibid) {
+        var hbM = absUrl.match(/\/lot\/(\d{4,15})/i);
+        if (!hbM) return null;
+        return {
+          lotKey: 'hibid:' + hbM[1],
+          itemId: 'hibid:' + hbM[1],
+          externalItemId: 'hibid:' + hbM[1],
+          sourceUrl: absUrl.split('#')[0]
+        };
+      }
+      if (isCtbids) {
+        var ctM = absUrl.match(/\/item\/(\d{4,15})/i) || absUrl.match(/item[_-]?id=(\d{4,15})/i);
+        if (!ctM) return null;
+        return {
+          lotKey: 'ctbids:' + ctM[1],
+          itemId: 'ctbids:' + ctM[1],
+          externalItemId: 'ctbids:' + ctM[1],
+          sourceUrl: absUrl.split('#')[0]
+        };
+      }
+      if (isLiveAuc) {
+        var laM = absUrl.match(/\/item\/(\d{4,15})/i);
+        if (!laM) return null;
+        return {
+          lotKey: 'liveauc:' + laM[1],
+          itemId: 'liveauc:' + laM[1],
+          externalItemId: 'liveauc:' + laM[1],
+          sourceUrl: absUrl.split('#')[0]
+        };
+      }
+      var genM = absUrl.match(/\/(?:lot|item|itm|listing|products?|marketplace\/item)\/([A-Za-z0-9_-]*\d{4,15})/i);
+      if (!genM) return null;
+      var genKey = platformName.toLowerCase().replace(/[^a-z0-9]+/g, '') + ':' + genM[1];
+      return {
+        lotKey: genKey,
+        itemId: genKey,
+        externalItemId: genKey,
+        sourceUrl: absUrl.split('#')[0]
+      };
+    }
+
+    function isInsideIgnoredChrome(el) {
+      if (!el || !el.closest) return false;
+      return Boolean(
+        el.closest('header, footer, nav, #rc-scout-tray, #rc-scout-fab-bar, [data-rc-bml-shell]')
+      );
+    }
+
+    // Climb DOM up to 8 levels to find the highest card container that ONLY links to this single lotKey
+    function findSingleCardContainer(anchorEl, selfLotKey) {
+      var best = anchorEl;
+      var cur = anchorEl.parentElement;
+      var depth = 0;
+      while (cur && cur !== document.body && cur.tagName !== 'MAIN' && cur.tagName !== 'TBODY' && depth < 8) {
+        var links = cur.querySelectorAll('a[href]');
+        var hasForeignLot = false;
+        for (var i = 0; i < links.length; i++) {
+          var ident = extractCardIdentityFromHref(links[i].getAttribute('href') || links[i].href || '');
+          if (ident && ident.lotKey !== selfLotKey) {
+            hasForeignLot = true;
+            break;
+          }
+        }
+        if (hasForeignLot) break;
+        best = cur;
+        cur = cur.parentElement;
+        depth++;
+      }
+      return best;
+    }
+
+    // Page-level hints (Seller Storefront on ShopGoodwill; Buyer's Premium % on Estate catalogs)
+    var pageTextTop = cleanText(((document.querySelector('main') || document.body || {}).innerText || '').slice(0, 4500));
+    var pageSellerHint = '';
+    if (isSgw) {
+      var sgwStoreM = pageTextTop.match(/(?:Seller|Location|Store)\s*:\s*(Goodwill[^\n\r|×✕]{4,68})/i);
+      if (sgwStoreM && sgwStoreM[1]) {
+        pageSellerHint = cleanText(sgwStoreM[1]).replace(/\s*(?:Clear\s+All|Filter|Sort\s+By).*$/i, '').trim();
+      }
+    }
+    var pageBpPct = isLiveAuc ? 20 : isEstateHost ? 15 : 0;
+    var bpM =
+      pageTextTop.match(/(\d{1,2}(?:\.\d{1,2})?)\s*%\s*buyer'?s?\s*premium/i) ||
+      pageTextTop.match(/buyer'?s?\s*premium[^0-9\n]{0,25}(\d{1,2}(?:\.\d{1,2})?)\s*%/i);
+    if (bpM && bpM[1]) {
+      var parsedBp = parseFloat(bpM[1]);
+      if (parsedBp >= 1 && parsedBp <= 40) pageBpPct = parsedBp;
+    }
+    var pageLocalPickupHint = /\blocal\s+pick[\s-]*up\s+only\b|\bno\s+shipping\s+available\b/i.test(pageTextTop);
+
+    var anchors = Array.prototype.slice.call(document.querySelectorAll('a[href]'));
+    var byKey = {};
+    var orderKeys = [];
+
+    anchors.forEach(function (a) {
+      if (isInsideIgnoredChrome(a)) return;
+      var ident = extractCardIdentityFromHref(a.getAttribute('href') || a.href || '');
+      if (!ident) return;
+      if (!byKey[ident.lotKey]) {
+        byKey[ident.lotKey] = { ident: ident, anchors: [] };
+        orderKeys.push(ident.lotKey);
+      }
+      byKey[ident.lotKey].anchors.push(a);
+    });
+
+    var cards = [];
+    orderKeys.forEach(function (key) {
+      if (cards.length >= 48) return;
+      var group = byKey[key];
+      var primaryAnchor = group.anchors[0];
+      var cardEl = findSingleCardContainer(primaryAnchor, key);
+      if (!cardEl) return;
+
+      // Clone text without our own injected sweep badge so re-scrapes stay clean
+      var cloneEl = cardEl.cloneNode(true);
+      var oldInjected = cloneEl.querySelectorAll('.rc-sweep-card-bar, .rc-sgw-inline-badge');
+      for (var rIdx = 0; rIdx < oldInjected.length; rIdx++) {
+        oldInjected[rIdx].remove();
+      }
+      var cardText = cleanText(cloneEl.textContent || '');
+      if (!cardText || cardText.length < 6) return;
+
+      // Skip ended/closed lots so we only triage active opportunities
+      if (/\b(?:auction\s+ended|bidding\s+closed|lot\s+closed|sold\s+for)\b/i.test(cardText)) return;
+
+      // Title extraction
+      var title = '';
+      if (isEbay) {
+        var ebTitleNode = cloneEl.querySelector('.s-item__title, [class*="s-item__title"], h3');
+        if (ebTitleNode) title = cleanText(ebTitleNode.textContent || '');
+        title = title
+          .replace(/^New\s+Listing\s*/i, '')
+          .replace(/^Sponsored\s*/i, '')
+          .replace(/\s*Opens in a new window or tab.*$/i, '')
+          .trim();
+        if (/^shop\s+on\s+ebay$/i.test(title)) return;
+      }
+      if (!title) {
+        var titleNodes = cloneEl.querySelectorAll('h2, h3, h4, h5, [class*="title" i], [class*="item-name" i], [class*="product-name" i], [class*="lot-name" i]');
+        for (var tIdx = 0; tIdx < titleNodes.length; tIdx++) {
+          var candT = cleanText(titleNodes[tIdx].textContent || '');
+          if (candT.length >= 6 && !/^\$[0-9,.]+$/.test(candT) && !/^(?:quick\s*view|place\s*bid|buy\s*now|watch)$/i.test(candT)) {
+            if (candT.length > title.length) title = candT;
+          }
+        }
+      }
+      if (!title) {
+        group.anchors.forEach(function (anc) {
+          var at = cleanText(anc.getAttribute('title') || anc.textContent || '');
+          if (at.length > title.length && !/^\$[0-9,.]+$/.test(at) && !/^(?:view|quick\s*view|bid|place\s*bid|buy\s*now|details)$/i.test(at)) {
+            title = at;
+          }
+        });
+      }
+      var imgEl = cardEl.querySelector('img');
+      if (!title && imgEl) {
+        var altT = cleanText(imgEl.getAttribute('alt') || '');
+        if (altT.length >= 6) title = altT;
+      }
+      title = title.replace(/^(?:Item\s*#?\s*\d+\s*[-:|]\s*)/i, '').trim();
+      if (!title || title.length < 3) return;
+
+      // Thumbnail extraction
+      var thumbUrl = '';
+      var cardImgs = cardEl.querySelectorAll('img');
+      for (var mIdx = 0; mIdx < cardImgs.length; mIdx++) {
+        var im = cardImgs[mIdx];
+        var rawSrc =
+          im.getAttribute('data-zoom-src') ||
+          im.getAttribute('data-src') ||
+          im.getAttribute('data-lazy-src') ||
+          im.getAttribute('data-original') ||
+          im.currentSrc ||
+          im.getAttribute('src') ||
+          im.src ||
+          '';
+        rawSrc = String(rawSrc || '').trim();
+        if (!rawSrc || rawSrc.indexOf('data:') === 0) continue;
+        if (/logo|icon|avatar|badge|sprite|spinner|placeholder|blank\.gif|\.svg(?:\?|$)/i.test(rawSrc)) continue;
+        if (rawSrc.indexOf('//') === 0) rawSrc = window.location.protocol + rawSrc;
+        if (!/^https?:\/\//i.test(rawSrc)) continue;
+        if (isSgw) {
+          thumbUrl = rawSrc
+            .replace(/[-_](?:thumb|small|t1|t2|tn)(?=\.(?:jpe?g|png|webp|gif)(?:\?|$))/i, '')
+            .replace(/\/t1\.(?=[^/]+$)/i, '/');
+        } else {
+          var upg = upgradeAndKeyExternalImage(rawSrc, host);
+          thumbUrl = upg ? upg.url : rawSrc;
+        }
+        if (thumbUrl) break;
+      }
+
+      // Price, Shipping, Bid Count & Format extraction
+      var currentPrice = 0;
+      var minimumBid = 0;
+      var shippingCost = null;
+      var isLocalPickupOnly = Boolean(pageLocalPickupHint);
+      var isBuyItNow = false;
+      var isAuction = domainKey === 'shopgoodwill' || domainKey === 'estate_bp';
+
+      if (isEbay) {
+        var ebPriceNode = cloneEl.querySelector('.s-item__price, [class*="s-item__price"]');
+        if (ebPriceNode) currentPrice = parseDollar(ebPriceNode.textContent || '');
+        var ebShipNode = cloneEl.querySelector('.s-item__shipping, .s-item__logisticsCost, [class*="shipping" i]');
+        var ebShipTxt = cleanText((ebShipNode && ebShipNode.textContent) || '');
+        if (/free\s+(?:shipping|delivery)/i.test(ebShipTxt)) {
+          shippingCost = 0;
+        } else if (/local\s+pickup/i.test(ebShipTxt) && !/\$\d/.test(ebShipTxt)) {
+          isLocalPickupOnly = true;
+          shippingCost = 0;
+        } else if (ebShipTxt) {
+          var ebShipM = ebShipTxt.match(/\$([0-9,]+(?:\.[0-9]{1,2})?)/);
+          if (ebShipM) shippingCost = parseFloat(ebShipM[1].replace(/,/g, '')) || 0;
+        }
+        if (/\b\d+\s*bids?\b/i.test(cardText)) {
+          isAuction = true;
+        } else {
+          isAuction = false;
+          isBuyItNow = true;
+        }
+      } else {
+        var namedPriceM = cardText.match(/(?:Current\s+(?:Price|Bid)|High\s+Bid|Starting\s+Bid|Winning\s+Bid|Price|Buy\s+Now)\s*:?\s*\$([0-9,]+(?:\.[0-9]{1,2})?)/i);
+        if (namedPriceM && namedPriceM[1]) {
+          currentPrice = parseFloat(namedPriceM[1].replace(/,/g, '')) || 0;
+        } else {
+          currentPrice = parseDollar(cardText);
+        }
+        var minM = cardText.match(/Min(?:imum)?\s+Bid\s*:?\s*\$([0-9,]+(?:\.[0-9]{1,2})?)/i);
+        if (minM && minM[1]) {
+          minimumBid = parseFloat(minM[1].replace(/,/g, '')) || 0;
+        }
+        if (/\bbuy\s+it\s+now\b|\bbuy\s+now\s+only\b/i.test(cardText) && !/\bbids?\b/i.test(cardText)) {
+          isBuyItNow = true;
+          isAuction = false;
+        }
+        if (/\blocal\s+pick[\s-]*up\s+only\b|\bno\s+shipping\b/i.test(cardText)) {
+          isLocalPickupOnly = true;
+          shippingCost = 0;
+        } else if (/\bfree\s+shipping\b/i.test(cardText)) {
+          shippingCost = 0;
+        } else {
+          var shipCardM = cardText.match(/(?:\+|Shipping\s*:?\s*)\s*\$([0-9,]+(?:\.[0-9]{1,2})?)\s*(?:shipping|s&h|ship)/i);
+          if (shipCardM && shipCardM[1]) {
+            shippingCost = parseFloat(shipCardM[1].replace(/,/g, '')) || 0;
+          }
+        }
+      }
+
+      var bidCount = null;
+      var bidM = cardText.match(/\b(\d{1,3})\s*bids?\b/i);
+      if (bidM && bidM[1] !== undefined) {
+        bidCount = parseInt(bidM[1], 10);
+      }
+
+      var timeLeft = '';
+      var timeM =
+        cardText.match(/(?:Time\s+Left|Remaining|Ends\s+in)\s*:?\s*([0-9dhms\s:]{2,22})/i) ||
+        cardText.match(/\b(\d{1,2}d\s*\d{1,2}h|\d{1,2}h\s*\d{1,2}m|\d{1,2}m\s*\d{1,2}s|\d{1,2}h\s+left|\d{1,2}d\s+left)\b/i);
+      if (timeM && timeM[1]) {
+        timeLeft = cleanText(timeM[1]).slice(0, 28);
+      }
+
+      var seller = pageSellerHint || '';
+      var shippingWeightLbs = null;
+      var sellerId = null;
+
+      // Merge cached ShopGoodwill Buyer API metadata whenever already hydrated
+      if (isSgw && state.sgwApi && state.sgwApi[group.ident.itemId] && !state.sgwApi[group.ident.itemId].failed) {
+        var hit = state.sgwApi[group.ident.itemId];
+        if (hit.seller) seller = hit.seller;
+        if (hit.sellerId) sellerId = hit.sellerId;
+        if (hit.shippingWeight > 0) shippingWeightLbs = hit.shippingWeight;
+        if (hit.currentPrice > 0) currentPrice = hit.currentPrice;
+        if (hit.minimumBid > 0) minimumBid = hit.minimumBid;
+        if (!thumbUrl && hit.images && hit.images[0]) thumbUrl = hit.images[0];
+      }
+
+      if (minimumBid < currentPrice) minimumBid = currentPrice;
+      if (currentPrice <= 0 && minimumBid <= 0) return;
+
+      cards.push({
+        lotKey: group.ident.lotKey,
+        itemId: group.ident.itemId,
+        externalItemId: group.ident.externalItemId,
+        sourceUrl: group.ident.sourceUrl,
+        domainKey: domainKey,
+        platformName: platformName,
+        title: title,
+        currentPrice: currentPrice,
+        minimumBid: minimumBid,
+        shippingCost: shippingCost,
+        shippingWeightLbs: shippingWeightLbs,
+        buyersPremiumPct: pageBpPct,
+        isAuction: isAuction,
+        isSoftClose: isEstateHost,
+        isBuyItNow: isBuyItNow,
+        isLocalPickupOnly: isLocalPickupOnly,
+        bidCount: bidCount,
+        timeLeft: timeLeft,
+        seller: seller,
+        sellerId: sellerId,
+        thumbnailUrl: thumbUrl,
+        cardEl: cardEl
+      });
+    });
+
+    return cards;
+  }
+
   function detectPageAndRows() {
     var path = (window.location.pathname || '').toLowerCase();
     var domRows = [];
@@ -1355,10 +1805,13 @@
 
     if (!isShopGoodwillHost()) {
       if (isGenericExternalBrowseUrl()) {
-        state.pageType = 'other';
+        var extGridCards = scrapeActiveAuctionGridDom();
+        state.gridCards = extGridCards;
+        state.pageType = extGridCards.length >= 2 ? 'auction-grid' : 'other';
         state.rows = [];
         return;
       }
+      state.gridCards = [];
       state.pageType = 'external-item';
       var extRow = scrapeExternalListingDom();
       if (extRow.isSoftClose || !extRow.isAuction || Number(extRow.buyersPremiumPct || 0) > 0) {
@@ -1370,6 +1823,7 @@
     }
 
     if (path.indexOf('/item/') !== -1) {
+      state.gridCards = [];
       state.pageType = 'item';
       domRows.push(scrapeSingleItemDom());
       state.rows = domRows;
@@ -1377,13 +1831,18 @@
     }
 
     if (path.indexOf('inprogress-auctions') !== -1 || path.indexOf('in-progress') !== -1) {
+      state.gridCards = [];
       state.pageType = 'inprogress-auctions';
     } else if (path.indexOf('closed-auctions') !== -1 || path.indexOf('won-auctions') !== -1) {
+      state.gridCards = [];
       state.pageType = 'closed-auctions';
     } else if (path.indexOf('shipped-orders') !== -1 || path.indexOf('open-orders') !== -1) {
+      state.gridCards = [];
       state.pageType = 'shipped-orders';
     } else {
-      state.pageType = 'other';
+      var sgwGridCards = scrapeActiveAuctionGridDom();
+      state.gridCards = sgwGridCards;
+      state.pageType = sgwGridCards.length >= 2 ? 'auction-grid' : 'other';
     }
 
     var trs = Array.prototype.slice.call(document.querySelectorAll('table tbody tr'));
@@ -1654,6 +2113,509 @@
         targetTd.appendChild(badgeWrap);
       });
     }
+    decorateAuctionGridCards();
+  }
+
+  function clearAuctionGridDecorations() {
+    var oldBars = document.querySelectorAll('.rc-sweep-card-bar');
+    for (var i = 0; i < oldBars.length; i++) {
+      oldBars[i].remove();
+    }
+    var decorated = document.querySelectorAll('[data-rc-sweep-card]');
+    for (var j = 0; j < decorated.length; j++) {
+      decorated[j].removeAttribute('data-rc-sweep-card');
+      decorated[j].classList.remove('rc-sweep-dimmed');
+      decorated[j].style.outline = '';
+      decorated[j].style.outlineOffset = '';
+      decorated[j].style.opacity = '';
+    }
+  }
+
+  function decorateAuctionGridCards() {
+    if (state.pageType !== 'auction-grid') {
+      clearAuctionGridDecorations();
+      return;
+    }
+    var cards = state.gridCards || [];
+    cards.forEach(function (c) {
+      var el = c.cardEl;
+      if (!el) return;
+      var prevBar = el.querySelector('.rc-sweep-card-bar');
+      if (prevBar) prevBar.remove();
+
+      el.setAttribute('data-rc-sweep-card', c.lotKey);
+      el.classList.remove('rc-sweep-dimmed');
+      el.style.outline = '';
+      el.style.outlineOffset = '';
+      el.style.opacity = '';
+
+      var wl = lookupWatchlistForItem(c);
+      var syn = c.seller ? evaluateSellerSynergy(c.seller, c.shippingWeightLbs || 1.5, c.itemId, c.domainKey) : null;
+      var swept = state.sweepByKey && state.sweepByKey[c.lotKey] ? state.sweepByKey[c.lotKey] : null;
+
+      if (!wl && !(syn && syn.isEligible) && !swept) return;
+
+      var bar = document.createElement('div');
+      bar.className = 'rc-sweep-card-bar';
+      var bg = '#0f172a';
+      var border = '#334155';
+      if (swept) {
+        if (swept.verdictBucket === 'HOT_FLIP') {
+          bg = '#064e3b';
+          border = '#10b981';
+          el.style.outline = '2px solid #10b981';
+          el.style.outlineOffset = '2px';
+        } else if (swept.verdictBucket === 'COMBINE_PLAY') {
+          bg = '#134e4a';
+          border = '#2dd4bf';
+          el.style.outline = '2px solid #14b8a6';
+          el.style.outlineOffset = '2px';
+        } else if (swept.verdictBucket === 'SLEEPER') {
+          bg = '#1e1b4b';
+          border = '#818cf8';
+          el.style.outline = '2px dashed #818cf8';
+          el.style.outlineOffset = '2px';
+        } else {
+          bg = '#1e293b';
+          border = '#475569';
+          if (state.dimPassedCards && !wl) {
+            el.classList.add('rc-sweep-dimmed');
+            el.style.opacity = '0.45';
+          }
+        }
+      } else if (syn && syn.isEligible) {
+        bg = '#064e3b';
+        border = '#34d399';
+      } else if (wl) {
+        bg = '#1e1b4b';
+        border = '#818cf8';
+      }
+
+      bar.style.cssText =
+        'margin-top:6px;padding:5px 7px;border-radius:8px;background:' +
+        bg +
+        ';border:1px solid ' +
+        border +
+        ';color:#f8fafc;font-family:system-ui,-apple-system,sans-serif;font-size:10.5px;line-height:1.25;display:flex;align-items:center;justify-content:space-between;gap:5px;position:relative;z-index:5;';
+
+      var leftBits = [];
+      if (swept) {
+        var netSign = swept.netProfitAtCurrentUsd >= 0
+          ? '+$' + Math.round(swept.netProfitAtCurrentUsd)
+          : '-$' + Math.round(Math.abs(swept.netProfitAtCurrentUsd));
+        var chShort = swept.bestChannel === 'MD' ? '🔮 MD' : swept.bestChannel === 'DT' ? '🐯 DT' : swept.bestChannel === 'Poshmark' ? '👗 Posh' : '🌐 eBay';
+        if (swept.verdictBucket === 'PASS') {
+          leftBits.push('<span style="color:#fca5a5;font-weight:800;">' + escHtml(swept.verdictLabel) + ' (' + netSign + ')</span>');
+        } else {
+          leftBits.push(
+            '<span style="font-weight:900;color:#ecfdf5;">' +
+              escHtml(swept.verdictBucket === 'HOT_FLIP' ? '🔥' : swept.verdictBucket === 'COMBINE_PLAY' ? '📦' : '👀') +
+              ' ' +
+              netSign +
+              ' Net • ' +
+              chShort +
+              (swept.balancedMaxBidUsd > 0 ? ' • Max $' + swept.balancedMaxBidUsd.toFixed(2) : '') +
+            '</span>'
+          );
+        }
+      } else {
+        if (syn && syn.isEligible) {
+          leftBits.push('<span style="color:#6ee7b7;font-weight:900;">📦 Combine (+' + syn.matchCount + ')</span>');
+        }
+        if (wl) {
+          leftBits.push(
+            '<span style="color:#c7d2fe;font-weight:800;">📌 Tracked' +
+              (wl.maxBid > 0 ? ' ($' + Number(wl.maxBid).toFixed(2) + ')' : '') +
+            '</span>'
+          );
+        }
+      }
+
+      bar.innerHTML =
+        '<div style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' +
+          leftBits.join(' • ') +
+        '</div>' +
+        '<button type="button" class="rc-sweep-inline-inspect-btn" data-lotkey="' +
+          escHtml(c.lotKey) +
+          '" title="Open Full 12-Photo AI Speed Scout inside Drawer" style="background:#312e81;color:#e0e7ff;border:1px solid #6366f1;border-radius:5px;padding:2px 6px;font-size:10px;font-weight:900;cursor:pointer;flex-shrink:0;white-space:nowrap;">⚡ Scout</button>';
+
+      var inspectBtn = bar.querySelector('.rc-sweep-inline-inspect-btn');
+      if (inspectBtn) {
+        inspectBtn.onclick = function (ev) {
+          if (ev && ev.preventDefault) ev.preventDefault();
+          if (ev && ev.stopPropagation) ev.stopPropagation();
+          openSweepLotFullScout(c.lotKey, true);
+        };
+      }
+
+      el.appendChild(bar);
+    });
+  }
+
+  // Gently pre-hydrates seller/weight/minBid on mixed ShopGoodwill search grids (4 concurrent, max 24 cards, 2.2s cap)
+  function hydrateSweepGridSgwCards(cards, doneCallback) {
+    if (!isShopGoodwillHost() || !Array.isArray(cards) || cards.length === 0) {
+      doneCallback();
+      return;
+    }
+    var toFetch = [];
+    for (var i = 0; i < cards.length && toFetch.length < 24; i++) {
+      var c = cards[i];
+      if (!c || !c.itemId || !/^\d{6,12}$/.test(String(c.itemId))) continue;
+      if (c.seller && c.shippingWeightLbs) continue;
+      var cached = state.sgwApi && state.sgwApi[c.itemId];
+      if (cached && (Date.now() - Number(cached.fetchedAt || 0) < 120000)) continue;
+      toFetch.push(String(c.itemId));
+    }
+    if (toFetch.length === 0) {
+      doneCallback();
+      return;
+    }
+
+    var finished = false;
+    var cursor = 0;
+    var activeWorkers = 0;
+    var safetyTimer = setTimeout(function () {
+      if (!finished) {
+        finished = true;
+        doneCallback();
+      }
+    }, 2400);
+
+    function pump() {
+      if (finished) return;
+      if (cursor >= toFetch.length && activeWorkers === 0) {
+        finished = true;
+        clearTimeout(safetyTimer);
+        doneCallback();
+        return;
+      }
+      while (activeWorkers < 4 && cursor < toFetch.length) {
+        var nextId = toFetch[cursor++];
+        activeWorkers++;
+        hydrateShopGoodwillItemApi(false, nextId, true)
+          .then(function () {
+            activeWorkers--;
+            pump();
+          })
+          .catch(function () {
+            activeWorkers--;
+            pump();
+          });
+      }
+    }
+    pump();
+  }
+
+  function runAuctionSweep() {
+    var auth = window.__RC_BML_AUTH__ && window.__RC_BML_AUTH__.getSession ? window.__RC_BML_AUTH__.getSession() : null;
+    if (!auth) {
+      if (window.__RC_BML_AUTH__ && window.__RC_BML_AUTH__.openConnectFlow) {
+        window.__RC_BML_AUTH__.openConnectFlow(false);
+      }
+      return;
+    }
+    if (state.sweepingGrid) return;
+
+    detectPageAndRows();
+    if (!state.gridCards || state.gridCards.length === 0) {
+      state.errorMsg = 'No active auction cards were detected on this page yet. Scroll until listings load and tap 🔄.';
+      state.trayOpen = true;
+      renderUI();
+      return;
+    }
+
+    state.trayOpen = true;
+    state.inspectingGridItem = null;
+    state.sweepingGrid = true;
+    state.errorMsg = null;
+    state.sweepProgressMsg = isShopGoodwillHost()
+      ? '🔍 Checking seller combine branches & min bids...'
+      : '🕸️ Harvesting active auction grid...';
+    renderUI();
+
+    hydrateSweepGridSgwCards(state.gridCards, function () {
+      detectPageAndRows();
+      var candidates = (state.gridCards || []).slice(0, 40).map(function (c) {
+        var syn = c.seller ? evaluateSellerSynergy(c.seller, c.shippingWeightLbs || 1.5, c.itemId, c.domainKey) : null;
+        return {
+          lotKey: c.lotKey,
+          itemId: c.itemId,
+          externalItemId: c.externalItemId,
+          sourceUrl: c.sourceUrl,
+          domainKey: c.domainKey,
+          platformName: c.platformName,
+          title: c.title,
+          currentPrice: c.currentPrice,
+          minimumBid: c.minimumBid,
+          shippingCost: c.shippingCost,
+          shippingWeightLbs: c.shippingWeightLbs,
+          buyersPremiumPct: c.buyersPremiumPct,
+          isAuction: c.isAuction,
+          isSoftClose: c.isSoftClose,
+          isBuyItNow: c.isBuyItNow,
+          isLocalPickupOnly: c.isLocalPickupOnly,
+          bidCount: c.bidCount,
+          timeLeft: c.timeLeft,
+          seller: c.seller,
+          sellerId: c.sellerId,
+          combineEligible: Boolean(syn && syn.isEligible),
+          combineMatchCount: syn && syn.isEligible ? syn.matchCount : 0,
+          thumbnailUrl: c.thumbnailUrl
+        };
+      });
+
+      state.sweepProgressMsg = '🕸️ Triaging ' + candidates.length + ' lots across MD / DT / Online...';
+      renderUI();
+
+      callRcApi('POST', '/api/bml/auction-sweep', {
+        pageUrl: window.location.href,
+        useVisionOnSleepers: true,
+        candidates: candidates
+      })
+        .then(function (res) {
+          state.sweepingGrid = false;
+          state.sweepProgressMsg = '';
+          var lots = (res && Array.isArray(res.lots)) ? res.lots : [];
+          var byKey = {};
+          lots.forEach(function (l) {
+            byKey[l.lotKey] = l;
+          });
+          var sum = (res && res.summary) || {
+            totalEvaluated: lots.length,
+            hotFlipCount: 0,
+            combinePlayCount: 0,
+            sleeperCount: 0,
+            passCount: 0,
+            visionThumbnailsUsed: 0
+          };
+          var hitTotal = Number(sum.hotFlipCount || 0) + Number(sum.combinePlayCount || 0) + Number(sum.sleeperCount || 0);
+          state.sweepData = {
+            summary: sum,
+            lots: lots,
+            sweptCount: candidates.length,
+            sweptAt: Date.now()
+          };
+          state.sweepByKey = byKey;
+          state.sweepFilter = hitTotal > 0 ? 'HITS' : 'ALL';
+          state.justFinishedScan = true;
+          decorateAuctionGridCards();
+          renderUI();
+        })
+        .catch(function (err) {
+          state.sweepingGrid = false;
+          state.sweepProgressMsg = '';
+          state.errorMsg = (err && err.message) || 'Auction Sweep failed.';
+          renderUI();
+        });
+    });
+  }
+
+  function findGridCardByLotKey(lotKey) {
+    var list = state.gridCards || [];
+    for (var i = 0; i < list.length; i++) {
+      if (list[i].lotKey === lotKey) return list[i];
+    }
+    return null;
+  }
+
+  function openSweepLotFullScout(lotKey, autoRunAi) {
+    var gridCard = findGridCardByLotKey(lotKey);
+    var sweptLot = state.sweepByKey && state.sweepByKey[lotKey] ? state.sweepByKey[lotKey] : null;
+    if (!gridCard && !sweptLot) return;
+
+    var merged = gridCard
+      ? {
+          lotKey: gridCard.lotKey,
+          itemId: gridCard.itemId,
+          externalItemId: gridCard.externalItemId,
+          sourceUrl: gridCard.sourceUrl,
+          domainKey: gridCard.domainKey,
+          platformName: gridCard.platformName,
+          title: gridCard.title,
+          currentPrice: gridCard.currentPrice,
+          minimumBid: gridCard.minimumBid,
+          shippingCost: gridCard.shippingCost,
+          shippingWeightLbs: gridCard.shippingWeightLbs || (sweptLot ? sweptLot.estWeightLbs : null),
+          buyersPremiumPct: gridCard.buyersPremiumPct,
+          isAuction: gridCard.isAuction,
+          isSoftClose: gridCard.isSoftClose,
+          isLocalPickupOnly: gridCard.isLocalPickupOnly,
+          timeLeft: gridCard.timeLeft,
+          seller: gridCard.seller || (sweptLot ? sweptLot.seller : ''),
+          sellerId: gridCard.sellerId,
+          thumbnailUrl: gridCard.thumbnailUrl
+        }
+      : {
+          lotKey: sweptLot.lotKey,
+          itemId: sweptLot.itemId,
+          externalItemId: sweptLot.externalItemId,
+          sourceUrl: sweptLot.sourceUrl,
+          domainKey: sweptLot.domainKey,
+          platformName: sweptLot.platformName,
+          title: sweptLot.title,
+          currentPrice: sweptLot.currentPrice,
+          minimumBid: sweptLot.minimumBid,
+          shippingCost: sweptLot.soloShipUsd,
+          shippingWeightLbs: sweptLot.estWeightLbs,
+          buyersPremiumPct: sweptLot.buyersPremiumPct,
+          isAuction: sweptLot.isAuction,
+          isSoftClose: sweptLot.isSoftClose,
+          isLocalPickupOnly: sweptLot.isLocalPickupOnly,
+          timeLeft: sweptLot.timeLeft,
+          seller: sweptLot.seller,
+          sellerId: null,
+          thumbnailUrl: sweptLot.thumbnailUrl
+        };
+
+    // Reset per-item scout state while preserving state.sweepData & state.sweepByKey intact!
+    state.inspectingGridItem = merged;
+    state.trayOpen = true;
+    state.scoutReport = null;
+    state.isRestoredSavedReport = false;
+    state.restoredDocId = '';
+    state.loadingRestoredDocId = '';
+    state.customMaxBid = '';
+    state.trackedSavedMsg = null;
+    state.lastSavedForItemId = '';
+    state.errorMsg = null;
+    state.galleryUrls = merged.thumbnailUrl ? [merged.thumbnailUrl] : [];
+    state.selectedPhotoUrls = {};
+    state.hasManualPhotoToggles = false;
+    state.coverPhotoUrl = merged.thumbnailUrl || '';
+    state.resellerNotes = '';
+    state.detailsOpen = false;
+    state.galleryExpandedPostScan = false;
+    state.combineExpandedPostScan = false;
+    state.lastSyncedItemId = String(merged.itemId || '');
+    state.justFinishedScan = true;
+
+    syncGalleryStateForItem(getActiveItemRow());
+    renderUI();
+
+    var existingWl = lookupWatchlistForItem(getActiveItemRow());
+    if (existingWl && existingWl.hasReport && existingWl.docId) {
+      if (merged.domainKey === 'shopgoodwill') {
+        hydrateShopGoodwillItemApi(false, merged.itemId, false);
+      }
+      maybeRestoreSavedReport();
+      return;
+    }
+
+    if (merged.domainKey === 'shopgoodwill') {
+      hydrateShopGoodwillItemApi(false, merged.itemId, false).then(function () {
+        if (autoRunAi && state.inspectingGridItem && state.inspectingGridItem.lotKey === lotKey && !state.scoutReport) {
+          runInTrayAiScout();
+        }
+      });
+    } else if (autoRunAi) {
+      runInTrayAiScout();
+    }
+  }
+
+  function closeSweepLotFullScout() {
+    state.inspectingGridItem = null;
+    state.scoutingItem = false;
+    state.scoutReport = null;
+    state.isRestoredSavedReport = false;
+    state.restoredDocId = '';
+    state.loadingRestoredDocId = '';
+    state.errorMsg = null;
+    state.trackedSavedMsg = null;
+    decorateAuctionGridCards();
+    renderUI();
+  }
+
+  function scrollToSweepGridCard(lotKey) {
+    var card = findGridCardByLotKey(lotKey);
+    var el = (card && card.cardEl) || document.querySelector('[data-rc-sweep-card="' + String(lotKey).replace(/"/g, '') + '"]');
+    if (!el || !el.scrollIntoView) return;
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    var prevTransition = el.style.transition || '';
+    var prevBoxShadow = el.style.boxShadow || '';
+    el.style.transition = 'box-shadow 0.25s ease';
+    el.style.boxShadow = '0 0 0 4px #34d399, 0 0 28px rgba(16,185,129,0.65)';
+    setTimeout(function () {
+      el.style.boxShadow = prevBoxShadow;
+      el.style.transition = prevTransition;
+    }, 1800);
+  }
+
+  function quickTrackSweepLot(lotKey) {
+    var auth = window.__RC_BML_AUTH__ && window.__RC_BML_AUTH__.getSession ? window.__RC_BML_AUTH__.getSession() : null;
+    if (!auth) {
+      if (window.__RC_BML_AUTH__ && window.__RC_BML_AUTH__.openConnectFlow) {
+        window.__RC_BML_AUTH__.openConnectFlow(false);
+      }
+      return;
+    }
+    var swept = state.sweepByKey && state.sweepByKey[lotKey] ? state.sweepByKey[lotKey] : null;
+    var card = findGridCardByLotKey(lotKey);
+    if (!swept && !card) return;
+
+    var maxBid = swept && swept.balancedMaxBidUsd > 0 ? swept.balancedMaxBidUsd : 0;
+    if (maxBid > 0 && navigator.clipboard && navigator.clipboard.writeText) {
+      try {
+        navigator.clipboard.writeText(maxBid.toFixed(2));
+      } catch (e) {}
+    }
+
+    var dKey = (swept && swept.domainKey) || (card && card.domainKey) || 'generic_url';
+    var isSgwLot = dKey === 'shopgoodwill';
+    var itemId = (swept && swept.itemId) || (card && card.itemId) || '';
+    var extId = (swept && swept.externalItemId) || (card && card.externalItemId) || itemId;
+    var srcUrl = (swept && swept.sourceUrl) || (card && card.sourceUrl) || window.location.href;
+    var thumb = (swept && swept.thumbnailUrl) || (card && card.thumbnailUrl) || null;
+    var noteStr = swept
+      ? ('[🕸️ AUCTION SWEEP] ' + swept.verdictLabel + ' • ' + swept.bestChannelLabel + ' — ' + swept.oneLineWhy)
+      : '[🕸️ AUCTION SWEEP] Quick-Tracked from active grid';
+
+    state.quickTrackingKey = lotKey;
+    state.errorMsg = null;
+    renderUI();
+
+    callRcApi('POST', '/api/bml/sgw-sync', {
+      pageType: isSgwLot ? 'item' : 'external-item',
+      dryRun: false,
+      rows: [
+        {
+          itemId: itemId,
+          externalItemId: extId,
+          sourceUrl: srcUrl,
+          domainKey: dKey,
+          platformName: (swept && swept.platformName) || (card && card.platformName) || '',
+          listingMode: (swept && !swept.isAuction) ? 'fixed_online' : 'auction',
+          buyersPremiumPct: Number((swept && swept.buyersPremiumPct) || (card && card.buyersPremiumPct) || 0),
+          title: (swept && swept.title) || (card && card.title) || ('Listing #' + itemId),
+          currentPrice: Number((swept && swept.currentPrice) || (card && card.currentPrice) || 0),
+          minimumBid: Number((swept && swept.minimumBid) || (card && card.minimumBid) || 0),
+          maxBid: maxBid,
+          boutiquePrice: swept ? swept.estGrossMid : 0,
+          resalePrice: swept ? swept.estGrossLow : 0,
+          seller: (swept && swept.seller) || (card && card.seller) || '',
+          shippingWeight: Number((swept && swept.estWeightLbs) || (card && card.shippingWeightLbs) || 1.5),
+          canCombineShipping: isSgwLot,
+          primaryImageUrl: thumb,
+          imageUrls: thumb ? [thumb] : [],
+          endingDate: (swept && swept.timeLeft) || (card && card.timeLeft) || '',
+          conditionNotes: noteStr,
+          aiReport: null
+        }
+      ]
+    })
+      .then(function () {
+        state.quickTrackingKey = '';
+        notifyRcTabs({ tool: 'auction_scout', action: 'tracked_item', itemId: itemId });
+        fetchWatchlist(function () {
+          decorateAuctionGridCards();
+          renderUI();
+        });
+      })
+      .catch(function (err) {
+        state.quickTrackingKey = '';
+        state.errorMsg = (err && err.message) || 'Failed to quick-track lot.';
+        renderUI();
+      });
   }
 
   function callRcApi(method, pathSuffix, bodyObj) {
@@ -1772,16 +2734,20 @@
     state.trayOpen = true;
     renderUI();
 
+    var inspectedSgwId = (state.inspectingGridItem && state.inspectingGridItem.domainKey === 'shopgoodwill')
+      ? String(state.inspectingGridItem.itemId || '')
+      : '';
     var sgwIdMatch = isShopGoodwillHost() ? String(window.location.pathname || '').match(/\/item\/(\d+)/i) : null;
-    var sgwWaitPromise = sgwIdMatch && (!state.sgwApi || !state.sgwApi[sgwIdMatch[1]])
+    var targetSgwId = inspectedSgwId || (sgwIdMatch ? sgwIdMatch[1] : '');
+    var sgwWaitPromise = targetSgwId && (!state.sgwApi || !state.sgwApi[targetSgwId])
       ? Promise.race([
-          Promise.resolve(hydrateShopGoodwillItemApi()),
+          Promise.resolve(hydrateShopGoodwillItemApi(false, targetSgwId, false)),
           new Promise(function (resolve) { setTimeout(resolve, 2200); })
         ])
       : Promise.resolve(null);
 
     sgwWaitPromise.then(function () {
-      detectPageAndRows();
+      if (!state.inspectingGridItem) detectPageAndRows();
       var itemRow = getActiveItemRow();
       syncGalleryStateForItem(itemRow);
       var selectedUrls = getSelectedGalleryUrls();
@@ -1792,23 +2758,27 @@
 
       // ALWAYS send clientDomListing + selected photo URLs (even on ShopGoodwill) so Vercel is never empty-handed
       // if Cloudflare / WAF throttles buyerapi.shopgoodwill.com for the server's datacenter IP.
-      var isSgwHost = isShopGoodwillHost();
+      var targetSourceUrl = itemRow.sourceUrl || window.location.href;
+      var isSgwItem = Boolean(
+        itemRow.domainKey === 'shopgoodwill' ||
+          (isShopGoodwillHost() && /^\d{6,12}$/.test(String(itemRow.itemId || '')))
+      );
       var clientDomPayload = {
-        sourceUrl: window.location.href,
-        platformName: isSgwHost ? 'ShopGoodwill' : (itemRow.platformName || ''),
-        domainFamily: isSgwHost ? 'shopgoodwill' : (itemRow.domainFamily || ''),
-        listingMode: isSgwHost ? 'auction' : (itemRow.listingMode || ''),
+        sourceUrl: targetSourceUrl,
+        platformName: isSgwItem ? 'ShopGoodwill' : (itemRow.platformName || ''),
+        domainFamily: isSgwItem ? 'shopgoodwill' : (itemRow.domainFamily || ''),
+        listingMode: isSgwItem ? 'auction' : (itemRow.listingMode || ''),
         externalItemId: itemRow.externalItemId || itemRow.itemId || '',
         title: itemRow.title || '',
         description: itemRow.description || '',
         currentPrice: Number(itemRow.currentPrice || 0),
         minimumBid: Number(itemRow.minimumBid || itemRow.currentPrice || 0) || undefined,
-        buyersPremiumPct: isSgwHost ? 0 : Number(itemRow.buyersPremiumPct || 0),
-        shippingCost: !isSgwHost && itemRow.shippingCost !== undefined && itemRow.shippingCost !== null ? Number(itemRow.shippingCost) : undefined,
+        buyersPremiumPct: isSgwItem ? 0 : Number(itemRow.buyersPremiumPct || 0),
+        shippingCost: !isSgwItem && itemRow.shippingCost !== undefined && itemRow.shippingCost !== null ? Number(itemRow.shippingCost) : undefined,
         shippingWeight: Number(itemRow.shippingWeight || 0) || undefined,
         isLocalPickupOnly: Boolean(itemRow.isLocalPickupOnly),
-        isAuction: isSgwHost ? true : Boolean(itemRow.isAuction),
-        isSoftClose: isSgwHost ? false : Boolean(itemRow.isSoftClose),
+        isAuction: isSgwItem ? true : Boolean(itemRow.isAuction),
+        isSoftClose: isSgwItem ? false : Boolean(itemRow.isSoftClose),
         termsText: itemRow.termsText || '',
         sellerName: itemRow.seller || '',
         locationText: itemRow.locationText || '',
@@ -1817,7 +2787,7 @@
       };
 
       var reqBody = {
-        url: window.location.href,
+        url: targetSourceUrl,
         notes: humanNotes,
         zipCode: state.zipCode || '97206',
         selectedRemoteImageUrls: selectedUrls,
@@ -2188,7 +3158,7 @@
       return;
     }
 
-    detectPageAndRows();
+    if (!state.inspectingGridItem) detectPageAndRows();
     var itemRow = getActiveItemRow();
     syncGalleryStateForItem(itemRow);
     var selectedUrls = getSelectedGalleryUrls();
@@ -2221,12 +3191,13 @@
       combinedNotes.push(fin.whyPayUp);
     }
 
-    var isSgw = isShopGoodwillHost();
-    var resolvedDomainKey = (fin && fin.domainKey) || resolveClientDomainKey(itemRow);
+    var resolvedDomainKey = (fin && fin.domainKey) || itemRow.domainKey || resolveClientDomainKey(itemRow);
+    var isSgw = resolvedDomainKey === 'shopgoodwill' || (isShopGoodwillHost() && /^\d{6,12}$/.test(String(itemRow.itemId || '')));
+    var targetSourceUrl = itemRow.sourceUrl || window.location.href;
     var payloadRow = {
       itemId: itemRow.itemId,
       externalItemId: itemRow.externalItemId || itemRow.itemId,
-      sourceUrl: window.location.href,
+      sourceUrl: targetSourceUrl,
       domainKey: resolvedDomainKey,
       platformName: itemRow.platformName || (isSgw ? 'ShopGoodwill' : ''),
       domainFamily: itemRow.domainFamily || '',
@@ -2798,9 +3769,12 @@
 
   function renderItemTrayBody() {
     var itemRow = getActiveItemRow();
-    var isSgw = isShopGoodwillHost();
+    var isSgw = Boolean(
+      itemRow.domainKey === 'shopgoodwill' ||
+        (isShopGoodwillHost() && /^\d{6,12}$/.test(String(itemRow.itemId || '')))
+    );
     var existingWl = lookupWatchlistForItem(itemRow);
-    var preSynergy = evaluateSellerSynergy(itemRow.seller, itemRow.shippingWeight, itemRow.itemId);
+    var preSynergy = evaluateSellerSynergy(itemRow.seller, itemRow.shippingWeight, itemRow.itemId, itemRow.domainKey);
     var fin = computeScoutFinancials();
     var activeSynergy = fin && fin.synergy ? fin.synergy : preSynergy;
 
@@ -2824,6 +3798,28 @@
     }
 
     var html = '';
+
+    if (state.inspectingGridItem) {
+      var sumBack = (state.sweepData && state.sweepData.summary) || null;
+      var backHits = sumBack
+        ? Number(sumBack.hotFlipCount || 0) + Number(sumBack.combinePlayCount || 0) + Number(sumBack.sleeperCount || 0)
+        : 0;
+      var backLabel = state.sweepData
+        ? ('← Back to 🕸️ Auction Sweep (' + backHits + ' Hit' + (backHits === 1 ? '' : 's') + ')')
+        : ('← Back to 🕸️ Grid (' + (state.gridCards ? state.gridCards.length : 0) + ' Lots)');
+      html +=
+        '<div style="display:flex;justify-content:space-between;align-items:center;gap:6px;background:#1e1b4b;border:1px solid #6366f1;border-radius:10px;padding:6px 9px;margin-bottom:8px;">' +
+          '<button type="button" id="rc-back-to-sweep-btn" style="background:#312e81;color:#e0e7ff;border:1px solid #818cf8;border-radius:7px;padding:4px 9px;font-size:11px;font-weight:900;cursor:pointer;">' +
+            escHtml(backLabel) +
+          '</button>' +
+          '<div style="display:flex;align-items:center;gap:5px;">' +
+            '<button type="button" id="rc-focus-inspected-card-btn" title="Scroll webpage to this card" style="background:#0f172a;color:#6ee7b7;border:1px solid #334155;border-radius:7px;padding:4px 7px;font-size:10.5px;font-weight:800;cursor:pointer;">🎯 Card</button>' +
+            (itemRow.sourceUrl
+              ? '<a href="' + escHtml(itemRow.sourceUrl) + '" target="_blank" rel="noopener noreferrer" style="background:#0f172a;color:#93c5fd;border:1px solid #334155;border-radius:7px;padding:4px 8px;font-size:10.5px;font-weight:800;text-decoration:none;">Open ↗</a>'
+              : '') +
+          '</div>' +
+        '</div>';
+    }
 
     var dispCurBid = Number((fin && fin.currentBid) || itemRow.currentPrice || 0);
     var dispMinBid = Number((fin && fin.minimumBid) || itemRow.minimumBid || dispCurBid);
@@ -3235,13 +4231,246 @@
     );
   }
 
-  function isActionableUrlMode() {
+  function isSgwTableSyncMode() {
     return (
-      isItemScoutMode() ||
-      state.pageType === 'shipped-orders' ||
-      state.pageType === 'inprogress-auctions' ||
-      state.pageType === 'closed-auctions'
+      !state.inspectingGridItem &&
+      (state.pageType === 'shipped-orders' ||
+        state.pageType === 'inprogress-auctions' ||
+        state.pageType === 'closed-auctions')
     );
+  }
+
+  function isActionableUrlMode() {
+    return isItemScoutMode() || isSgwTableSyncMode();
+  }
+
+  function countGridLocalSynergies() {
+    var combineCount = 0;
+    var trackedCount = 0;
+    (state.gridCards || []).forEach(function (c) {
+      if (lookupWatchlistForItem(c)) trackedCount++;
+      if (c.seller) {
+        var syn = evaluateSellerSynergy(c.seller, c.shippingWeightLbs || 1.5, c.itemId, c.domainKey);
+        if (syn && syn.isEligible) combineCount++;
+      }
+    });
+    return { combineCount: combineCount, trackedCount: trackedCount };
+  }
+
+  function renderAuctionSweepTrayBody() {
+    var html = '';
+    if (state.errorMsg) {
+      html += '<div style="background:#7f1d1d;color:#fecaca;padding:9px 11px;border-radius:10px;margin-bottom:9px;font-weight:700;font-size:11px;">❌ ' + escHtml(state.errorMsg) + '</div>';
+    }
+
+    if (state.sweepingGrid) {
+      html +=
+        '<div style="background:#1e1b4b;border:1.5px solid #818cf8;border-radius:14px;padding:22px 14px;text-align:center;margin-bottom:10px;">' +
+          '<div style="font-size:22px;margin-bottom:6px;">🕸️</div>' +
+          '<div style="font-size:13.5px;font-weight:900;color:#e0e7ff;margin-bottom:4px;">' +
+            escHtml(state.sweepProgressMsg || 'Sweeping Active Auction Grid...') +
+          '</div>' +
+          '<div style="font-size:11px;color:#a5b4fc;line-height:1.45;">Evaluating live channel net margins (🔮 Memory Den, 🐯 Dusty Tiger &lt;8&quot; smalls, 🌐 eBay / Poshmark), 📦 Combined Shipping &amp; 👀 Sleeper lot thumbnails...</div>' +
+        '</div>';
+      return html;
+    }
+
+    var cards = state.gridCards || [];
+    var localCounts = countGridLocalSynergies();
+
+    if (!state.sweepData || !Array.isArray(state.sweepData.lots)) {
+      var platLabel = (cards[0] && cards[0].platformName) || (isShopGoodwillHost() ? 'ShopGoodwill' : 'Active Grid');
+      var sweepCapCount = Math.min(40, cards.length);
+      var sampleHtml = cards
+        .slice(0, 4)
+        .map(function (c) {
+          var wl = lookupWatchlistForItem(c);
+          var syn = c.seller ? evaluateSellerSynergy(c.seller, c.shippingWeightLbs || 1.5, c.itemId, c.domainKey) : null;
+          return (
+            '<div style="display:flex;justify-content:space-between;align-items:center;gap:6px;padding:5px 0;border-bottom:1px dashed rgba(255,255,255,0.06);font-size:10.5px;">' +
+              '<span style="color:#e2e8f0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;flex:1;">' +
+                (wl ? '📌 ' : (syn && syn.isEligible ? '📦 ' : '• ')) +
+                escHtml(c.title) +
+              '</span>' +
+              '<span style="font-family:monospace;color:#38bdf8;font-weight:800;white-space:nowrap;">$' + Number(c.currentPrice || c.minimumBid || 0).toFixed(2) + '</span>' +
+            '</div>'
+          );
+        })
+        .join('');
+
+      html +=
+        '<div style="background:linear-gradient(145deg,#1e1b4b,#0f172a);border:1px solid #4f46e5;border-radius:12px;padding:13px 12px;margin-bottom:10px;">' +
+          '<div style="display:flex;justify-content:space-between;align-items:center;gap:6px;margin-bottom:6px;">' +
+            '<span style="font-size:13px;font-weight:900;color:#f8fafc;">🕸️ Auction Sweep Ready</span>' +
+            '<span style="background:#312e81;color:#e0e7ff;padding:2px 8px;border-radius:999px;font-family:monospace;font-size:10.5px;font-weight:900;">' +
+              cards.length + ' Active Lots' +
+            '</span>' +
+          '</div>' +
+          '<div style="font-size:11px;color:#cbd5e1;line-height:1.45;margin-bottom:8px;">' +
+            'Detected <strong>' + cards.length + '</strong> live ' + escHtml(platLabel) + ' listings. One sweep triages up to <strong>' + sweepCapCount + '</strong> lots against your booth &amp; online fees, combined-shipping branches, and sleeper cover photos.' +
+          '</div>' +
+          ((localCounts.combineCount > 0 || localCounts.trackedCount > 0)
+            ? '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px;">' +
+                (localCounts.combineCount > 0
+                  ? '<span style="background:#064e3b;color:#6ee7b7;border:1px solid #34d399;padding:2px 8px;border-radius:999px;font-size:10px;font-weight:900;">📦 ' + localCounts.combineCount + ' Combine Match' + (localCounts.combineCount === 1 ? '' : 'es') + ' ($0 Instant)</span>'
+                  : '') +
+                (localCounts.trackedCount > 0
+                  ? '<span style="background:#312e81;color:#c7d2fe;border:1px solid #818cf8;padding:2px 8px;border-radius:999px;font-size:10px;font-weight:900;">📌 ' + localCounts.trackedCount + ' Already Tracked</span>'
+                  : '') +
+              '</div>'
+            : '') +
+          (sampleHtml
+            ? '<div style="background:#020617;border:1px solid #1e293b;border-radius:8px;padding:6px 9px;">' +
+                '<div style="font-size:9.5px;font-weight:800;color:#94a3b8;text-transform:uppercase;margin-bottom:3px;">Detected Page Sample</div>' +
+                sampleHtml +
+              '</div>'
+            : '') +
+        '</div>';
+      return html;
+    }
+
+    var sum = state.sweepData.summary || {};
+    var allLots = state.sweepData.lots || [];
+    var hotCount = Number(sum.hotFlipCount || 0);
+    var combCount = Number(sum.combinePlayCount || 0);
+    var sleepCount = Number(sum.sleeperCount || 0);
+    var hitCount = hotCount + combCount + sleepCount;
+
+    var sweepFilters = [
+      { key: 'HITS', label: '🎯 Hits', count: hitCount, color: '#34d399' },
+      { key: 'HOT', label: '🔥 Hot', count: hotCount, color: '#fbbf24' },
+      { key: 'COMBINE', label: '📦 Combine', count: combCount, color: '#2dd4bf' },
+      { key: 'ALL', label: '📋 All', count: allLots.length, color: '#a5b4fc' }
+    ];
+
+    var extraLoadedCount = Math.max(0, cards.length - Number(state.sweepData.sweptCount || allLots.length));
+
+    html +=
+      '<div style="background:#1e293b;border:1px solid #334155;border-radius:11px;padding:9px 10px;margin-bottom:8px;">' +
+        '<div style="display:flex;justify-content:space-between;align-items:center;gap:6px;margin-bottom:7px;">' +
+          '<span style="font-weight:900;font-size:12px;color:#f8fafc;">🕸️ Sweep Leaderboard</span>' +
+          '<div style="display:flex;align-items:center;gap:5px;">' +
+            (Number(sum.visionThumbnailsUsed || 0) > 0
+              ? '<span style="background:#052e2b;color:#6ee7b7;border:1px solid #34d399;padding:1px 7px;border-radius:999px;font-size:9.5px;font-weight:800;">📸 ' + sum.visionThumbnailsUsed + ' Sleeper Thumbs</span>'
+              : '') +
+            '<span style="background:#0f172a;color:#cbd5e1;border:1px solid #334155;padding:1px 7px;border-radius:999px;font-family:monospace;font-size:10px;font-weight:800;">' +
+              allLots.length + ' Scored' +
+            '</span>' +
+          '</div>' +
+        '</div>' +
+        '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:5px;margin-bottom:7px;">';
+
+    sweepFilters.forEach(function (sf) {
+      var isAct = state.sweepFilter === sf.key;
+      html +=
+        '<button type="button" class="rc-sweep-filter-btn" data-sfilter="' + sf.key + '" style="background:' + (isAct ? '#1e1b4b' : '#0f172a') + ';border:1.5px solid ' + (isAct ? '#818cf8' : '#334155') + ';border-radius:8px;padding:6px 4px;text-align:center;cursor:pointer;color:#f8fafc;min-width:0;">' +
+          '<div style="font-size:9.5px;color:#cbd5e1;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + sf.label + '</div>' +
+          '<div style="font-size:14px;font-weight:900;color:' + sf.color + ';font-family:monospace;margin-top:2px;line-height:1.1;">' + sf.count + '</div>' +
+        '</button>';
+    });
+
+    html +=
+        '</div>' +
+        '<div style="display:flex;justify-content:space-between;align-items:center;gap:6px;background:#0f172a;border:1px solid #1e293b;padding:5px 8px;border-radius:7px;font-size:10.5px;">' +
+          '<label style="display:inline-flex;align-items:center;gap:5px;cursor:pointer;color:#cbd5e1;font-weight:800;">' +
+            '<input type="checkbox" id="rc-sweep-dim-toggle" ' + (state.dimPassedCards ? 'checked' : '') + ' />' +
+            '<span>🌘 Dim Passed Lots on Webpage (' + Number(sum.passCount || 0) + ')</span>' +
+          '</label>' +
+          (extraLoadedCount > 0
+            ? '<span style="color:#fbbf24;font-weight:800;font-size:10px;white-space:nowrap;">+' + extraLoadedCount + ' scrolled</span>'
+            : '') +
+        '</div>' +
+      '</div>';
+
+    var visibleLots = allLots.filter(function (l) {
+      if (state.sweepFilter === 'HITS') return l.verdictBucket !== 'PASS';
+      if (state.sweepFilter === 'HOT') return l.verdictBucket === 'HOT_FLIP';
+      if (state.sweepFilter === 'COMBINE') return l.verdictBucket === 'COMBINE_PLAY';
+      return true;
+    });
+
+    if (visibleLots.length === 0) {
+      html +=
+        '<div style="padding:18px 12px;text-align:center;color:#94a3b8;background:#020617;border-radius:10px;border:1px dashed #334155;margin-bottom:8px;">' +
+          '<div style="font-weight:800;color:#e2e8f0;margin-bottom:3px;">No lots in this filter bucket.</div>' +
+          '<div style="font-size:10.5px;">Click <strong>📋 All (' + allLots.length + ')</strong> above to inspect why items were skipped, or navigate to the next page of auctions.</div>' +
+        '</div>';
+      return html;
+    }
+
+    html += '<div style="display:flex;flex-direction:column;gap:7px;margin-bottom:8px;">';
+    visibleLots.forEach(function (lot) {
+      var wl = lookupWatchlistForItem(lot);
+      var isHot = lot.verdictBucket === 'HOT_FLIP';
+      var isComb = lot.verdictBucket === 'COMBINE_PLAY';
+      var isSleep = lot.verdictBucket === 'SLEEPER';
+      var cardBorder = isHot ? '#10b981' : isComb ? '#2dd4bf' : isSleep ? '#818cf8' : '#334155';
+      var badgeBg = isHot ? '#065f46' : isComb ? '#115e59' : isSleep ? '#312e81' : '#334155';
+      var badgeCol = isHot ? '#d1fae5' : isComb ? '#ccfbf1' : isSleep ? '#e0e7ff' : '#cbd5e1';
+
+      var netNum = Number(lot.netProfitAtCurrentUsd || 0);
+      var netCol = netNum < 0 ? '#f87171' : lot.verdictBucket === 'PASS' ? '#fcd34d' : '#34d399';
+      var netTxt = (netNum >= 0 ? '+$' : '-$') + Math.round(Math.abs(netNum)) + ' Net';
+
+      var shipSummary = lot.isLocalPickupOnly
+        ? '$0 Pickup'
+        : (lot.combineSavingsUsd > 0
+          ? ('$' + lot.effectiveShipUsd.toFixed(2) + ' S&amp;H (Saved $' + lot.combineSavingsUsd + '!)')
+          : ('$' + lot.effectiveShipUsd.toFixed(2) + ' S&amp;H'));
+      var bpNote = lot.buyersPremiumPct > 0 ? (' +' + lot.buyersPremiumPct + '% BP') : '';
+      var priceRefLabel = lot.minimumBid > lot.currentPrice ? ('Min $' + lot.floorBid.toFixed(2)) : ('$' + lot.floorBid.toFixed(2));
+      var metaRightBits = [];
+      if (lot.bidCount !== null && lot.bidCount !== undefined) metaRightBits.push(lot.bidCount + ' bid' + (lot.bidCount === 1 ? '' : 's'));
+      if (lot.timeLeft) metaRightBits.push(lot.timeLeft);
+
+      var isSavingThis = state.quickTrackingKey === lot.lotKey;
+      var trackBtnLabel = isSavingThis
+        ? '⏳ Saving...'
+        : wl
+        ? ('✅ Tracked' + (wl.maxBid > 0 ? ' ($' + Number(wl.maxBid).toFixed(2) + ')' : ''))
+        : (lot.balancedMaxBidUsd > 0 ? ('📌 Track ($' + lot.balancedMaxBidUsd.toFixed(2) + ')') : '📌 Watch');
+
+      html +=
+        '<div style="background:#020617;border:1.5px solid ' + cardBorder + ';border-radius:11px;padding:8px 9px;">' +
+          '<div style="display:flex;gap:8px;align-items:flex-start;">' +
+            (lot.thumbnailUrl
+              ? '<img src="' + escHtml(lot.thumbnailUrl) + '" alt="" style="width:48px;height:48px;border-radius:7px;object-fit:cover;background:#0f172a;border:1px solid #1e293b;flex-shrink:0;" />'
+              : '<div style="width:48px;height:48px;border-radius:7px;background:#0f172a;border:1px solid #1e293b;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;">📦</div>') +
+            '<div style="min-width:0;flex:1;">' +
+              '<div style="display:flex;justify-content:space-between;align-items:center;gap:4px;flex-wrap:wrap;margin-bottom:3px;">' +
+                '<div style="display:flex;align-items:center;gap:4px;flex-wrap:wrap;">' +
+                  '<span style="background:' + badgeBg + ';color:' + badgeCol + ';padding:1px 6px;border-radius:999px;font-size:9.5px;font-weight:900;white-space:nowrap;">' + escHtml(lot.verdictLabel) + '</span>' +
+                  '<span style="background:#1e293b;color:#e2e8f0;padding:1px 6px;border-radius:6px;font-size:9.5px;font-weight:800;white-space:nowrap;">' + escHtml(lot.bestChannelLabel) + '</span>' +
+                  (lot.visionThumbUsed ? '<span title="Thumbnail analyzed by Gemini Vision" style="background:#052e2b;color:#6ee7b7;padding:1px 5px;border-radius:5px;font-size:9px;font-weight:800;">📸</span>' : '') +
+                '</div>' +
+                (metaRightBits.length > 0
+                  ? '<span style="font-size:9.5px;color:#94a3b8;font-family:monospace;white-space:nowrap;">' + escHtml(metaRightBits.join(' • ')) + '</span>'
+                  : '') +
+              '</div>' +
+              '<a href="' + escHtml(lot.sourceUrl) + '" target="_blank" rel="noopener noreferrer" style="display:block;font-weight:800;font-size:11.5px;color:#f8fafc;text-decoration:none;line-height:1.3;">' +
+                escHtml(lot.title) + ' <span style="color:#818cf8;font-size:10px;">↗</span>' +
+              '</a>' +
+            '</div>' +
+          '</div>' +
+          '<div style="display:flex;justify-content:space-between;align-items:center;gap:6px;flex-wrap:wrap;background:#0f172a;border:1px solid #1e293b;border-radius:7px;padding:4px 7px;margin-top:6px;font-family:monospace;font-size:10px;">' +
+            '<span style="color:#cbd5e1;">' + escHtml(priceRefLabel + bpNote) + ' + ' + shipSummary + '</span>' +
+            '<span style="font-weight:900;color:' + netCol + ';white-space:nowrap;">Est. ~$' + Math.round(lot.estGrossMid) + ' ➔ ' + netTxt + (lot.balancedMaxBidUsd > 0 ? ' • Max $' + lot.balancedMaxBidUsd.toFixed(2) : '') + '</span>' +
+          '</div>' +
+          (lot.splitPlayHint
+            ? '<div style="font-size:10px;color:#fde68a;margin-top:4px;font-weight:800;">👑 ' + escHtml(lot.splitPlayHint) + '</div>'
+            : '') +
+          (lot.oneLineWhy
+            ? '<div style="font-size:10px;color:#94a3b8;margin-top:3px;line-height:1.3;">💡 ' + escHtml(lot.oneLineWhy) + '</div>'
+            : '') +
+          '<div style="display:flex;align-items:center;gap:5px;margin-top:6px;">' +
+            '<button type="button" class="rc-sweep-open-scout-btn" data-lotkey="' + escHtml(lot.lotKey) + '" style="flex:1.15;background:#4f46e5;color:#fff;border:0;border-radius:7px;padding:5px 7px;font-size:10.5px;font-weight:900;cursor:pointer;white-space:nowrap;">⚡ Full Scout</button>' +
+            '<button type="button" class="rc-sweep-quick-track-btn" data-lotkey="' + escHtml(lot.lotKey) + '" ' + (isSavingThis ? 'disabled ' : '') + 'style="flex:1.15;background:' + (wl ? '#065f46' : '#0f766e') + ';color:#ecfdf5;border:1px solid #34d399;border-radius:7px;padding:5px 7px;font-size:10.5px;font-weight:900;cursor:pointer;white-space:nowrap;">' + escHtml(trackBtnLabel) + '</button>' +
+            '<button type="button" class="rc-sweep-find-card-btn" data-lotkey="' + escHtml(lot.lotKey) + '" title="Scroll webpage to this lot card" style="background:#1e293b;color:#cbd5e1;border:1px solid #334155;border-radius:7px;padding:5px 8px;font-size:10.5px;font-weight:800;cursor:pointer;white-space:nowrap;">🎯 Find</button>' +
+          '</div>' +
+        '</div>';
+    });
+    html += '</div>';
+    return html;
   }
 
   function renderBrowseIdleBody() {
@@ -3260,7 +4489,8 @@
 
     var itemRow = isItemScoutMode() ? getActiveItemRow() : null;
     var existingWl = itemRow ? lookupWatchlistForItem(itemRow) : null;
-    var pillSynergy = itemRow ? evaluateSellerSynergy(itemRow.seller, itemRow.shippingWeight, itemRow.itemId) : null;
+    var pillSynergy = itemRow ? evaluateSellerSynergy(itemRow.seller, itemRow.shippingWeight, itemRow.itemId, itemRow.domainKey) : null;
+    var gridLocalCounts = isAuctionSweepMode() ? countGridLocalSynergies() : { combineCount: 0, trackedCount: 0 };
 
     var curPriceNum = itemRow ? Number(itemRow.currentPrice || 0) : 0;
     var minBidNum = itemRow ? Number(itemRow.minimumBid || curPriceNum) : 0;
@@ -3282,19 +4512,37 @@
 
     var combinePillBadge = pillSynergy && pillSynergy.isEligible
       ? '<span style="background:#065f46;color:#6ee7b7;padding:2px 8px;border-radius:999px;font-size:10.5px;font-weight:900;white-space:nowrap;">📦 Combine (+' + pillSynergy.matchCount + ')</span>'
+      : (isAuctionSweepMode() && gridLocalCounts.combineCount > 0)
+      ? '<span style="background:#065f46;color:#6ee7b7;padding:2px 8px;border-radius:999px;font-size:10.5px;font-weight:900;white-space:nowrap;">📦 ' + gridLocalCounts.combineCount + ' Combine</span>'
       : '';
 
     var trackedPillBadge = existingWl
       ? '<span style="background:#065f46;color:#d1fae5;padding:2px 7px;border-radius:999px;font-size:10px;font-weight:800;white-space:nowrap;">📌 Tracked</span>'
+      : (isAuctionSweepMode() && gridLocalCounts.trackedCount > 0)
+      ? '<span style="background:#312e81;color:#c7d2fe;padding:2px 7px;border-radius:999px;font-size:10px;font-weight:800;white-space:nowrap;">📌 ' + gridLocalCounts.trackedCount + '</span>'
       : '';
+
+    var sweepHitsTotal = (state.sweepData && state.sweepData.summary)
+      ? (Number(state.sweepData.summary.hotFlipCount || 0) + Number(state.sweepData.summary.combinePlayCount || 0) + Number(state.sweepData.summary.sleeperCount || 0))
+      : 0;
 
     var pillCountBadge = isItemScoutMode()
       ? '<span style="background:#312e81;color:#e0e7ff;padding:2px 8px;border-radius:999px;font-size:10.5px;font-weight:800;font-family:monospace;white-space:nowrap;">' +
           (livePriceChipText ? escHtml(livePriceChipText) : ('⚡ ' + escHtml(!isShopGoodwillHost() && itemRow && itemRow.platformName ? itemRow.platformName : 'Scout'))) +
         '</span>'
+      : isAuctionSweepMode()
+      ? (state.sweepData
+          ? '<span style="background:#065f46;color:#6ee7b7;padding:2px 8px;border-radius:999px;font-size:10.5px;font-weight:900;font-family:monospace;white-space:nowrap;">🎯 ' + sweepHitsTotal + ' Hit' + (sweepHitsTotal === 1 ? '' : 's') + '</span>'
+          : '<span style="background:#312e81;color:#e0e7ff;padding:2px 8px;border-radius:999px;font-size:10.5px;font-weight:800;font-family:monospace;white-space:nowrap;">🕸️ ' + (state.gridCards ? state.gridCards.length : 0) + ' Lots</span>')
       : state.pageType === 'other'
       ? '<span style="background:#1e293b;color:#cbd5e1;padding:2px 8px;border-radius:999px;font-size:10.5px;font-weight:800;white-space:nowrap;">🧭 Browse</span>'
       : '<span style="background:#312e81;color:#e0e7ff;padding:2px 8px;border-radius:999px;font-size:10.5px;font-family:monospace;white-space:nowrap;">' + state.rows.length + (state.csvHarvested ? ' CSV' : ' Rows') + '</span>';
+
+    var pillSweepQuickBtn = isAuctionSweepMode() && !state.sweepData
+      ? '<button id="rc-pill-run-sweep-btn" title="Sweep Page for Profitable Flips" style="background:linear-gradient(135deg,#6366f1,#4f46e5);color:#fff;border:0;border-radius:999px;padding:3px 9px;font-size:10.5px;font-weight:900;cursor:pointer;white-space:nowrap;">' +
+          (state.sweepingGrid ? '⏳ Sweeping...' : '🕸️ Sweep') +
+        '</button>'
+      : '';
 
     var signInOrRolePill = auth
       ? '<span style="color:#a5b4fc;font-size:11px;white-space:nowrap;">' + escHtml(auth.roleBadge || '👑') + '</span>' +
@@ -3309,6 +4557,7 @@
         combinePillBadge +
         trackedPillBadge +
       '</button>' +
+      pillSweepQuickBtn +
       signInOrRolePill;
 
     // Enforce strict mutual exclusivity: hide bottom-right Pill Bar when Drawer is open (keeping DOM node mounted for clientCore auth guard)
@@ -3319,11 +4568,19 @@
     if (toggleBtn) {
       toggleBtn.onclick = function () {
         state.trayOpen = true;
-        if (!isItemScoutMode() && state.pageType !== 'other' && !state.previewData && !state.loadingPreview) {
+        if (isSgwTableSyncMode() && !state.previewData && !state.loadingPreview) {
           runPreviewOrSync(true);
           return;
         }
         renderUI();
+      };
+    }
+
+    var pillSweepBtn = document.getElementById('rc-pill-run-sweep-btn');
+    if (pillSweepBtn && !state.sweepingGrid) {
+      pillSweepBtn.onclick = function (e) {
+        if (e && e.stopPropagation) e.stopPropagation();
+        runAuctionSweep();
       };
     }
 
@@ -3364,7 +4621,8 @@
         '#rc-scout-tray-body::-webkit-scrollbar, #rc-scout-tray .rc-scout-scroll::-webkit-scrollbar { width: 5px; height: 5px; }' +
         '#rc-scout-tray-body::-webkit-scrollbar-track, #rc-scout-tray .rc-scout-scroll::-webkit-scrollbar-track { background: transparent; }' +
         '#rc-scout-tray-body::-webkit-scrollbar-thumb, #rc-scout-tray .rc-scout-scroll::-webkit-scrollbar-thumb { background: #334155; border-radius: 999px; }' +
-        '#rc-scout-tray .rc-btn-pill { display: inline-flex; align-items: center; justify-content: center; gap: 4px; white-space: nowrap; flex-shrink: 0; height: 27px; padding: 0 8px; border-radius: 7px; font-size: 10.5px; font-weight: 800; line-height: 1; text-decoration: none; cursor: pointer; }';
+        '#rc-scout-tray .rc-btn-pill { display: inline-flex; align-items: center; justify-content: center; gap: 4px; white-space: nowrap; flex-shrink: 0; height: 27px; padding: 0 8px; border-radius: 7px; font-size: 10.5px; font-weight: 800; line-height: 1; text-decoration: none; cursor: pointer; }' +
+        '.rc-sweep-dimmed:hover { opacity: 0.94 !important; transition: opacity 0.15s ease; }';
       document.head.appendChild(styleEl);
     }
 
@@ -3377,10 +4635,14 @@
       document.body.appendChild(tray);
     }
 
-    var sourceBadge = state.pageType === 'external-item'
+    var sourceBadge = state.inspectingGridItem
+      ? '<span style="background:#312e81;color:#e0e7ff;padding:2px 7px;border-radius:6px;font-size:10px;font-weight:800;white-space:nowrap;flex-shrink:0;">⚡ Grid Scout ' + escHtml((itemRow && itemRow.displayBadgeId) || '') + '</span>'
+      : state.pageType === 'external-item'
       ? '<span style="background:#312e81;color:#e0e7ff;padding:2px 7px;border-radius:6px;font-size:10px;font-weight:800;white-space:nowrap;flex-shrink:0;">🌐 ' + escHtml((itemRow && itemRow.platformName) || 'Web Listing') + '</span>'
       : state.pageType === 'item'
       ? '<span style="background:#312e81;color:#e0e7ff;padding:2px 7px;border-radius:6px;font-size:10px;font-weight:800;white-space:nowrap;flex-shrink:0;">⚡ SGW #' + escHtml((itemRow && itemRow.itemId) || '') + '</span>'
+      : isAuctionSweepMode()
+      ? '<span style="background:#312e81;color:#e0e7ff;padding:2px 7px;border-radius:6px;font-size:10px;font-weight:900;white-space:nowrap;flex-shrink:0;">🕸️ Auction Sweep (' + (state.gridCards ? state.gridCards.length : 0) + ')</span>'
       : state.pageType === 'other'
       ? '<span style="background:#1e293b;color:#cbd5e1;padding:2px 7px;border-radius:6px;font-size:10px;font-weight:800;white-space:nowrap;flex-shrink:0;">🧭 Browse Watcher</span>'
       : state.csvHarvested
@@ -3393,10 +4655,14 @@
 
     var headerCombineChip = pillSynergy && pillSynergy.isEligible
       ? '<button type="button" id="rc-header-combine-chip" title="Toggle Combined Shipping details" style="background:#065f46;color:#6ee7b7;border:1px solid #34d399;padding:1px 7px;border-radius:999px;font-size:10px;font-weight:900;cursor:pointer;white-space:nowrap;flex-shrink:0;">📦 +' + pillSynergy.matchCount + ' (~$' + pillSynergy.estSavings.toFixed(0) + ')</button>'
+      : (isAuctionSweepMode() && gridLocalCounts.combineCount > 0)
+      ? '<span style="background:#065f46;color:#6ee7b7;border:1px solid #34d399;padding:1px 7px;border-radius:999px;font-size:10px;font-weight:900;white-space:nowrap;flex-shrink:0;">📦 ' + gridLocalCounts.combineCount + ' Combine</span>'
       : '';
 
     var headerTrackedChip = existingWl
       ? '<span style="background:#065f46;color:#d1fae5;padding:1px 6px;border-radius:999px;font-size:9.5px;font-weight:800;white-space:nowrap;flex-shrink:0;">📌 Tracked</span>'
+      : (isAuctionSweepMode() && gridLocalCounts.trackedCount > 0)
+      ? '<span style="background:#312e81;color:#c7d2fe;padding:1px 6px;border-radius:999px;font-size:9.5px;font-weight:800;white-space:nowrap;flex-shrink:0;">📌 ' + gridLocalCounts.trackedCount + ' Tracked</span>'
       : '';
 
     var trackersHeaderLink =
@@ -3408,7 +4674,7 @@
     var refreshBtnHtml =
       '<button id="rc-scout-refresh-btn" class="rc-btn-pill" title="Refresh live item / bid / watchlist data" style="background:#0f172a;border:1px solid #334155;color:#e2e8f0;">🔄</button>';
 
-    var harvestCsvBtnHtml = !isItemScoutMode() && state.pageType !== 'other' && isShopGoodwillHost()
+    var harvestCsvBtnHtml = isSgwTableSyncMode() && isShopGoodwillHost()
       ? '<button id="rc-scout-harvest-csv-btn" class="rc-btn-pill" title="Silently harvest ShopGoodwill CSV in memory" style="background:#334155;border:1px solid #475569;color:#f8fafc;">🔄 CSV</button>'
       : '';
 
@@ -3475,6 +4741,23 @@
             '</div>' +
           '</div>';
       }
+    } else if (isAuctionSweepMode()) {
+      var gridCount = state.gridCards ? Math.min(40, state.gridCards.length) : 0;
+      var sweepCtaLabel = state.sweepingGrid
+        ? '⏳ Sweeping Active Lots...'
+        : state.sweepData
+        ? ('🕸️ Re-Sweep Page for Flips (' + gridCount + ' Lots)')
+        : ('🕸️ Sweep Page for Flips (' + gridCount + ' Lots)');
+      footerHtml =
+        '<div style="display:flex;flex-direction:column;gap:6px;">' +
+          '<button id="rc-sweep-run-btn" ' + (state.sweepingGrid ? 'disabled ' : '') + 'style="width:100%;background:linear-gradient(135deg,#6366f1,#4f46e5);color:#fff;border:0;border-radius:10px;padding:11px 14px;font-weight:900;cursor:' + (state.sweepingGrid ? 'wait' : 'pointer') + ';font-size:13px;box-shadow:0 4px 14px rgba(99,102,241,0.4);">' +
+            escHtml(sweepCtaLabel) +
+          '</button>' +
+          '<div style="display:flex;gap:6px;">' +
+            '<a href="' + state.activeOrigin + '/scout/trackers" target="_blank" style="flex:1;text-align:center;background:#1e293b;color:#a5b4fc;text-decoration:none;border:1px solid #334155;border-radius:8px;padding:7px 10px;font-weight:800;font-size:11px;">📌 Buy Trackers ↗</a>' +
+            '<a href="' + state.activeOrigin + '/purchases" target="_blank" style="flex:1;text-align:center;background:#1e293b;color:#e2e8f0;text-decoration:none;border:1px solid #334155;border-radius:8px;padding:7px 10px;font-weight:800;font-size:11px;">📦 /purchases ↗</a>' +
+          '</div>' +
+        '</div>';
     } else if (state.pageType === 'other') {
       footerHtml =
         '<div style="display:flex;gap:6px;">' +
@@ -3497,9 +4780,12 @@
         '</div>';
     }
 
+    var activeGridPlat = (isAuctionSweepMode() && state.gridCards && state.gridCards[0] && state.gridCards[0].platformName)
+      ? state.gridCards[0].platformName
+      : '';
     var trayHeaderTitle = (isShopGoodwillHost()
       ? '🔭 RC Scout'
-      : ('🔭 ' + escHtml((itemRow && itemRow.platformName) || 'RC Scout'))) +
+      : ('🔭 ' + escHtml((itemRow && itemRow.platformName) || activeGridPlat || 'RC Scout'))) +
       ' <span title="Script version • serving host" style="background:#1e1b4b;color:#a5b4fc;border:1px solid #4338ca;padding:1px 5px;border-radius:6px;font-size:9px;font-weight:800;font-family:monospace;vertical-align:middle;">' +
       escHtml(SCRIPT_VERSION) + ' • ' + escHtml(ORIGIN_HOST) + '</span>';
 
@@ -3536,6 +4822,8 @@
       '<div id="rc-scout-tray-body" class="rc-bml-drawer-body" style="flex:1;overflow-y:auto;padding:10px 12px;">' +
         (isItemScoutMode()
           ? renderItemTrayBody()
+          : isAuctionSweepMode()
+          ? renderAuctionSweepTrayBody()
           : state.pageType === 'other'
           ? renderBrowseIdleBody()
           : renderTableTrayBody()) +
@@ -3572,7 +4860,7 @@
         decoratePageRows();
         hydrateShopGoodwillItemApi(true);
         fetchWatchlist(function () {
-          if (!isItemScoutMode() && state.pageType !== 'other') {
+          if (isSgwTableSyncMode()) {
             runPreviewOrSync(true);
           } else {
             renderUI();
@@ -3868,6 +5156,69 @@
         runPreviewOrSync(false);
       };
     }
+
+    // Wire Auction Sweep (v4.5) Drawer & In-Drawer Drill-Down listeners
+    var sweepRunBtn = document.getElementById('rc-sweep-run-btn');
+    if (sweepRunBtn && !state.sweepingGrid) {
+      sweepRunBtn.onclick = function () {
+        runAuctionSweep();
+      };
+    }
+
+    var sweepFilterBtns = tray.querySelectorAll('.rc-sweep-filter-btn');
+    Array.prototype.slice.call(sweepFilterBtns).forEach(function (btn) {
+      btn.onclick = function () {
+        state.sweepFilter = btn.getAttribute('data-sfilter') || 'HITS';
+        renderUI();
+      };
+    });
+
+    var sweepDimToggle = document.getElementById('rc-sweep-dim-toggle');
+    if (sweepDimToggle) {
+      sweepDimToggle.onchange = function () {
+        state.dimPassedCards = Boolean(sweepDimToggle.checked);
+        decorateAuctionGridCards();
+        renderUI();
+      };
+    }
+
+    var sweepOpenScoutBtns = tray.querySelectorAll('.rc-sweep-open-scout-btn');
+    Array.prototype.slice.call(sweepOpenScoutBtns).forEach(function (btn) {
+      btn.onclick = function () {
+        var lk = btn.getAttribute('data-lotkey');
+        if (lk) openSweepLotFullScout(lk, true);
+      };
+    });
+
+    var sweepQuickTrackBtns = tray.querySelectorAll('.rc-sweep-quick-track-btn');
+    Array.prototype.slice.call(sweepQuickTrackBtns).forEach(function (btn) {
+      btn.onclick = function () {
+        var lk = btn.getAttribute('data-lotkey');
+        if (lk && !state.quickTrackingKey) quickTrackSweepLot(lk);
+      };
+    });
+
+    var sweepFindCardBtns = tray.querySelectorAll('.rc-sweep-find-card-btn');
+    Array.prototype.slice.call(sweepFindCardBtns).forEach(function (btn) {
+      btn.onclick = function () {
+        var lk = btn.getAttribute('data-lotkey');
+        if (lk) scrollToSweepGridCard(lk);
+      };
+    });
+
+    var backToSweepBtn = document.getElementById('rc-back-to-sweep-btn');
+    if (backToSweepBtn) {
+      backToSweepBtn.onclick = function () {
+        closeSweepLotFullScout();
+      };
+    }
+
+    var focusInspectedBtn = document.getElementById('rc-focus-inspected-card-btn');
+    if (focusInspectedBtn && state.inspectingGridItem) {
+      focusInspectedBtn.onclick = function () {
+        scrollToSweepGridCard(state.inspectingGridItem.lotKey);
+      };
+    }
   }
 
   // SPA URL Watcher (Fixes "YOU MAY ALSO LIKE" & SPA Route Transition Freezes Across Both Drawer & Pill Bar)
@@ -3883,9 +5234,17 @@
     if (!cleanNext || cleanNext === state.lastObservedHref) return;
     state.lastObservedHref = cleanNext;
     clearSpaSettleTimers();
+    clearAuctionGridDecorations();
 
     // Reset per-URL transient state while keeping auth/watchlist/combinableItems/sgwApi caches intact
     state.rows = [];
+    state.gridCards = [];
+    state.sweepingGrid = false;
+    state.sweepProgressMsg = '';
+    state.sweepData = null;
+    state.sweepByKey = {};
+    state.quickTrackingKey = '';
+    state.inspectingGridItem = null;
     state.csvRows = [];
     state.csvHarvested = false;
     state.previewData = null;
@@ -3916,7 +5275,7 @@
       if (isItemScoutMode()) {
         hydrateShopGoodwillItemApi(false);
         maybeRestoreSavedReport();
-      } else if (isFinal && state.trayOpen && state.pageType !== 'other' && !state.previewData && !state.loadingPreview) {
+      } else if (isFinal && state.trayOpen && isSgwTableSyncMode() && !state.previewData && !state.loadingPreview) {
         runPreviewOrSync(true);
         return;
       }
@@ -3945,7 +5304,7 @@
     state.lastHandledClickSeq = Number(window.__RC_BML_CLICK_SEQ__ || 0);
     window.__RC_BOOKMARKLET_CLICKED__ = false;
     state.trayOpen = !state.trayOpen;
-    if (state.trayOpen && !isItemScoutMode() && state.pageType !== 'other' && !state.previewData && !state.loadingPreview) {
+    if (state.trayOpen && isSgwTableSyncMode() && !state.previewData && !state.loadingPreview) {
       runPreviewOrSync(true);
       return;
     }
@@ -3967,7 +5326,7 @@
 
   function onBmlAuthenticated() {
     fetchWatchlist(function () {
-      if (state.trayOpen && !isItemScoutMode() && state.pageType !== 'other') {
+      if (state.trayOpen && isSgwTableSyncMode()) {
         runPreviewOrSync(true);
       } else {
         maybeRestoreSavedReport();
@@ -3992,10 +5351,15 @@
         combinableItems: state.combinableItems,
         sgwApi: state.sgwApi,
         domainProfiles: state.domainProfiles,
-        roiTargets: state.roiTargets
+        roiTargets: state.roiTargets,
+        sweepData: state.sweepData,
+        sweepByKey: state.sweepByKey,
+        sweepFilter: state.sweepFilter,
+        dimPassedCards: state.dimPassedCards
       };
     } catch (e) {}
     clearSpaSettleTimers();
+    clearAuctionGridDecorations();
     try { if (typeof unwatchSpa === 'function') unwatchSpa(); } catch (e) {}
     try { window.removeEventListener('rc-bml-authenticated', onBmlAuthenticated); } catch (e) {}
     ['rc-scout-tray', 'rc-scout-fab-bar', 'rc-scout-tray-styles'].forEach(function (id) {
@@ -4013,7 +5377,7 @@
     state.trayOpen = true;
     harvestPageCsvSilently(function () {
       fetchWatchlist(function () {
-        if (!isItemScoutMode() && state.pageType !== 'other') {
+        if (isSgwTableSyncMode()) {
           runPreviewOrSync(true);
         } else {
           maybeRestoreSavedReport();
@@ -4026,17 +5390,25 @@
   window.__RC_BOOKMARKLET_CLICKED__ = false;
   installCsvInterceptor();
   detectPageAndRows();
-  // URL-Driven 1st-Click Mode Auto-Detection: open 100dvh Drawer on actionable item/sync URLs; rest as Pill Bar on generic browse/home URLs!
+  // URL-Driven 1st-Click Mode Auto-Detection: open 100dvh Drawer on actionable item/sync URLs; rest as Pill Bar on browse/grid URLs!
   if (isActionableUrlMode()) {
     state.trayOpen = true;
   }
   decoratePageRows();
   renderUI();
+  // Re-check grid cards once SPA frameworks finish painting search results
+  if (state.pageType === 'other' || state.pageType === 'auction-grid') {
+    spaSettleTimers.push(setTimeout(function () {
+      detectPageAndRows();
+      decoratePageRows();
+      renderUI();
+    }, 550));
+  }
   // Immediately hydrate the full 10-24 photo gallery from SGW's Buyer API (browser-direct) so the strip is full BEFORE Scan
   hydrateShopGoodwillItemApi(false);
   fetchWatchlist(function () {
     harvestPageCsvSilently(function () {
-      if (state.trayOpen && !isItemScoutMode() && state.pageType !== 'other' && !state.previewData && !state.loadingPreview) {
+      if (state.trayOpen && isSgwTableSyncMode() && !state.previewData && !state.loadingPreview) {
         runPreviewOrSync(true);
       }
     });
