@@ -358,14 +358,34 @@ for (const rel of salesSyncGuardedFiles) {
 }
 
 // =========================================================================
-// 5c. SKILL & RULE HEALTH CHECK (broken references, missing frontmatter, missing triggers)
+// 5c. SKILL, RULE, GEMINI.MD & PLUGIN SUBAGENT HEALTH CHECK
 // =========================================================================
 {
+    const geminiMdPath = path.join(process.cwd(), 'GEMINI.md');
+    if (fs.existsSync(geminiMdPath)) {
+        const geminiBytes = Buffer.byteLength(fs.readFileSync(geminiMdPath, 'utf8'), 'utf8');
+        if (geminiBytes >= 24000) {
+            console.error(`❌ Rule health: GEMINI.md is ${geminiBytes} bytes (>= 24,000 B Antigravity hard cap — Laws 1–7 will truncate!)`);
+            hasErrors = true;
+        } else if (geminiBytes >= 20000) {
+            console.warn(`⚠️ Rule health: GEMINI.md is ${geminiBytes} bytes (approaching 24,000 B cap; keep < 20,000 B)`);
+        }
+    }
+
     const skillsRoot = path.join(process.cwd(), '.agents', 'skills');
     const rulesRoot = path.join(process.cwd(), '.agents', 'rules');
+    const looseAgentsRoot = path.join(process.cwd(), '.agents', 'agents');
+    const pluginsRoot = path.join(process.cwd(), '.agents', 'plugins');
+
     if (fs.existsSync(skillsRoot)) {
         for (const dir of fs.readdirSync(skillsRoot, { withFileTypes: true })) {
-            if (!dir.isDirectory()) continue;
+            if (!dir.isDirectory()) {
+                if (dir.name !== '.DS_Store') {
+                    console.error(`❌ Skill health: loose file .agents/skills/${dir.name} is ignored by Antigravity; delete or move into .agents/skills/<name>/SKILL.md`);
+                    hasErrors = true;
+                }
+                continue;
+            }
             const skillFile = path.join(skillsRoot, dir.name, 'SKILL.md');
             if (!fs.existsSync(skillFile)) {
                 console.error(`❌ Skill health: .agents/skills/${dir.name}/ has no SKILL.md`);
@@ -388,6 +408,92 @@ for (const rel of salesSyncGuardedFiles) {
             }
         }
     }
+
+    if (fs.existsSync(rulesRoot)) {
+        for (const entry of fs.readdirSync(rulesRoot, { withFileTypes: true })) {
+            if (entry.isDirectory()) {
+                console.error(`❌ Rule health: subdirectory .agents/rules/${entry.name}/ is ignored by Antigravity; rules must sit flat in .agents/rules/*.md`);
+                hasErrors = true;
+                continue;
+            }
+            if (!entry.name.endsWith('.md')) continue;
+            const rulePath = path.join(rulesRoot, entry.name);
+            const ruleText = fs.readFileSync(rulePath, 'utf8');
+            const ruleBytes = Buffer.byteLength(ruleText, 'utf8');
+            if (ruleBytes >= 24000) {
+                console.error(`❌ Rule health: .agents/rules/${entry.name} is ${ruleBytes} bytes (>= 24,000 B Antigravity hard cap)`);
+                hasErrors = true;
+            }
+            const fm = ruleText.match(/^---\r?\n([\s\S]*?)\r?\n---/);
+            if (!fm) {
+                console.error(`❌ Rule health: .agents/rules/${entry.name} is missing YAML frontmatter ("trigger: always_on | glob | model_decision | manual")`);
+                hasErrors = true;
+                continue;
+            }
+            const triggerMatch = fm[1].match(/^trigger:\s*(always_on|glob|model_decision|manual)\s*$/m);
+            if (!triggerMatch) {
+                console.error(`❌ Rule health: .agents/rules/${entry.name} has invalid or missing "trigger:" in frontmatter`);
+                hasErrors = true;
+                continue;
+            }
+            if (triggerMatch[1] === 'glob') {
+                const globsMatch = fm[1].match(/^globs:\s*(.+)$/m);
+                if (!globsMatch || !globsMatch[1].trim()) {
+                    console.error(`❌ Rule health: .agents/rules/${entry.name} has "trigger: glob" without non-empty "globs:"`);
+                    hasErrors = true;
+                } else if (/[{}]/.test(globsMatch[1])) {
+                    console.error(`❌ Rule health: .agents/rules/${entry.name} "globs:" contains "{...}" brace syntax (expand to comma-separated patterns)`);
+                    hasErrors = true;
+                }
+            }
+        }
+    }
+
+    if (fs.existsSync(looseAgentsRoot)) {
+        console.error(`❌ Agent health: .agents/agents/ is not discovered by Antigravity; package custom subagents under .agents/plugins/<plugin>/agents/*.md with plugin.json`);
+        hasErrors = true;
+    }
+
+    if (fs.existsSync(pluginsRoot)) {
+        for (const plug of fs.readdirSync(pluginsRoot, { withFileTypes: true })) {
+            if (!plug.isDirectory()) continue;
+            const manifestPath = path.join(pluginsRoot, plug.name, 'plugin.json');
+            if (!fs.existsSync(manifestPath)) {
+                console.error(`❌ Plugin health: .agents/plugins/${plug.name}/ is missing plugin.json`);
+                hasErrors = true;
+            } else {
+                try {
+                    const parsed = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+                    if (!parsed.name) {
+                        console.error(`❌ Plugin health: .agents/plugins/${plug.name}/plugin.json is missing "name"`);
+                        hasErrors = true;
+                    }
+                } catch (e) {
+                    console.error(`❌ Plugin health: .agents/plugins/${plug.name}/plugin.json invalid JSON: ${e.message}`);
+                    hasErrors = true;
+                }
+            }
+            const plugAgentsDir = path.join(pluginsRoot, plug.name, 'agents');
+            if (fs.existsSync(plugAgentsDir)) {
+                for (const ag of fs.readdirSync(plugAgentsDir, { withFileTypes: true })) {
+                    if (!ag.isFile() || !ag.name.endsWith('.md')) continue;
+                    const agText = fs.readFileSync(path.join(plugAgentsDir, ag.name), 'utf8');
+                    const fm = agText.match(/^---\r?\n([\s\S]*?)\r?\n---/);
+                    if (
+                        !fm ||
+                        !/^name:\s*\S/m.test(fm[1]) ||
+                        !/^description:\s*\S/m.test(fm[1]) ||
+                        !/^subagent:\s*(true|false)\s*$/m.test(fm[1]) ||
+                        !/^tools:\s*\[/m.test(fm[1])
+                    ) {
+                        console.error(`❌ Plugin agent health: .agents/plugins/${plug.name}/agents/${ag.name} needs frontmatter with name, description, subagent, and tools`);
+                        hasErrors = true;
+                    }
+                }
+            }
+        }
+    }
+
     // Every module named in a Gemini Web bundle must exist as a skill folder or a rule file
     const syncScriptPath = path.join(process.cwd(), 'scripts', 'sync-ai-context.mjs');
     if (fs.existsSync(syncScriptPath)) {

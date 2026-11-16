@@ -1,0 +1,6 @@
+{
+  "name": "rc-auditors",
+  "displayName": "Resale Command Read-Only Auditors",
+  "version": "1.0.0",
+  "description": "Read-only forensic ledger/schema and pre-push contract auditor subagents for Resale Command."
+}
