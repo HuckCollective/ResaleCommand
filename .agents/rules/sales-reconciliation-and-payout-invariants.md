@@ -1,3 +1,9 @@
+---
+trigger: glob
+globs: "**/src/**/sales/**, **/src/lib/sales*, **/src/lib/ricochet*, **/src/composables/useRicochetSalesSync.ts, **/public/ricochet-upc-sync.user.js"
+description: "Mandatory Ricochet POS CSV, ticket-line multiset deduplication, Booth Bin lock, and sold-date invariants."
+---
+
 # Sales Reconciliation, Payout Sync & Settlement Invariants
 
 This rule defines the strict accounting invariants, venue isolation laws, and data-protection guardrails for sales imports, payout reconciliations, and co-op settlements in **Resale Command**.
@@ -6,10 +12,10 @@ This rule defines the strict accounting invariants, venue isolation laws, and da
 
 ## 1. The Sale Date Authority Law (Anti-Timestamp Hallucination)
 1. **The Venue Register is the Sole Date Authority**:
-   - The `saleDate` of any sold item MUST originate directly from the POS register transaction timestamp (e.g. the `Sold` column `MM-DD-YYYY` in Memory Den Ricochet CSVs).
+   - The `saleDate` of any sold item MUST originate directly from the POS register transaction timestamp (e.g. the `Sold` column `MM-DD-YYYY` or `Sold Date` in Ricochet CSVs).
 2. **Absolute Prohibition of Database Creation Timestamps**:
-   - **NEVER** use `item.$createdAt`, `item.$updatedAt`, or `new Date()` as a sale date.
-   - Database record creation timestamps only indicate when a row was inserted into Appwrite, NOT when money changed hands at the retail counter.
+   - **NEVER** use `item.$createdAt`, `item.$updatedAt`, `Paid` check dates, or `new Date()` as a sale date.
+   - Database creation timestamps only indicate when a row was inserted into Appwrite, NOT when money changed hands at the retail counter.
 
 ---
 
@@ -18,162 +24,119 @@ This rule defines the strict accounting invariants, venue isolation laws, and da
    - Financial ledgers, realized revenue KPI cards, and partner settlement statements must **ONLY** aggregate verified documents from the `sales` collection.
 2. **No Fabricated Fallbacks**:
    - Never synthesize temporary or fake sale rows out of unlinked inventory items simply because `status === 'sold'`.
-   - If an inventory item is marked `sold` but has no corresponding `sales` document, it must be flagged for reconciliation in the Sync workbench, NEVER silently dumped into realized revenue.
+   - If an inventory item is marked `sold` but has no corresponding `sales` document, flag it for reconciliation in the Sync workbench — NEVER silently dump it into realized revenue.
 
 ---
 
 ## 3. Strict Multi-Month Cycle Partitioning
 1. **Never Mash Multiple Months into a Single Settlement**:
    - Venue payout reports (such as Memory Den Payout History) frequently contain 3 to 12 months of historical data in a single CSV.
-   - The importer and settlement views MUST group records into discrete monthly cycles based on the `Sold` date.
+   - Importer and settlement views MUST group records into discrete 1-indexed `YYYY-MM` monthly cycles based strictly on the calendar `Sold` date (`calendarMonthKeyFromDateString` / `pacificMonthKey` in `src/lib/salesBucketing.ts`).
 2. **One Month's Rent per Monthly Cycle**:
-   - Fixed monthly booth rent ($382.50 at Memory Den) applies strictly to its respective calendar month cycle.
+   - Monthly booth rent (resolved dynamically from `warehouses.monthlyRent`, e.g. `$382.50/mo` at Memory Den) applies strictly to its respective calendar month cycle.
    - Never subtract a single month's rent from a multi-month cumulative gross total.
 
 ---
 
 ## 4. Strict Venue Attribution vs. Partner Prefix Separation
 1. **Prefix = Consignor / Curator (Who Curated It)**:
-   - `HUCK-`, `PDXGL-`, and `BB-` identify the partner organization who sourced the item and is owed curator profit.
+   - `HUCK-`, `PDXGL-`, and `BB-` identify the partner organization or consignor associated with the item.
 2. **Location / Warehouse = Physical Selling Channel (Where It Sold)**:
-   - A sale is attributed to Memory Den **ONLY** if the sale record explicitly links to the Memory Den warehouse document, contains `Booth 0EJ`, or originated from an `MD-PAYOUT` ticket.
-   - Having a `HUCK-`, `BB-`, or `PDXGL-` barcode prefix **NEVER** implies the item sold at Memory Den. It could have sold online, at Dusty Tiger, or through private cash sale.
+   - A sale is attributed to a booth (`MD`, `DT`, etc.) **ONLY** if the sale record explicitly links to that canonical warehouse document / location code.
+   - Having a `HUCK-`, `BB-`, or `PDXGL-` barcode prefix **NEVER** implies the item sold at Memory Den — it could sell online, at Dusty Tiger, or via pop-up.
 
 ---
 
 ## 5. Live Production Dataset Protection (Zero Data Corruption)
-When syncing or importing into the live production environment (`items`, `sales` collections):
+When syncing or importing into live `items` and `sales` collections:
 1. **Idempotent Imports (No Double-Counting)**:
-   - Check every incoming sale row against existing database sales using a 2-point fingerprint:
-     - `orderId` / Ticket Number
-     - Exact `saleDate` + Gross Price + Sku
-   - Duplicate sales must be safely bypassed with an informational notice.
+   - Deduplicate strictly via POS ticket-line multiset counting (`ticketLineKey(ticket, gross, net)` — see §15) and Layer 3 database ticket + date + location checks.
 2. **Non-Destructive Inventory Updates**:
-   - Matching a sale to an inventory item updates:
-     - `status: 'sold'`
-     - `saleId: orderRef`
-     - `soldPrice: netPrice`
+   - Matching a single-unit (`quantity === 1`) sale updates `status: 'sold'`, `saleId`, and `soldPrice`. (Multi-quantity Booth Bins follow the §15 LOCKED DECISION and are never depleted by Sales Commit.)
    - **Immutable Fields**: Landed purchase cost (`cost`), purchase order ID (`purchaseId`), barcodes (`upc`, `sku`), and lineage (`parentLotId`) are **LOCKED and IMMUTABLE**.
 3. **Dry-Run Review Before Database Commit**:
-   - The user must always be presented with the matched items, unmatched count, and expected net check in the importer UI before any writes are committed.
+   - Always present matched items, unmatched count, and expected net totals in the confirmation UI (`SlideOverDrawer`) before committing writes.
 
 ---
 
-## 6. Proportional Booth Overhead Sharing Law (Anti-Host Subsidy)
-1. **Shared Floor Space Requires Shared Rent**:
-   - All goods housed and sold within a shared retail booth (e.g., Memory Den Booth 0EJ) MUST contribute proportionally to fixed booth rent ($382.50) and verified tech operational expenses based on their share of gross revenue:
-     $$\text{Partner Rent Share} = \left( \frac{\text{Partner Gross Sales}}{\text{Total Booth Gross Sales}} \right) \times \text{Fixed Booth Rent}$$
-2. **Absolute Prohibition of Unencumbered Consignor Payouts**:
-   - Never pay an outside consignor (e.g., B&B) a flat 85% net cut without deducting their proportional share of booth rent.
-   - If a consignor receives 85% and the mall takes 15%, 0% remains to pay the physical booth rent. The managing operator would be subsidizing other people's inventory at a personal loss.
+## 6. Booth Overhead & Consignor Sub-Lease Rent Law (Aligned with `src/lib/coopGovernance.ts`)
+1. **Contractual Consignor Sub-Lease Offset First**:
+   - Outside consignors (`BB-`) are governed by configurable `ConsignorAgreementConfig` in `src/lib/coopGovernance.ts`. By default, `BB-` is an external sub-tenant paying a **fixed `$85.41/mo` contractual rent offset** (`85%` gross less venue fee, minus `$85.41/mo`, `0%` Commons Pool split), reducing the Co-op's net booth rent burden (e.g. `$382.50 - $85.41 = $297.09` Net Co-op Rent).
+   - If a consignor's agreement is configured to proportional rent mode instead of fixed sub-lease mode, deduct their configured share per `coopGovernance.ts` — never pay an unencumbered `85%` gross payout with `$0` rent contribution.
+2. **Co-op Commons Waterfall (`HUCK-` & `PDXGL-`)**:
+   - Co-op member sales follow the WSDE waterfall: 1) Venue Fee (`warehouses.commissionRate`) ➔ 2) `100%` verified Curator Cost Basis Recouped ➔ 3) Net Surplus split `70%` Curator / `30%` Co-op Commons Pool (which funds Net Co-op Rent and shared supplies).
 
 ---
 
 ## 7. Zero-Cost Basis Rule (No Cost = Straight Net Split)
 1. **Documented Receipts Required for Capital Recoupment**:
-   - A 100% cost recoupment check is paid ONLY if an item has a verified, documented out-of-pocket landed purchase cost (`cost > 0`).
-2. **Fallback for Uncosted or Historical Goods**:
-   - If `cost === 0` or cost is omitted, the curator or partner receives their agreed net profit split after their proportional share of booth overhead. Zero phantom cost basis may be invented.
+   - `100%` cost recoupment applies ONLY when an item has a verified landed purchase cost (`cost > 0`).
+2. **Fallback for Uncosted Goods**:
+   - If `cost === 0` or omitted, zero phantom cost basis may be invented; net proceeds flow directly into the applicable partner/co-op split.
 
 ---
 
 ## 8. The 100% Sales Recording Mandate
 1. **Every Register Transaction Must Be Preserved**:
-   - Every line item on a POS payout statement reflects an actual retail customer transaction.
-   - Unmatched rows must NEVER be dropped, skipped, or omitted from the database.
+   - Every real sale line on a POS payout statement reflects an actual retail customer transaction; unmatched rows must NEVER be dropped or omitted.
 2. **Auto-Create on Commit**:
-   - Any sale row not mapped to existing inventory must be auto-created as a sold catalog item with an official sequential barcode (`HUCK-`, `PDXGL-`, or `BB-`), landed cost 0, and marked `status: 'sold'`.
-   - 100% of sales must be recorded in the `sales` collection and linked to inventory for IRS Schedule C and co-op compliance.
+   - Any sale row not mapped to existing inventory is auto-created as a sold catalog item (`quantity: 1`, `cost: 0`, `status: 'sold'`) with an official sequential barcode (`HUCK-`, `PDXGL-`, or `BB-`) and linked to the `sales` record.
 
 ---
 
 ## 9. Multi-Quantity Batch Stock Invariant & Appwrite Schema Law
-1. **1 SKU = 1 Unit Terminal Rule (Unless Flagged Multi-Qty)**:
-   - For single-unit vintage goods, an item can sell at most **ONCE**. Once sold, it is terminal and can never sell again.
-   - For batch stock ($10 book packs `0EJ0F9`, felt hats `0EJ0DC`, stickers), items legitimately sell multiple times across tickets.
-2. **Strict Appwrite Schema Compliance (No `isMultiQty` in Database)**:
-   - In Appwrite's `items` collection, the supported integer attribute is **`quantity`**, NOT `isMultiQty`.
-   - **NEVER** send `isMultiQty` in document creation or update payloads to Appwrite; Appwrite will crash with:
-     `Invalid document structure: Attribute "isMultiQty" not found in collection`.
-   - Instead, set `quantity: isMulti ? Math.max(2, repeatCount) : 1` in Appwrite, and hydrate `isMultiQty` in frontend reactive memory whenever `quantity > 1`.
+1. **1 SKU = 1 Unit Terminal Rule (Unless Multi-Qty Booth Bin)**:
+   - Single-unit vintage goods (`quantity === 1`) sell at most **ONCE**.
+   - Multi-qty Booth Bins (`$10` book packs, felt hats, choice bins with `quantity > 1`) legitimately sell across many tickets.
+2. **Strict Appwrite Schema Compliance (No `isMultiQty` or `quantity: 0` in Database)**:
+   - Appwrite's `items` collection uses integer `quantity >= 1`, NOT `isMultiQty`.
+   - **NEVER** send `isMultiQty` or `quantity: 0` in Appwrite payloads; derive `isMultiQty` in memory (`quantity > 1`).
 
 ---
 
-## 10. Reconciliation Workspace Auto-Save & Receipt Archive Law
-1. **Continuous Local Persistence**:
-   - Reconciling multi-month payout files requires matching dozens or hundreds of items.
-   - The importer workspace must continuously auto-save staging state to `localStorage` (`rc_sales_importer_staging_v1`) on every parse, link, unlink, month switch, and commit.
-   - Page reloads, server restarts, and tab switching must **NEVER** wipe in-progress reconciliation matches.
+## 10. Location-Scoped Staging Persistence & Manifest Archive Law
+1. **Location-Scoped Local + Cloud Persistence**:
+   - Always scope client staging storage by canonical location code via `getScopedStagingStorageKey(code)` (NEVER use unscoped legacy keys like `rc_sales_importer_staging_v1`, which cross-contaminate booths).
+   - Cloud staging/commit state lives in Appwrite `manifests` (`staged ➔ committed` with `committed_at` and `committed_count`).
 2. **Historic Settlement Archive**:
-   - Committed settlements must be permanently stored in persistent history (`rc_sales_reconciliation_history_v1`).
-   - Resellers and co-op partners must be able to view historic statement breakdowns and re-download PDF settlement reports at any time.
+   - Committed sales live permanently in `resale_db.sales`, grouped dynamically by calendar `Sold` month for historical inspection and statements.
 
 ---
 
 ## 11. Exact-to-the-Penny Mathematical Payout Ground Truth Law
 1. **Penny-Exact Matching Mandate**:
-   - Payout reconciliations are legal and tax-binding financial accounting documents.
-   - Gross register sales, venue commissions (15%), space rental deductions, and net check payouts MUST match the venue's physical check and payout statement down to the exact penny:
-     $$\text{Net Check Payout} = \text{Gross Register Sales} - \text{Mall Commission (15\%)} - \text{Space Rental}$$
-2. **No Approximation or Rounding Drift**:
-   - Every financial metric must use standard two-decimal cash accounting (`Number(val.toFixed(2))`). Zero mathematical drift is tolerated.
+   - Gross register sales, venue commissions (`warehouses.commissionRate`), space rental deductions, and net check payouts MUST match the venue's physical payout statement to the exact penny (`Number(val.toFixed(2))`).
 
 ---
 
-## 12. Combined Lot Dereferencing & Multi-Quantity Partial Depletion Law
-
+## 12. Combined Lot Dereferencing & Booth Bin Non-Depletion Alignment
 1. **The Lineage Absorption Law (Anti-Child Zombie Attribution)**:
-   - When items are merged into a combined lot, the original component items are set to `status: 'combined'` with their `parentLotId` pointing to the active Parent Lot.
-   - **Title Search Exclusion**: Items with `status === 'combined'` or `'deconstructed'` must NEVER be matched by title, name, or keyword searches in any reconciliation or sales import workflow.
-   - **SKU/UPC Dereferencing**: If an incoming register sale row matches the exact `upc` or `locationSku` of a `status === 'combined'` child item, the system MUST automatically dereference `parentLotId` and bind the sale to the active Parent Lot document. Child items must NEVER be directly marked `sold`.
-
-2. **Stateful Stock Capacity Counter (`remainingStockMap`)**:
-   - Reconcilers and CSV matchers MUST NOT lock or exhaust an item after a single match if `item.quantity > 1` or `item.isMultiQty`.
-   - Maintain a stateful capacity counter initialized to `remainingStock = Math.max(1, Number(item.quantity || 1))`.
-   - When multiple sales rows match the same multi-quantity lot (e.g. 4 copies of "Frank Frazetta Fantasy Art" sold across different tickets), all rows bind to that Parent Lot while decrementing its `remainingStock` counter ($9 \to 8 \to 7 \to 6 \to 5$).
-   - When resolving title matches, active Parent Lots (`quantity > 1`, `status === 'placed'`) take strict precedence over single-unit items.
-
-3. **Partial vs. Full Multi-Quantity Depletion on Commit (Appwrite Schema Safe)**:
-   - When committing $K$ sales against an item with quantity $N$:
-     * **Sales Collection**: Create all $K$ verified sale records in the `sales` collection linked to the Parent Lot's UPC/SKU.
-     * **Partial Depletion ($K < N$)**:
-       - Update the Parent Lot's `quantity` to $N - K$ (e.g. 5 remaining).
-       - Maintain active status (`status: 'placed'` or `'in-stock'`). **NEVER** mark a Parent Lot `'sold'` while units remain in stock!
-       - Adjust remaining inventory cost basis proportionally:
-         $$\text{Unit Cost} = \frac{\text{Total Cost}}{N}, \quad \text{Remaining Cost} = \text{Unit Cost} \times (N - K)$$
-       - Credit $\text{Unit Cost} \times K$ to the current monthly settlement's recouped basis.
-     * **Full Depletion ($K \ge N$)**:
-       - Set `status: 'sold'`.
-       - Set `quantity: 1` (never 0, strictly respecting Appwrite's integer validation constraint `quantity >= 1`).
-
-4. **Booth Price-Point Assortment SKUs & Physical Substrate Grounding**:
-   - **Strictly ONE Document per Multi-Quantity Assortment**: When ingesting or deconstructing a lot into a Multi-Qty SKU (e.g. 9 Frank Frazetta wood plaques @ $95/ea), the system MUST create strictly ONE Appwrite document with `quantity: N` and `resalePrice: unitPrice`. **NEVER** run a loop generating $N$ separate single-unit documents in backstock.
-   - **Concise 30–38 Character Tag Titles**: The primary `title` of a booth Multi-Qty SKU must match the physical thermal barcode price tag (30–38 chars max, e.g. `"Frank Frazetta Fantasy Art"`). This guarantees 1:1 string equality with Ricochet POS register exports.
-   - **Physical Substrate Category Authority**: Items with substrate indicators ("plaque", "laminated", "wood", "wall art", "art print", "framed", "lithograph", "canvas", "poster", or `physical_substrate === "WALL_ART"`) MUST be classified as `art_decor` (Wall Art & Decor) before evaluating genre words like "fantasy" or falling back to "books".
-
-
-
-
-
+   - Items merged into a combined lot carry `status: 'combined'` and `parentLotId` pointing to the active Parent Lot.
+   - **Title Search Exclusion**: Items with `status === 'combined'` or `'deconstructed'` must NEVER match by title or keyword in sales reconciliation.
+   - **SKU/UPC Dereferencing**: If a register sale matches the `upc` or `locationSku` of a `status === 'combined'` child, dereference `parentLotId` to bind the sale to the active Parent Lot.
+2. **Booth Bin Matching & Lock (`buildLockedMultiBinMap`)**:
+   - Reconcilers MUST NOT exhaust a multi-qty Booth Bin (`quantity > 1`, `isMultiQty`, or locked via `buildLockedMultiBinMap` in `src/lib/salesBucketing.ts`) after a single ticket match; all repeat ticket lines bind to that Booth Bin SKU.
+3. **Commit Stock Rule (Aligned with §15 LOCKED DECISION)**:
+   - **Single-Unit Items (`!isBinSale`, `quantity === 1`)**: Mark `status: 'sold'`, `quantity: 1` (never `0`), `saleId`, and `soldPrice`.
+   - **Multi-Qty Booth Bins (`isBinSale`)**: Sales Commit writes **ONLY** the `sales` documents and **NEVER** decrements `items.quantity` or flips a Booth Bin to `status: 'sold'` (see §15 — live Booth Bin stock counts are governed solely by Ricochet `Products-*.csv` catalog sync and `➕ Restock Bin` to prevent double-depletion).
+4. **Booth Assortment SKUs & Physical Substrate Grounding**:
+   - Create strictly **ONE** Appwrite document (`quantity: N`, `resalePrice: unitPrice`) per Multi-Qty Booth Bin — never loop-create `N` separate single-unit rows.
+   - Keep booth tag `title` concise (`30–40` chars) and classify physical plaques/prints/frames (`physical_substrate === "WALL_ART"`) as Wall Art & Decor before genre keywords.
 
 ---
 
 ## Duplicate Sale Cleanup: Re-link `items.saleId` Before Deleting
 
 When removing duplicate sale records, always repair item links first:
-1. Choose the surviving canonical sale record (the one with correct totals / `soNumber`).
-2. Re-link every `items.saleId` that points at a duplicate to the canonical sale's `$id`.
-3. Only then delete the duplicate sales.
-
-Deleting a duplicate first leaves items with a dangling `saleId`, which breaks the item drawer's `Last Sale SO` / `View SO` links and sold-state reconciliation. Never delete a sale that any item still references.
-
-
+1. Choose the surviving canonical `sales` document.
+2. Re-link every `items.saleId` pointing at a duplicate to the canonical sale's `$id`.
+3. Only then delete the duplicate `sales` documents (never leave dangling `saleId` references).
 
 ---
 
 ## 13. The 3 Memory Den (Ricochet) CSV Schemas
 
-Ricochet exports three different files. Classify by headers, never by file name. All three: item titles contain commas inside quotes (use an RFC 4180 parser); SKUs are the booth tag `0EJXXX` = `items.locationSku`.
+Classify strictly by headers (`isProductCatalogHeaders` in `src/lib/salesBucketing.ts`), never by filename. Use an RFC 4180 parser; booth SKUs `0EJXXX` map to `items.locationSku`.
 
 | # | File | Headers | Creates `sales`? |
 |---|------|---------|------------------|
@@ -181,77 +144,53 @@ Ricochet exports three different files. Classify by headers, never by file name.
 | 2 | `Payouts *.csv` — **Interim Sales** (current month) | `Item,Sale#,Agreed,Cost/Split,Aged Price,Discounts,Sold Date,Amount` | Yes |
 | 3 | `Payout History *.csv` — **Settled Monthly Checks** | `Item,Sale,Agreed,Cost/Split,"Aged Price",Discounts,Paid,Sold,Amount,Check#` | Yes |
 
-### 1. `Products-*.csv` (Catalog & Stock-Level Sync) — items only
-- Detected by `Product ID` + `SKU` + `Inventory` with **no** `Sale`/`Sale#` column and **no** `Sold`/`Sold Date` column (`isProductCatalogHeaders` in `src/lib/salesBucketing.ts`).
-- Has NO ticket number and NO sold date. The `In stock` column is the **date the item was added to stock, NOT a sale date and NOT a quantity**; the live count is `Quantity`.
-- `SKU` has a leading apostrophe (`'0EJ001`): always strip it (`cleanCatalogSku`) so `locationSku` is `0EJ001`.
-- `Inventory` is `In Stock`, `Paid` or `Sold`.
-- **NEVER create `sales` documents from this file** (the 2026-10-28 incident created 292 bogus sales dated "today"). It may only update `items`: `locationSku`, `upc`, `resalePrice`, `status`, `quantity`.
-  - `Inventory === 'In Stock'` and `Quantity >= 1` → `status: 'placed'`, `storageLocation: 'MD'`, `quantity: Number(Quantity)`.
-  - `Paid` / `Sold` → only normalise `locationSku`; never change status or create sales.
-- `LocationSyncView.vue` runs it as an items-only sync (green banner); `SalesImporter.vue` rejects it with a banner pointing to `Payouts-*.csv`.
-
-### 2. `Payouts *.csv` (Interim Sales)
-- Ticket column is `Sale#`; `Sold Date` is `YYYY-MM-DD HH:mm:ss` (register time, Pacific). `Amount` is the net payout; `Agreed` is gross.
-- The item title has **no** ` - 0EJXXX` suffix, so match by title / ticket history.
-
-### 3. `Payout History *.csv` (Settled Monthly Checks)
-- Ticket column is `Sale`; `Sold` is `MM-DD-YYYY` (date only → stored as noon Pacific); `Paid` is the check date; `Check#` identifies the settlement.
-- `Item` ends with ` - 0EJXXX` (the booth SKU): extract it, match `items.locationSku` FIRST, then strip it from the display title.
-
-### Rows to skip in the sales files (2 and 3)
-`(Credit) Space Rental …` (booth rent, handled as a monthly deduction), `Total for payout`, `Total Paid:`, and any row with empty `Sale`/`Agreed`/`Amount`.
-
-### Idempotent re-uploads
-Normalise tickets (`T-217301 • Title`, `Ticket #217301`, `217301` → `217301`). Fingerprint = `canonicalTicket|titleOrSku|gross#occurrence`; two identical copies on one ticket are `#1`/`#2`. Already-recorded rows are skipped, so any file can be uploaded again with no duplicates.
+1. **`Products-*.csv` (Catalog & Stock Sync — `items` ONLY)**:
+   - `In stock` is the date added to stock (NOT a sale date or quantity); live count is `Quantity`. Strip leading apostrophe on `'0EJ001` (`cleanCatalogSku`).
+   - **NEVER create `sales` documents from `Products-*.csv`!** Updates `items` only (`Inventory === 'In Stock'` & `Quantity >= 1` ➔ `status: 'placed'`, `quantity: Number(Quantity)`; `Paid`/`Sold` ➔ normalize `locationSku` only).
+2. **`Payouts *.csv` (Interim Sales)**:
+   - `Sale#` + `Sold Date` (`YYYY-MM-DD HH:mm:ss` Pacific); `Amount` = net, `Agreed` = gross; no ` - 0EJXXX` suffix on `Item`.
+3. **`Payout History *.csv` (Settled Monthly Checks)**:
+   - `Sale` + `Sold` (`MM-DD-YYYY` stored as noon UTC of that calendar day); `Paid` = check date; `Item` ends with ` - 0EJXXX` (`splitTrailingBoothSku` matches `items.locationSku` first).
+4. **Rows to Skip in Sales Files**:
+   - `(Credit) Space Rental …`, `Total for payout`, `Total Paid:`, and rows missing `Sale`/`Agreed`/`Amount` (`isPayoutSummaryRow`).
 
 ---
 
 ## 14. Evergreen Live-Fetch Bookmarklet (`⚡ Memory Den Sync`) & 1-to-1 `0EJ...` ↔ `UPC` Bijection Law
 1. **Strict 1-to-1 `0EJ...` SKU ↔ `UPC` Uniqueness**:
-   - Every Ricochet SKU (`0EJ...` stored in `items.locationSku`) MUST map 1-to-1 to a unique barcode (`items.upc`: `HUCK-XXXX`, `PDXGL-XXXX`, or `BB-...`).
-   - Two `0EJ...` SKUs may NEVER share the same `upc` (Ricochet POS returns `HTTP 422 Unprocessable Entity` on duplicate `upc_code`).
-2. **Server & Userscript Collision Self-Healing**:
-   - `GET /api/md-verify-report?mode=payload` enforces `EXPLICIT_COLLISION_PAIRS` (`0EJ0MQ` ➔ `HUCK-0334` / `0EJ09A` ➔ `HUCK-9716`, `0EJ0HE` ➔ `HUCK-1379` / `0EJ0MW` ➔ `HUCK-9724`, `0EJ0JJ` ➔ `HUCK-1461` / `0EJ0MY` ➔ `HUCK-9732`, `0EJ05G` ➔ `HUCK-9543` / `0EJ02D` ➔ `HUCK-9740`) and a global `usedUpcs` Set, auto-allocating and persisting a unique `HUCK-XXXX` in Appwrite if any collision is detected.
-   - `public/ricochet-upc-sync.user.js` applies `CANONICAL_COLLISION_OVERRIDES` in `sanitizeBarcodeMap()` and clears `runtime422Conflicts` whenever `fetchLivePayloadFromCloud()` succeeds.
-
+   - Every Ricochet SKU (`0EJ...` in `items.locationSku`) MUST map 1-to-1 to a unique barcode (`items.upc`: `HUCK-XXXX`, `PDXGL-XXXX`, or `BB-...`). Two `0EJ...` SKUs may NEVER share a `upc` (Ricochet returns `HTTP 422` on duplicate `upc_code`).
+2. **Dynamic Appwrite Bijection & `usedUpcs` Self-Healing (Zero Hardcoded Collision Maps)**:
+   - `GET /api/md-verify-report?mode=payload&location=${code}` builds the `0EJ... ➔ UPC` bijection dynamically from live `resale_db.items` documents using a `usedUpcs` Set, self-healing collisions in Appwrite without hardcoded `0EJ` lookup tables (Law 4).
+   - `public/ricochet-upc-sync.user.js` fetches live cloud mappings on open and enforces the 3 Physical Retail Tag Safety Laws (`MISSING_IN_MD` blank-only writes, `#rc-preflight-details` preview, and 1-click `🏷️ Adopt Booth Tag` for `MISMATCH_UPC`).
 
 ---
 
-## 15. Ticket-Line Ledger Identity & the 2026-11-04 Incident (read before touching Commit / dedupe)
+## 15. Ticket-Line Ledger Identity & the 2026-11-04 / 2026-11-15 Incidents
 
 ### Identity of one sale line
-- **One sale line = POS ticket # + gross + net**, counted as a **multiset** (`ticketLineKey` / `posTicketOfRow` in `src/composables/useRicochetSalesSync.ts`).
-  Each existing `sales` document with that key "uses up" exactly one CSV line; remaining lines are new. A ticket may hold several identical lines (e.g. 4x `0EJ07M` `$15` on #196110) and a Booth Bin SKU appears on many tickets, so **SKU, UPC, title, price-only or date-only is never an identity**.
-- The server's `alreadySynced` / `isAlreadyRecorded` flags (SKU+price shortcuts) are **untrusted**: they hide every repeat sale of a bin after the first.
-- `orderId` = `Ticket #<n>` (`Ticket #<n> #<k>` for the k-th identical line). `soNumber` = UPC, else SKU, else the ticket ref. Never `SO-<timestamp>`.
+- **One sale line = POS ticket # + gross + net**, counted as a **multiset** (`ticketLineKey` / `posTicketOfRow` in `src/composables/useRicochetSalesSync.ts`). Each existing `sales` document with that key consumes one matching CSV line; remaining lines are new. **SKU, UPC, title, price-only, or date-only is NEVER an identity.**
+- Server `alreadySynced` / `isAlreadyRecorded` SKU+price shortcuts are **untrusted** for Commit filtering because they hide repeat Booth Bin sales.
+- `orderId` = `Ticket #<n>` (`Ticket #<n> #<k>` for the k-th identical line). `soNumber` = UPC, else SKU, else ticket ref (never `SO-<timestamp>`).
 
-### Sale creation & date
-- A sale is created ONLY from a real Payouts / Payout History row that has a **ticket # and a Sold date**. Catalog "Sold" items never create sales.
-- `saleDate` = Ricochet Sold date (Pacific wall-clock) stored as noon UTC of that calendar day (`toSaleIso`). Never the Paid/check date. A row without a Sold date is skipped.
-- **Memory Den Check Schedule (15th of the Month):** Memory Den cuts monthly settlement checks on the **15th of the following month** (e.g., October sales remain in `Pending (/payouts)` from Nov 1–14 alongside early November sales, and move to `Paid (/payout_history)` on Nov 15). Because Resale Command buckets strictly by calendar `Sold` date (Law 7) and deduplicates by `ticketLineKey(ticket, gross, net)`, October is already 100% settled on Nov 1 and re-syncing after the 15th never duplicates a single row.
-- If the preflight read of existing sales fails, Commit stops and writes nothing.
+### Sale creation, date & 15th-of-month check schedule
+- Create `sales` ONLY from Payouts / Payout History rows with a **ticket # and Sold date** (`toSaleIso` stores noon UTC of that calendar day; never use `Paid` check date). If preflight `sales` read fails, abort Commit and write nothing.
+- Memory Den cuts monthly checks on the **15th of the following month**; bucketing strictly by calendar `Sold` date (Law 7) + `ticketLineKey` multiset dedupe prevents cross-month drift or post-15th duplicates.
+- Known ground truth: October 2026 = **63 sales / `$2,462.99` gross / `$369.45` fee / `$2,093.54` net**.
 
-### Verification
-- Compare Appwrite `sales` to the two CSVs by ticket+gross+net (scratch script, dry-run first): expect **0 missing, 0 extra**.
-- Known good: October 2026 = **63 sales / $2,462.99 gross / $369.45 fee / $2,093.54 net**.
-- The importer page's "New / Ready to Sync" is an estimate; Commit re-reads Appwrite fresh.
+### LOCKED DECISION (owner: Mike) — Bin stock on Commit
+- A Booth Bin (`quantity > 1`, `isMultiQty`, appearing on `>1` staged ticket line, or in `buildLockedMultiBinMap`) is **NEVER** depleted or flipped to `sold / qty 1` by Sales Commit (`useRicochetSalesSync.ts`). Sales Commit writes ONLY the `sales` ledger document; physical bin `quantity` is governed exclusively by Ricochet `Products-*.csv` catalog sync and `➕ Restock Bin`.
 
-### LOCKED DECISION (owner: Mike) - bin stock on Commit
-- A Booth Bin (`quantity > 1`, `isMultiQty`, on `>1` staged ticket line, or in `PREVERIFIED_MD_MULTI_QTY_BINS` / `buildLockedMultiBinMap`) is **NEVER** depleted or flipped to `sold / qty 1` by the Sales Commit (`useRicochetSalesSync.ts`). Sales Commit writes ONLY the `sales` ledger document for bin sales; physical bin `quantity` is governed exclusively by Ricochet's live `Products-*.csv` / catalog sync and `➕ Restock Bin` so running both `Payouts` and `Products` syncs can never double-deplete a Booth Bin.
-
-### Incident log - never repeat
+### Incident log — never repeat
 | Date | What happened | Root cause |
 |---|---|---|
 | 2026-10-28 | 292 bogus sales | `Products-*.csv` created sales dated "today" |
 | 2026-11-04 | 45 duplicate Oct sales after Commit | SKU/price heuristics + unlinked `SO-xxxxx` placeholders + UTC date roll |
-| 2026-11-04 | A cleanup script deleted real bin sales | Treated "same price within 2 days" as duplicate; ignored Booth Bins |
+| 2026-11-04 | Cleanup script deleted real bin sales | Treated "same price within 2 days" as duplicate; ignored Booth Bins |
 | 2026-11-04 | 20 phantom sales dated 10-07 | Catalog "Sold" fallback + paid date used as sold date |
-| 2026-11-04 | Bookmarklet dropped identical lines | De-duplicated rows by content; a ticket can hold identical lines |
-| 2026-11-04 | Repeat bin sales never committed | Server `alreadySynced` flag (SKU+price) was trusted |
-| 2026-11-04 | ~49 items left with dangling `saleId` | Duplicate sales deleted before re-linking items (violated "Duplicate Sale Cleanup") |
-| 2026-11-15 | 8 Nov sales (incl. `11-14` `PDXGL`/`HUCK`) never reached `sales` | Bookmarklet only staged dry-run (`mode:'stage'`), `/sales` had no visible Commit banner, and persisted `alreadySynced: true` + catalog `Sold` status hid repeat Booth Bin sales (`0EJ0M8`, `0EJ0FQ`) |
+| 2026-11-04 | Bookmarklet dropped identical lines | Content-hash dedupe dropped repeat items on the same ticket |
+| 2026-11-04 | Repeat bin sales never committed | Trusted server `alreadySynced` SKU+price shortcut |
+| 2026-11-04 | ~49 items left with dangling `saleId` | Deleted duplicate sales before re-linking `items.saleId` |
+| 2026-11-15 | 8 Nov sales never reached `sales` | Dry-run staging had no visible `/sales` Commit banner + `alreadySynced` hid repeat bin sales (`0EJ0M8`, `0EJ0FQ`) |
 
 ### Bookmarklet / paste path
-- `🔄 Harvest` then `Stage Sales to Resale Core`. It must not click Ricochet's `[Export]` (browser download dialog).
-- Reliable fallback: `📋 Paste Sync JSON / CSV` with the raw Payouts + Payout History text (`Get-Content <file> -Raw | Set-Clipboard`).
+- `🔄 Harvest` ➔ stage to cloud manifest ➔ review & commit via `SlideOverDrawer` on `/sales` (never trigger Ricochet's native `[Export]` download dialog; `📋 Paste Sync JSON / CSV` remains the manual fallback).
