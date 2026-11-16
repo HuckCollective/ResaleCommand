@@ -622,7 +622,7 @@
           <h3 class="text-xl font-black text-base-content">Co-op Partner, Skill Partner &amp; Voter Roster</h3>
           <p class="text-xs text-base-content/70">Manage eligible Loomio voters, Curator Partners (HUCK-, PDXGL-), Promoters &amp; Surplus Enablers (SWEAT- — $0 inventory required), and Consignors (BB-).</p>
         </div>
-        <div class="flex items-center gap-2 w-full sm:w-auto flex-wrap">
+        <div v-if="canEditGlobalFinancials" class="flex items-center gap-2 w-full sm:w-auto flex-wrap">
           <input v-model="newRosterMember.name" type="text" placeholder="Member Name (e.g. Alex)" class="input input-bordered input-sm rounded-xl text-xs" />
           <select v-model="newRosterMember.partner" class="select select-bordered select-sm rounded-xl font-mono font-bold text-xs">
             <option value="HUCK">HUCK- (Curator)</option>
@@ -634,13 +634,21 @@
         </div>
       </div>
 
+      <!-- In-App Appwrite Team Roles & Account Linking Panel (§8.3 & §8.4) -->
+      <CoopRolesPanel
+        :members="policyConfig.members"
+        :can-manage-roster-links="canEditGlobalFinancials"
+        @update:members="handleRosterMembersUpdated"
+      />
+
       <div class="overflow-x-auto border border-base-200 rounded-2xl">
         <table class="table table-sm">
           <thead>
             <tr class="bg-base-200/60 text-xs font-extrabold uppercase text-base-content/70">
               <th>Member Name</th>
               <th>Partner Prefix</th>
-              <th>Role</th>
+              <th>WSDE Hats (Display)</th>
+              <th>Linked Account</th>
               <th>Voting Rights</th>
               <th class="text-right">Action</th>
             </tr>
@@ -653,14 +661,31 @@
                   {{ member.partner }}-
                 </span>
               </td>
-              <td class="text-xs">{{ member.role }}</td>
+              <td class="text-xs">
+                <div class="flex items-center gap-1 flex-wrap">
+                  <span
+                    v-for="hat in member.hats || []"
+                    :key="hat"
+                    class="badge badge-ghost badge-xs font-semibold"
+                  >
+                    {{ MEMBER_HAT_META[hat]?.icon }} {{ MEMBER_HAT_META[hat]?.label || hat }}
+                  </span>
+                  <span v-if="!member.hats || member.hats.length === 0" class="text-base-content/60">{{ member.role }}</span>
+                </div>
+              </td>
+              <td class="text-xs">
+                <span v-if="member.userId" class="badge badge-success badge-outline badge-xs font-mono font-bold">
+                  🔗 {{ member.email || member.userId.slice(0, 10) }}
+                </span>
+                <span v-else class="text-base-content/45 text-[11px]">Unlinked</span>
+              </td>
               <td>
                 <span class="badge badge-xs font-bold" :class="member.canVote ? 'badge-success' : 'badge-ghost'">
                   {{ member.canVote ? '1 Member = 1 Vote' : 'Observer' }}
                 </span>
               </td>
               <td class="text-right">
-                <button v-if="policyConfig.members.length > 1" type="button" class="btn btn-ghost btn-xs text-error" @click="removeRosterMember(idx)">
+                <button v-if="canEditGlobalFinancials && policyConfig.members.length > 1" type="button" class="btn btn-ghost btn-xs text-error" @click="removeRosterMember(idx)">
                   Remove
                 </button>
               </td>
@@ -915,7 +940,9 @@ import { ref, computed, onMounted, onUnmounted } from 'vue';
 import { Icon } from '@iconify/vue';
 import { addToast } from '../../stores/toast';
 import { useAuth } from '../../composables/useAuth';
+import { useCoopFounderGate, matchRosterMemberStrict } from '../../composables/useCoopFounderGate';
 import JoinRequestsPanel from './JoinRequestsPanel.vue';
+import CoopRolesPanel from './CoopRolesPanel.vue';
 import CoopProposalInspector from './CoopProposalInspector.vue';
 import SlideOverDrawer from '../common/SlideOverDrawer.vue';
 import BottomActionDock from '../common/BottomActionDock.vue';
@@ -930,10 +957,12 @@ import {
   canUserEditProposal,
   DEFAULT_COOP_POLICY_CONFIG,
   CONSIGNOR_DEAL_MODE_LABELS,
+  MEMBER_HAT_META,
   type LoomioSignal,
   type CoopProposal,
   type SurplusPolicyMode,
   type CoopPolicyConfig,
+  type CoopMemberProfile,
 } from '../../lib/coopGovernance';
 
 export interface StrategyDocItem {
@@ -1046,11 +1075,11 @@ const newProposal = ref<{
 const newProposalExistingImages = ref<string[]>([]);
 const newProposalPhotos = ref<any[]>([]);
 
+const rosterRef = computed(() => policyConfig.value.members);
+const { isFounder, canEditGlobalFinancials } = useCoopFounderGate(rosterRef);
+
 const isStewardOrFounder = computed(() => {
-  if (ownedTeam.value) return true;
-  const activeRoster = policyConfig.value.members.find((m) => m.name === activeVotingMember.value);
-  if (activeRoster?.hats?.includes('founder')) return true;
-  return /mike|tyler/i.test(user.value?.name || '');
+  return Boolean(isFounder.value || ownedTeam.value);
 });
 
 function canEditProposalCard(p: CoopProposal): boolean {
@@ -1195,11 +1224,13 @@ onMounted(async () => {
   }
   isCloudSynced.value = syncedFromCloud;
 
-  if (user.value?.name) {
-    const matched = policyConfig.value.members.find((m) =>
-      m.name.toLowerCase().includes(user.value!.name.toLowerCase())
-    );
-    activeVotingMember.value = matched?.name || policyConfig.value.members[0]?.name || user.value.name;
+  if (user.value?.name || user.value?.$id) {
+    const matched = matchRosterMemberStrict(policyConfig.value.members, {
+      userId: user.value?.$id,
+      email: user.value?.email,
+      name: user.value?.name,
+    });
+    activeVotingMember.value = matched?.name || policyConfig.value.members[0]?.name || user.value?.name || 'Member';
     newProposal.value.proposer = activeVotingMember.value;
   } else if (policyConfig.value.members[0]) {
     activeVotingMember.value = policyConfig.value.members[0].name;
@@ -1347,6 +1378,12 @@ const removeRosterMember = async (idx: number) => {
   if (removed[0]) {
     addToast({ type: 'info', message: `Removed ${removed[0].name} from Co-op Roster.` });
   }
+};
+
+const handleRosterMembersUpdated = async (nextMembers: CoopMemberProfile[]) => {
+  policyConfig.value.members = nextMembers;
+  await savePolicyAndManifestState();
+  addToast({ type: 'success', message: 'Saved Co-op Roster account links & hats!' });
 };
 
 const enactConsensusProposal = async (proposal: CoopProposal) => {

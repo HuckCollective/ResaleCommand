@@ -1,0 +1,452 @@
+<template>
+  <div class="rounded-2xl border border-primary/25 bg-base-200/35 p-4 sm:p-5 space-y-4">
+    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+      <div class="space-y-0.5">
+        <div class="flex items-center gap-2 flex-wrap">
+          <span class="badge badge-primary badge-xs font-black">Appwrite Team Roles</span>
+          <span class="badge badge-outline badge-xs font-mono font-bold">Server-Verified JWT Authority</span>
+          <span
+            v-if="isOwner"
+            class="badge badge-success badge-xs font-bold"
+          >
+            👑 Owner Session Active
+          </span>
+          <span
+            v-else
+            class="badge badge-ghost badge-xs font-semibold"
+          >
+            👁️ Read-Only (Team Owner Edits Roles)
+          </span>
+        </div>
+        <h4 class="text-base font-black text-base-content">
+          Co-op Security Roles &amp; Account Linking
+        </h4>
+        <p class="text-xs text-base-content/70">
+          Assign Appwrite Team roles (<code>founder</code>, <code>curator</code>, <code>promoter</code>, <code>enabler</code>, <code>consignor</code>) for real server enforcement on labor approvals &amp; month locks, and link each account to a Roster profile.
+        </p>
+      </div>
+
+      <button
+        type="button"
+        class="btn btn-xs btn-outline rounded-xl font-bold gap-1.5 self-start sm:self-auto"
+        :disabled="loadingMemberships"
+        @click="loadMemberships"
+      >
+        <Icon icon="solar:refresh-bold" class="w-3.5 h-3.5" :class="{ 'animate-spin': loadingMemberships }" />
+        <span>Refresh Roles</span>
+      </button>
+    </div>
+
+    <!-- Invite New Team Member Bar (Owner Only) -->
+    <form
+      v-if="isOwner && resolvedTeamId"
+      class="rounded-xl bg-base-100 border border-base-300 p-3.5 space-y-2.5"
+      @submit.prevent="handleInviteMember"
+    >
+      <div class="text-xs font-black text-base-content flex items-center gap-1.5">
+        <Icon icon="solar:user-plus-bold-duotone" class="w-4 h-4 text-primary" />
+        <span>Invite Co-op Partner or Sweat-Equity Enabler to Appwrite Team</span>
+      </div>
+      <div class="grid grid-cols-1 sm:grid-cols-12 gap-2.5 items-end">
+        <div class="sm:col-span-4 form-control">
+          <label class="label py-0.5"><span class="label-text text-[11px] font-bold">Full Name</span></label>
+          <input
+            v-model="inviteForm.name"
+            type="text"
+            placeholder="e.g. Jesse (Social & Ops)"
+            class="input input-bordered input-xs h-8 rounded-lg text-xs"
+            required
+          />
+        </div>
+        <div class="sm:col-span-4 form-control">
+          <label class="label py-0.5"><span class="label-text text-[11px] font-bold">Email Address</span></label>
+          <input
+            v-model="inviteForm.email"
+            type="email"
+            placeholder="partner@example.com"
+            class="input input-bordered input-xs h-8 rounded-lg text-xs font-mono"
+            required
+          />
+        </div>
+        <div class="sm:col-span-4 flex items-center justify-between sm:justify-end gap-2 flex-wrap">
+          <select
+            v-model="inviteForm.initialRole"
+            class="select select-bordered select-xs h-8 rounded-lg font-bold text-xs"
+          >
+            <option value="enabler">🔥 Enabler ($0 Inv)</option>
+            <option value="promoter">📣 Promoter ($0 Inv)</option>
+            <option value="curator">💎 Curator Partner</option>
+            <option value="founder">👑 Co-Founder</option>
+            <option value="consignor">🏷️ Consignor</option>
+          </select>
+          <button
+            type="submit"
+            class="btn btn-xs btn-primary h-8 rounded-lg font-black px-3"
+            :disabled="inviting"
+          >
+            {{ inviting ? 'Sending…' : '+ Send Invite' }}
+          </button>
+        </div>
+      </div>
+    </form>
+
+    <!-- Error / Empty Notice -->
+    <div v-if="errorMessage" class="alert alert-warning text-xs py-2.5 rounded-xl">
+      <Icon icon="solar:shield-warning-bold" class="w-4 h-4 shrink-0" />
+      <span>{{ errorMessage }}</span>
+    </div>
+
+    <!-- Live Appwrite Team Memberships Table -->
+    <div v-if="memberships.length > 0" class="overflow-x-auto bg-base-100 border border-base-200 rounded-2xl">
+      <table class="table table-sm">
+        <thead>
+          <tr class="bg-base-200/60 text-[11px] font-extrabold uppercase text-base-content/70">
+            <th>Account</th>
+            <th>Status</th>
+            <th>Work &amp; Security Roles</th>
+            <th>🔗 Linked Roster Profile</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr
+            v-for="m in memberships"
+            :key="m.$id"
+            class="hover:bg-base-200/35 align-middle"
+          >
+            <td class="text-xs">
+              <div class="font-bold text-base-content flex items-center gap-1.5 flex-wrap">
+                <span>{{ m.userName || 'Invited Member' }}</span>
+                <span
+                  v-if="hasBuiltInOwner(m)"
+                  class="badge badge-warning badge-xs font-black"
+                  title="Built-in Appwrite Team Owner — protected against lockout"
+                >
+                  👑 Owner ({{ ownerCount === 1 ? 'Sole Owner' : 'Protected' }})
+                </span>
+              </div>
+              <div class="text-[11px] font-mono text-base-content/60">{{ m.userEmail || m.userId }}</div>
+            </td>
+
+            <td>
+              <span
+                class="badge badge-xs font-bold"
+                :class="m.confirm ? 'badge-success' : 'badge-warning badge-outline'"
+              >
+                {{ m.confirm ? '✅ Active' : '⏳ Pending Invite' }}
+              </span>
+            </td>
+
+            <td>
+              <div class="flex items-center gap-1.5 flex-wrap">
+                <label
+                  v-for="roleOpt in customRoleOptions"
+                  :key="roleOpt.id"
+                  class="inline-flex items-center gap-1 px-2 py-1 rounded-lg border text-[11px] font-bold transition-colors"
+                  :class="[
+                    hasCustomRole(m, roleOpt.id)
+                      ? 'bg-primary/12 border-primary/40 text-primary'
+                      : 'bg-base-200/40 border-base-300 text-base-content/65',
+                    isOwner && savingMembershipId !== m.$id
+                      ? 'cursor-pointer hover:border-primary/60'
+                      : 'opacity-75 cursor-not-allowed',
+                  ]"
+                >
+                  <input
+                    type="checkbox"
+                    class="checkbox checkbox-xs checkbox-primary"
+                    :checked="hasCustomRole(m, roleOpt.id)"
+                    :disabled="!isOwner || savingMembershipId === m.$id"
+                    @change="toggleCustomRole(m, roleOpt.id)"
+                  />
+                  <span>{{ roleOpt.icon }} {{ roleOpt.label }}</span>
+                </label>
+              </div>
+            </td>
+
+            <td class="min-w-48">
+              <select
+                class="select select-bordered select-xs rounded-lg font-bold text-xs w-full max-w-56"
+                :value="linkedRosterNameForUser(m.userId)"
+                :disabled="!canManageLinks"
+                @change="handleLinkSelect(m, ($event.target as HTMLSelectElement).value)"
+              >
+                <option value="">— Unlinked —</option>
+                <option
+                  v-for="rm in members"
+                  :key="rm.name"
+                  :value="rm.name"
+                >
+                  {{ rm.name }} [{{ rm.partner }}-]
+                </option>
+              </select>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="text-[11px] text-base-content/65 flex items-center justify-between gap-2 flex-wrap">
+      <span>
+        <strong>Founder power:</strong> <code>owner</code> or <code>founder</code> (approves labor, locks/unlocks months).
+        <strong>Voting/Labor roles:</strong> <code>curator</code>, <code>promoter</code>, <code>enabler</code>.
+        <strong>Consignor:</strong> own statement only (no labor access).
+      </span>
+      <span v-if="soleFounder" class="badge badge-info badge-outline badge-xs font-mono">
+        Sole Founder Active (self-approval audited)
+      </span>
+    </div>
+  </div>
+</template>
+
+<script setup lang="ts">
+import { ref, computed, onMounted, watch } from 'vue';
+import { Icon } from '@iconify/vue';
+import { teams } from '../../lib/appwrite';
+import { addToast } from '../../stores/toast';
+import { useAuth } from '../../composables/useAuth';
+import { useCoopFounderGate } from '../../composables/useCoopFounderGate';
+import {
+  deriveMemberHatsFromRoles,
+  MEMBER_HAT_META,
+  type CoopMemberProfile,
+} from '../../lib/coopGovernance';
+
+const props = defineProps<{
+  members: CoopMemberProfile[];
+  canManageRosterLinks?: boolean;
+}>();
+
+const emit = defineEmits<{
+  (e: 'update:members', next: CoopMemberProfile[]): void;
+}>();
+
+const customRoleOptions = [
+  { id: 'founder', icon: '👑', label: 'Founder' },
+  { id: 'curator', icon: '💎', label: 'Curator' },
+  { id: 'promoter', icon: '📣', label: 'Promoter' },
+  { id: 'enabler', icon: '🔥', label: 'Enabler' },
+  { id: 'consignor', icon: '🏷️', label: 'Consignor' },
+] as const;
+
+type CustomRoleId = (typeof customRoleOptions)[number]['id'];
+const CUSTOM_ROLE_IDS = new Set<string>(customRoleOptions.map((r) => r.id));
+
+const { currentTeam } = useAuth();
+const { coopIdentity, isOwner, isFounder, soleFounder, refreshCoopIdentity } =
+  useCoopFounderGate();
+
+const memberships = ref<any[]>([]);
+const loadingMemberships = ref(false);
+const savingMembershipId = ref('');
+const inviting = ref(false);
+const errorMessage = ref('');
+
+const inviteForm = ref<{
+  name: string;
+  email: string;
+  initialRole: CustomRoleId;
+}>({
+  name: '',
+  email: '',
+  initialRole: 'enabler',
+});
+
+const resolvedTeamId = computed(
+  () => coopIdentity.value?.teamId || currentTeam.value?.$id || ''
+);
+
+const canManageLinks = computed(
+  () => Boolean(props.canManageRosterLinks) || isFounder.value || isOwner.value
+);
+
+const ownerCount = computed(
+  () =>
+    memberships.value.filter(
+      (m) => m.confirm && Array.isArray(m.roles) && m.roles.includes('owner')
+    ).length
+);
+
+function hasBuiltInOwner(m: any): boolean {
+  return Array.isArray(m?.roles) && m.roles.includes('owner');
+}
+
+function hasCustomRole(m: any, roleId: CustomRoleId): boolean {
+  return Array.isArray(m?.roles) && m.roles.includes(roleId);
+}
+
+function linkedRosterNameForUser(userId?: string): string {
+  if (!userId) return '';
+  const found = props.members.find((rm) => rm.userId === userId);
+  return found ? found.name : '';
+}
+
+async function loadMemberships() {
+  if (!resolvedTeamId.value) return;
+  loadingMemberships.value = true;
+  errorMessage.value = '';
+  try {
+    const res = await teams.listMemberships(resolvedTeamId.value);
+    memberships.value = res.memberships || [];
+  } catch (err: any) {
+    errorMessage.value =
+      err?.message || 'Sign in as a confirmed team member to inspect Appwrite Team roles.';
+  } finally {
+    loadingMemberships.value = false;
+  }
+}
+
+async function toggleCustomRole(membership: any, roleId: CustomRoleId) {
+  if (!isOwner.value || !resolvedTeamId.value) {
+    addToast({
+      type: 'warning',
+      message: 'Only an Appwrite Team Owner can modify membership roles.',
+    });
+    return;
+  }
+
+  const existingRoles: string[] = Array.isArray(membership.roles)
+    ? membership.roles.map((r: any) => String(r))
+    : [];
+
+  // Preserve built-in roles ('owner', 'member') untouched (§8.3)
+  const builtIns = existingRoles.filter((r) => !CUSTOM_ROLE_IDS.has(r));
+  const currentCustom = new Set(existingRoles.filter((r) => CUSTOM_ROLE_IDS.has(r)));
+
+  if (currentCustom.has(roleId)) {
+    currentCustom.delete(roleId);
+  } else {
+    currentCustom.add(roleId);
+  }
+
+  // Never strip built-in 'owner', and ensure non-empty roles array for Appwrite
+  const merged = Array.from(new Set([...builtIns, ...currentCustom]));
+  if (hasBuiltInOwner(membership) && !merged.includes('owner')) {
+    merged.unshift('owner');
+  }
+  if (merged.length === 0) {
+    merged.push('member');
+  }
+
+  savingMembershipId.value = membership.$id;
+  try {
+    const updated = await teams.updateMembership(
+      resolvedTeamId.value,
+      membership.$id,
+      merged
+    );
+    memberships.value = memberships.value.map((m) =>
+      m.$id === membership.$id ? updated : m
+    );
+
+    // Sync derived display hats onto any linked roster entry (§8.4)
+    if (membership.userId) {
+      const linkedIdx = props.members.findIndex(
+        (rm) => rm.userId === membership.userId
+      );
+      if (linkedIdx >= 0) {
+        const target = props.members[linkedIdx];
+        const nextHats = deriveMemberHatsFromRoles(merged, target);
+        const nextMembers = props.members.map((rm, idx) =>
+          idx === linkedIdx
+            ? {
+                ...rm,
+                hats: nextHats,
+                canVote: nextHats.some((h) => MEMBER_HAT_META[h]?.canVote),
+              }
+            : rm
+        );
+        emit('update:members', nextMembers);
+      }
+    }
+
+    await refreshCoopIdentity(true);
+    addToast({
+      type: 'success',
+      message: `Updated roles for ${membership.userName || membership.userEmail}.`,
+    });
+  } catch (err: any) {
+    addToast({
+      type: 'error',
+      message: err?.message || 'Appwrite rejected membership role update.',
+    });
+  } finally {
+    savingMembershipId.value = '';
+  }
+}
+
+function handleLinkSelect(membership: any, selectedRosterName: string) {
+  if (!canManageLinks.value) return;
+  const uid = String(membership.userId || '').trim();
+  if (!uid) return;
+
+  const nextMembers = props.members.map((rm) => {
+    // Clear any previous roster row linked to this userId first (1-to-1 link)
+    if (rm.userId === uid && rm.name !== selectedRosterName) {
+      return { ...rm, userId: undefined, email: undefined };
+    }
+    if (rm.name === selectedRosterName) {
+      const derivedHats = deriveMemberHatsFromRoles(membership.roles || [], rm);
+      return {
+        ...rm,
+        userId: uid,
+        email: membership.userEmail
+          ? String(membership.userEmail).toLowerCase()
+          : rm.email,
+        hats: derivedHats,
+        canVote: derivedHats.some((h) => MEMBER_HAT_META[h]?.canVote),
+      };
+    }
+    return rm;
+  });
+
+  emit('update:members', nextMembers);
+}
+
+async function handleInviteMember() {
+  if (!isOwner.value || !resolvedTeamId.value) return;
+  const email = inviteForm.value.email.trim().toLowerCase();
+  const name = inviteForm.value.name.trim();
+  if (!email || !name) return;
+
+  inviting.value = true;
+  try {
+    const redirectUrl =
+      typeof window !== 'undefined'
+        ? `${window.location.origin}/coop/governance`
+        : 'https://works.thehc.llc/coop/governance';
+    const created = await teams.createMembership(
+      resolvedTeamId.value,
+      ['member', inviteForm.value.initialRole],
+      email,
+      undefined,
+      undefined,
+      redirectUrl,
+      name
+    );
+    memberships.value = [created, ...memberships.value];
+    inviteForm.value = { name: '', email: '', initialRole: 'enabler' };
+    addToast({
+      type: 'success',
+      message: `Sent Appwrite team invite to ${email} (${inviteForm.value.initialRole}).`,
+    });
+  } catch (err: any) {
+    addToast({
+      type: 'error',
+      message: err?.message || 'Failed to send team invitation.',
+    });
+  } finally {
+    inviting.value = false;
+  }
+}
+
+watch(resolvedTeamId, (id) => {
+  if (id) loadMemberships();
+});
+
+onMounted(async () => {
+  await refreshCoopIdentity();
+  if (resolvedTeamId.value) {
+    await loadMemberships();
+  }
+});
+</script>
