@@ -38,109 +38,105 @@
         </div>
         <!-- MAIN INVENTORY SECTION -->
         <div class="flex flex-col pt-0 min-w-0 w-full">
-                <!-- RESPONSIVE STICKY HEADER (Row 1: Title & Controls, Row 2: Full-width Search, Row 3: Quick Filter Pills) -->
-                <!-- STREAMLINED COMPACT HEADER -->
+                <!-- CALM 2-ROW STICKY HEADER (Row 1: Title, Omnibox, ⚡ Queues & Lists, ⚙ Filters, View Switcher, + Add | Row 2: Storage vs Booths Bar) -->
                 <div class="sticky top-0 z-30 bg-base-100/95 backdrop-blur-md border-b border-base-200 py-2 mb-2 -mx-4 px-4 sm:mx-0 sm:px-0 shadow-2xs">
-                    <div class="flex flex-col gap-1.5">
-                        <!-- Row 1: Title & Counts on Left | View Toggle & Add on Right -->
-                        <div class="flex items-center justify-between gap-2">
+                    <div class="flex flex-col gap-2">
+                        <!-- Row 1: Unified Reseller Toolbar -->
+                        <div class="flex flex-wrap lg:flex-nowrap items-center justify-between gap-2">
                             <!-- Left: Clean Title & Live Item Count -->
-                            <div class="flex items-center gap-2 min-w-0">
+                            <div class="flex items-center gap-2 shrink-0">
                                 <h1 class="text-lg sm:text-xl font-black tracking-tight text-base-content leading-none">Inventory</h1>
-                                <span class="badge badge-sm badge-neutral font-mono font-bold">{{ filteredInventory.length }}</span>
+                                <span class="badge badge-sm badge-neutral text-neutral-content font-mono font-bold whitespace-nowrap shrink-0">{{ filteredInventory.length }}</span>
                                 <span v-if="loading" class="loading loading-spinner loading-xs text-primary"></span>
                             </div>
 
-                            <!-- Right: Compact Controls (Zero Collisions!) -->
-                            <div class="flex items-center gap-1.5 shrink-0">
-                                <!-- Mobile: Single compact "Table" toggle button -->
-                                <button 
-                                    type="button"
-                                    class="sm:hidden btn btn-xs btn-ghost border border-base-300 gap-1 font-bold shadow-2xs"
-                                    @click="$emit('update:viewMode', 'table')"
-                                    title="Switch to Spreadsheet Table View"
-                                >
-                                    <Icon icon="solar:list-bold" class="w-3.5 h-3.5 text-primary" />
-                                    <span class="text-xs">Table</span>
-                                </button>
-
-                                <!-- Desktop: Full Segmented Control -->
-                                <div class="hidden sm:inline-flex join bg-base-200/80 p-0.5 rounded-lg border border-base-300 shrink-0">
-                                    <button 
-                                        type="button"
-                                        class="join-item btn btn-xs gap-1 font-bold transition-all px-2.5"
-                                        :class="viewMode === 'table' ? 'btn-primary text-primary-content shadow-xs' : 'btn-ghost opacity-70 hover:opacity-100'"
-                                        @click="$emit('update:viewMode', 'table')"
-                                        title="Spreadsheet Table View"
-                                    >
-                                        <Icon icon="solar:list-bold" class="w-3.5 h-3.5" />
-                                        <span class="text-[11px]">Table</span>
-                                    </button>
-                                    <button 
-                                        type="button"
-                                        class="join-item btn btn-xs gap-1 font-bold transition-all px-2.5"
-                                        :class="viewMode === 'grid' ? 'btn-primary text-primary-content shadow-xs' : 'btn-ghost opacity-70 hover:opacity-100'"
-                                        @click="$emit('update:viewMode', 'grid')"
-                                        title="Visual Card Grid View"
-                                    >
-                                        <Icon icon="solar:gallery-wide-bold" class="w-3.5 h-3.5" />
-                                        <span class="text-[11px]">Cards</span>
-                                    </button>
-                                </div>
-
-                                <!-- Desktop Only: Add Item Trigger (Mobile Add is thumb-docked in bottom tray!) -->
-                                <button class="hidden sm:inline-flex btn btn-xs sm:btn-sm btn-primary gap-1 font-bold shadow-xs shrink-0" @click="openAdd">
-                                    <Icon icon="solar:add-circle-linear" class="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-                                    <span class="text-xs">Add</span>
-                                </button>
-                            </div>
-                        </div>
-
-                        <!-- Row 2: Omnibox Search + Filters Pill Button -->
-                        <div class="flex items-center gap-2 w-full">
-                            <div class="relative flex-1">
-                                <Icon icon="solar:magnifer-linear" class="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 opacity-40 pointer-events-none" />
+                            <!-- Center: Prominent Omnibox Search + Camera Scan -->
+                            <div class="relative order-3 lg:order-2 w-full lg:flex-1 lg:max-w-xl min-w-0">
+                                <Icon icon="solar:magnifer-linear" class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 opacity-45 pointer-events-none" />
                                 <input 
                                     type="text" 
                                     v-model="searchQuery" 
-                                    placeholder="Search title, UPC, 0EJ, keywords, PO, location..." 
-                                    class="input input-bordered input-xs sm:input-sm h-8 min-h-8 w-full pl-8.5 pr-14 bg-base-200/60 focus:bg-base-100 font-mono text-xs shadow-inner rounded-lg" 
+                                    placeholder="Search title, barcode, booth SKU, PO, location…" 
+                                    aria-label="Search inventory"
+                                    class="input input-bordered input-sm h-11 md:h-8 w-full pl-9 pr-20 md:pr-16 bg-base-200/60 focus:bg-base-100 font-mono text-xs rounded-xl" 
                                 />
                                 <div class="absolute right-1 top-1/2 -translate-y-1/2 flex items-center gap-0.5">
                                     <button 
                                         v-if="searchQuery" 
                                         type="button"
                                         @click="searchQuery = ''" 
-                                        class="btn btn-ghost btn-circle btn-xs w-6 h-6 min-h-6 opacity-60 hover:opacity-100 touch-manipulation active:scale-90 flex items-center justify-center font-bold text-xs" 
+                                        class="btn btn-ghost btn-circle btn-xs w-9 h-9 md:w-6 md:h-6 opacity-65 hover:opacity-100 font-bold text-xs" 
                                         title="Clear search"
+                                        aria-label="Clear search"
                                     >✕</button>
                                     <button 
                                         type="button"
                                         @click="isScannerOpen = true" 
-                                        class="btn btn-ghost btn-circle btn-xs w-6 h-6 min-h-6 text-primary hover:bg-primary/10 transition-colors flex items-center justify-center" 
+                                        class="btn btn-ghost btn-circle btn-xs w-9 h-9 md:w-6 md:h-6 text-primary hover:bg-primary/10 transition-colors" 
                                         title="Scan Barcode or Mini QR with Camera"
                                         aria-label="Scan Barcode or Mini QR with Camera"
                                     >
-                                        <Icon icon="solar:camera-linear" class="w-3.5 h-3.5" />
+                                        <Icon icon="solar:camera-linear" class="w-4 h-4 md:w-3.5 md:h-3.5" />
                                     </button>
                                 </div>
                             </div>
 
-                            <!-- Mobile & Desktop Filter Button (zero side-scroll!) -->
-                            <button 
-                                type="button" 
-                                @click="openFilterTray" 
-                                class="hidden sm:inline-flex btn btn-xs sm:btn-sm rounded-lg gap-1 font-bold shrink-0 h-8 min-h-8 px-2.5 transition-all"
-                                :class="activeFilterCount > 0 ? 'btn-primary text-primary-content shadow-xs' : 'btn-outline border-base-300 bg-base-200/60 text-base-content hover:bg-base-200'"
-                                title="Open Filter Options"
-                            >
-                                <Icon icon="solar:tuning-square-2-bold-duotone" class="w-3.5 h-3.5" />
-                                <span>Filters</span>
-                                <span v-if="activeFilterCount > 0" class="badge badge-xs badge-neutral font-mono font-bold">{{ activeFilterCount }}</span>
-                            </button>
+                            <!-- Right: ⚡ Queues & Lists + ⚙ Filters + Table|Cards + Add -->
+                            <div class="flex items-center gap-1.5 order-2 lg:order-3 shrink-0 ml-auto lg:ml-0">
+                                <button
+                                    type="button"
+                                    @click="openQueuesTray"
+                                    class="btn btn-xs sm:btn-sm h-11 md:h-8 px-2.5 rounded-xl font-bold gap-1 shrink-0 transition-all"
+                                    :class="activeSmartQueueLabel ? 'btn-secondary text-secondary-content shadow-xs' : 'btn-outline border-base-300 bg-base-200/60 text-base-content hover:bg-base-200'"
+                                    title="Open Booth Restock Lists, Shared Online Ready Bin & Tag Health Queues"
+                                >
+                                    <span>⚡</span>
+                                    <span class="text-xs whitespace-nowrap">{{ activeSmartQueueLabel || 'Queues & Lists' }}</span>
+                                </button>
+
+                                <button 
+                                    type="button" 
+                                    @click="openFilterTray" 
+                                    class="inline-flex btn btn-xs sm:btn-sm rounded-xl gap-1 font-bold shrink-0 h-11 md:h-8 px-2.5 transition-all"
+                                    :class="activeFilterCount > 0 ? 'btn-outline btn-primary shadow-2xs' : 'btn-outline border-base-300 bg-base-200/60 text-base-content hover:bg-base-200'"
+                                    title="Open Filter Options"
+                                >
+                                    <Icon icon="solar:tuning-square-2-bold-duotone" class="w-3.5 h-3.5" />
+                                    <span class="hidden sm:inline text-xs">Filters</span>
+                                    <span v-if="activeFilterCount > 0" class="badge badge-2xs badge-primary text-primary-content font-mono font-bold whitespace-nowrap shrink-0">{{ activeFilterCount }}</span>
+                                </button>
+
+                                <div class="join bg-base-200/80 p-0.5 rounded-xl border border-base-300 shrink-0">
+                                    <button 
+                                        type="button"
+                                        class="join-item btn btn-xs h-11 md:h-7 gap-1 font-bold transition-all px-2.5 rounded-lg"
+                                        :class="viewMode === 'table' ? 'btn-neutral text-neutral-content shadow-xs' : 'btn-ghost opacity-70 hover:opacity-100'"
+                                        @click="$emit('update:viewMode', 'table')"
+                                        title="Spreadsheet Table View"
+                                    >
+                                        <Icon icon="solar:list-bold" class="w-3.5 h-3.5" />
+                                        <span class="hidden sm:inline text-[11px]">Table</span>
+                                    </button>
+                                    <button 
+                                        type="button"
+                                        class="join-item btn btn-xs h-11 md:h-7 gap-1 font-bold transition-all px-2.5 rounded-lg"
+                                        :class="viewMode === 'grid' ? 'btn-neutral text-neutral-content shadow-xs' : 'btn-ghost opacity-70 hover:opacity-100'"
+                                        @click="$emit('update:viewMode', 'grid')"
+                                        title="Visual Card Grid View"
+                                    >
+                                        <Icon icon="solar:gallery-wide-bold" class="w-3.5 h-3.5" />
+                                        <span class="hidden sm:inline text-[11px]">Cards</span>
+                                    </button>
+                                </div>
+
+                                <button class="hidden sm:inline-flex btn btn-xs sm:btn-sm h-11 md:h-8 px-3 btn-primary text-primary-content gap-1 font-black rounded-xl shadow-xs shrink-0" @click="openAdd">
+                                    <Icon icon="solar:add-circle-bold" class="w-4 h-4" />
+                                    <span class="text-xs">Add</span>
+                                </button>
+                            </div>
                         </div>
 
-                        <!-- Row 2.5: Spatial Location Tabs, Smart Queues & Partner Switcher -->
+                        <!-- Row 2: Reseller Storage vs Selling Booths Bar -->
                         <InventorySpatialBar
                             :inventoryItems="inventoryItems"
                             v-model:filterLocation="filterBinLocation"
@@ -154,6 +150,7 @@
                             @select-all="toggleAll"
                             @clear-selection="handleClearSelection"
                             @quick-assign-location="handleQuickAssignLocation"
+                            @open-queues="openQueuesTray"
                         />
 
                         <!-- Row 3: Wrapping Active Filter Chips Bar (Conditional - takes ZERO space when no filters active) -->
@@ -221,9 +218,9 @@
                         </div>
                     </div>
 
-                    <!-- 4-STAT FILTERED CATALOG VALUATION & SPREAD STRIP -->
+                    <!-- COLLAPSIBLE 1-LINE VALUATION & MARGIN SUMMARY STRIP -->
                     <div class="mb-3">
-                        <KpiStatGrid :items="gridKpiStats" />
+                        <InventoryValuationStrip :stats="gridKpiStats" />
                     </div>
 
                     <!-- 🔗 ACTIVE LINEAGE & PO FILTER BANNER -->
@@ -461,6 +458,7 @@
             :inventoryItems="inventoryItems" 
             @close="closeEditDrawer" 
             @save="saveEdit" 
+            @refresh="fetchInventory"
             @uncombined="fetchInventory" 
             @deconstruct="openDeconstructModal" 
             @selectItem="openEdit"
@@ -585,6 +583,15 @@
             @open-actions="openActionTray"
         />
 
+        <!-- INTERACTIVE BOTTOM-SHEET QUEUES & LISTS TRAY -->
+        <InventoryQueuesTray
+            v-model="isQueuesTrayOpen"
+            :inventory-items="inventoryItems"
+            :active-queue-filter="filterSmartQueue"
+            @apply-queue="val => (filterSmartQueue = val)"
+            @inspect-item="openEdit"
+        />
+
         <!-- DROPCAST STAGING TRAY -->
         <DropcastStagingTray v-if="isLegacyDropcastStudio" />
 
@@ -603,7 +610,9 @@
 import { ref, computed, defineAsyncComponent, onMounted, onUnmounted, watch, nextTick } from 'vue';
 import { marked } from 'marked';
 import BarcodeScannerModal from '../common/BarcodeScannerModal.vue';
-import KpiStatGrid from '../common/KpiStatGrid.vue';
+import InventoryValuationStrip from './InventoryValuationStrip.vue';
+import InventoryQueuesTray from './InventoryQueuesTray.vue';
+import { SMART_QUEUES } from '../../lib/inventoryVibes';
 import { computeInventoryKpiStats } from '../../lib/inventoryKpiStats';
 import { useInventory } from '../../composables/useInventory';
 import { updateInventoryItem, deleteInventoryItem, saveItemToInventory, BUCKET_ID, getCollectionId, DB_ID, getAssetUrl, cloneItemMediaPayload, duplicateItemMediaInStorage } from '../../lib/inventory';
@@ -1318,6 +1327,7 @@ onMounted(() => {
     }
     fetchPurchases();
     initFromUrl();
+    closeAllTrays();
     if (insightFilter.value) {
         bulkOpen.value = true;
     }
@@ -1354,18 +1364,26 @@ const selectedItemsObjects = computed(() => {
     return inventoryItems.value.filter(i => selectedItems.value.includes(i.$id));
 });
 
-// Outbound Location Manifest State
+// Outbound Location Manifest & Unified Bottom Surface State
 const {
     activeManifest,
     stagedCount: manifestItemCount,
     isTrayOpen: isManifestTrayOpen,
+    isQueuesTrayOpen,
     openManifestTray,
     openActionTray,
+    openQueuesTray,
+    closeAllTrays,
     addToActiveManifest,
     removeFromManifest,
     clearStagedItems,
     initActiveDraft
 } = useManifest();
+
+const activeSmartQueueLabel = computed(() => {
+    if (!filterSmartQueue.value) return '';
+    return SMART_QUEUES.find(q => q.id === filterSmartQueue.value)?.shortLabel || '';
+});
 
 const { activeCast, stageItemsForCast } = useDropcasts();
 const isLegacyDropcastStudio = ref(

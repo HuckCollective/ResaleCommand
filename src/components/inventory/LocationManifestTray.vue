@@ -813,6 +813,7 @@ import { useManifest } from '../../composables/useManifest';
 import { manifestsApi } from '../../lib/manifests';
 import { BUCKET_ID, getAssetUrl, updateInventoryItem } from '../../lib/inventory';
 import { hasOnlineReadyTag } from '../../lib/onlineCoCuration';
+import { useBodyScrollLock } from '../../composables/useBodyScrollLock';
 import { addToast } from '../../stores/toast';
 
 const ItemDrawer = defineAsyncComponent(() => import('../common/ItemDrawer.vue'));
@@ -869,6 +870,7 @@ const emit = defineEmits<{
   (e: 'close'): void;
   (e: 'update:isOpen', val: boolean): void;
   (e: 'drop-changed'): void;
+  (e: 'open-actions'): void;
 }>();
 
 const {
@@ -932,6 +934,8 @@ const allAvailableDrops = computed(() => {
 const showTray = computed(() => {
   return props.isOpen !== undefined ? props.isOpen : composableTrayOpen.value;
 });
+
+useBodyScrollLock(showTray);
 
 // Auto-refresh all drafts and enforce location scoping whenever tray opens
 watch(showTray, async (isOpen) => {

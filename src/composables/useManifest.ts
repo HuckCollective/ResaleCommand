@@ -10,17 +10,34 @@ import { ensureItemUpc, isValidOrgUpc } from '../lib/upcAuthority';
 import { reconcileManifestWithRicochetCsv, type ReconcileResult } from '../lib/manifestReconciliation';
 import { hasOnlineReadyTag } from '../lib/onlineCoCuration';
 
-// Shared singleton state across all views
+// Shared singleton state across all views — single active bottom surface ('none' | 'queues' | 'filters' | 'manifest')
+export type ActiveInventorySurface = 'none' | 'queues' | 'filters' | 'manifest';
+
 const activeManifest = ref<ManifestDocument | null>(null);
 const stagedItems = ref<any[]>([]);
 const isManifestTrayOpen = ref(false);
 const isActionTrayOpen = ref(false);
+const isQueuesTrayOpen = ref(false);
 const isTrayOpen = isManifestTrayOpen;
 const isSyncing = ref(false);
 const allDrafts = ref<ManifestDocument[]>([]);
 const manifestsList = ref<ManifestDocument[]>([]);
 const recentManifests = ref<ManifestDocument[]>([]);
 const isInitialized = ref(false);
+
+const activeInventorySurface = computed<ActiveInventorySurface>({
+    get() {
+        if (isQueuesTrayOpen.value) return 'queues';
+        if (isManifestTrayOpen.value) return 'manifest';
+        if (isActionTrayOpen.value) return 'filters';
+        return 'none';
+    },
+    set(next) {
+        isQueuesTrayOpen.value = next === 'queues';
+        isManifestTrayOpen.value = next === 'manifest';
+        isActionTrayOpen.value = next === 'filters';
+    },
+});
 
 let manifestUpdateQueue = Promise.resolve();
 
@@ -31,34 +48,31 @@ function enqueueManifestUpdate<T>(task: () => Promise<T>): Promise<T> {
 }
 
 function openManifestTray() {
-    isActionTrayOpen.value = false;
-    isManifestTrayOpen.value = true;
+    activeInventorySurface.value = 'manifest';
 }
 
 function openActionTray() {
-    isManifestTrayOpen.value = false;
-    isActionTrayOpen.value = true;
+    activeInventorySurface.value = 'filters';
+}
+
+function openQueuesTray() {
+    activeInventorySurface.value = 'queues';
 }
 
 function toggleManifestTray() {
-    if (isManifestTrayOpen.value) {
-        isManifestTrayOpen.value = false;
-    } else {
-        openManifestTray();
-    }
+    activeInventorySurface.value = isManifestTrayOpen.value ? 'none' : 'manifest';
 }
 
 function toggleActionTray() {
-    if (isActionTrayOpen.value) {
-        isActionTrayOpen.value = false;
-    } else {
-        openActionTray();
-    }
+    activeInventorySurface.value = isActionTrayOpen.value ? 'none' : 'filters';
+}
+
+function toggleQueuesTray() {
+    activeInventorySurface.value = isQueuesTrayOpen.value ? 'none' : 'queues';
 }
 
 function closeAllTrays() {
-    isManifestTrayOpen.value = false;
-    isActionTrayOpen.value = false;
+    activeInventorySurface.value = 'none';
 }
 
 export function useManifest() {
@@ -887,10 +901,14 @@ export function useManifest() {
         isTrayOpen: isManifestTrayOpen,
         isManifestTrayOpen,
         isActionTrayOpen,
+        isQueuesTrayOpen,
+        activeInventorySurface,
         openManifestTray,
         openActionTray,
+        openQueuesTray,
         toggleManifestTray,
         toggleActionTray,
+        toggleQueuesTray,
         closeAllTrays,
         isSyncing,
         allDrafts,

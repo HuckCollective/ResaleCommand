@@ -1,220 +1,231 @@
 <template>
-    <div class="space-y-1.5">
-        <!-- True 2-Row Spatial & Operational Workbench Bar (Zero Desktop Clipping, Mobile-Friendly) -->
-        <div class="bg-base-100 border border-base-300 rounded-xl p-1.5 sm:p-2.5 shadow-2xs space-y-1.5 sm:space-y-2">
-            <!-- ROW 1: Spatial Location Tabs (Left) + Partner / Prefix Switcher (Right) -->
-            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 sm:gap-2">
-                <!-- Left: All 7 Spatial Location Tabs -->
-                <div class="flex items-center gap-1 overflow-x-auto sm:flex-wrap [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
-                    <button
-                        v-for="loc in SPATIAL_LOCATIONS"
-                        :key="loc.id"
-                        type="button"
-                        @click="selectLocation(loc.id)"
-                        class="btn btn-xs h-7 min-h-7 px-2 sm:px-2.5 rounded-lg font-bold gap-1 shrink-0 transition-all cursor-pointer"
-                        :class="getLocationTabClass(loc.id, locationCounts[loc.id] || 0)"
-                        :title="loc.description"
-                    >
-                        <span class="whitespace-nowrap text-[11px] sm:text-xs">{{ loc.shortLabel }}</span>
-                        <span
-                            class="badge badge-2xs font-mono font-extrabold border-0 px-1.5"
-                            :class="getLocationBadgeClass(loc.id, locationCounts[loc.id] || 0)"
-                        >
-                            {{ locationCounts[loc.id] || 0 }}
-                        </span>
-                    </button>
-                </div>
-
-                <!-- Right: Partner & 0EJ Switcher -->
-                <div class="flex items-center justify-between sm:justify-end gap-1.5 shrink-0">
-                    <span class="text-[10px] font-extrabold uppercase tracking-wider text-base-content/50 sm:hidden">
-                        Partner:
-                    </span>
-                    <div class="join bg-base-200/80 p-0.5 rounded-lg border border-base-300/80 shrink-0">
-                        <button
-                            v-for="p in PARTNER_PREFIXES"
-                            :key="p.id"
-                            type="button"
-                            @click="selectPartner(p.id)"
-                            class="join-item btn btn-2xs h-6 min-h-6 px-2 font-mono font-bold border-0 rounded-md transition-all"
-                            :class="isPartnerActive(p.id)
-                                ? 'btn-primary text-primary-content shadow-2xs'
-                                : 'btn-ghost text-base-content/70 hover:text-base-content'"
-                            :title="`${p.description} (${partnerCounts[p.id] || 0} active)`"
-                        >
-                            <span>{{ p.label }}</span>
-                        </button>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Subtle Horizontal Divider -->
-            <div class="border-t border-base-200/90"></div>
-
-            <!-- ROW 2: Operational Smart Queues (Left) + Sort Selector & Bulk Select Pills (Right) -->
-            <div class="flex flex-col md:flex-row md:items-center justify-between gap-1.5 sm:gap-2">
-                <!-- Left: All 6 Operational Smart Queue Pills -->
-                <div class="flex items-center gap-1 overflow-x-auto sm:flex-wrap [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
-                    <span class="text-[10px] font-extrabold uppercase tracking-wider text-base-content/50 hidden xl:inline mr-0.5 shrink-0">
-                        Smart Queues:
-                    </span>
-                    <button
-                        v-for="q in SMART_QUEUES"
-                        :key="q.id"
-                        type="button"
-                        @click="toggleQueue(q.id)"
-                        class="btn btn-xs h-7 min-h-7 px-2 sm:px-2.5 rounded-lg font-bold gap-1 shrink-0 transition-all cursor-pointer"
-                        :class="filterSmartQueue === q.id
-                            ? 'btn-secondary text-secondary-content shadow-xs ring-1 ring-secondary'
-                            : 'btn-ghost bg-base-200/70 hover:bg-base-300 text-base-content/80 border border-base-300/70'"
-                        :title="q.description"
-                    >
-                        <span class="whitespace-nowrap text-[11px] sm:text-xs">{{ q.shortLabel }}</span>
-                        <span
-                            class="badge badge-2xs font-mono font-bold px-1.5 border-0"
-                            :class="filterSmartQueue === q.id ? 'bg-secondary-content/20 text-secondary-content' : 'bg-base-300 text-base-content/75'"
-                        >
-                            {{ queueCounts[q.id] || 0 }}
-                        </span>
-                    </button>
-                </div>
-
-                <!-- Right: Sort Selector + Quick Bulk Select / Clear Pill -->
-                <div class="flex items-center justify-between md:justify-end gap-1.5 shrink-0">
-                    <!-- Stable Workbench Sort Selector -->
-                    <div class="flex items-center gap-1 shrink-0">
-                        <label for="rc-inventory-sort" class="text-[10px] font-extrabold uppercase tracking-wider text-base-content/55 hidden sm:inline">
-                            Sort:
-                        </label>
-                        <select
-                            id="rc-inventory-sort"
-                            :value="currentSortValue"
-                            @change="onSortChange"
-                            class="select select-bordered select-xs h-7 min-h-7 rounded-lg font-bold text-[11px] bg-base-200/70 border-base-300 text-base-content pr-6 pl-2 focus:bg-base-100 cursor-pointer"
-                            title="Sort inventory items (Newest Added and Barcode/SKU keep items fixed in place when editing)"
-                        >
-                            <option value="$createdAt:desc">🆕 Newest Added (Stable)</option>
-                            <option value="$createdAt:asc">🌱 Oldest Added</option>
-                            <option value="upc:desc">🔢 Barcode / SKU (High → Low)</option>
-                            <option value="upc:asc">🔢 Barcode / SKU (Low → High)</option>
-                            <option value="resalePrice:desc">💰 Price: High → Low</option>
-                            <option value="resalePrice:asc">💸 Price: Low → High</option>
-                            <option value="margin:desc">📈 Highest ROI %</option>
-                            <option value="title:asc">🔤 Title (A → Z)</option>
-                            <option value="$updatedAt:desc">🕒 Recently Edited</option>
-                            <option v-if="sortColumn === 'soldDate'" value="soldDate:desc">🏷️ Sold Date (Newest)</option>
-                        </select>
-                    </div>
-
-                    <!-- Quick Bulk Select / Clear Pill -->
-                    <div v-if="(filteredCount || 0) > 0" class="flex items-center gap-1 shrink-0">
-                        <button
-                            v-if="(selectedCount || 0) < (filteredCount || 0)"
-                            type="button"
-                            @click="$emit('select-all')"
-                            class="btn btn-xs h-7 min-h-7 px-2 sm:px-2.5 rounded-lg font-bold gap-1 shrink-0 btn-outline border-primary/40 text-primary hover:bg-primary hover:text-primary-content"
-                            title="Select all items matching current filter"
-                        >
-                            <Icon icon="solar:check-square-bold" class="w-3.5 h-3.5" />
-                            <span class="text-[11px] whitespace-nowrap">Select All ({{ filteredCount }})</span>
-                        </button>
-                        <button
-                            v-if="(selectedCount || 0) > 0"
-                            type="button"
-                            @click="$emit('clear-selection')"
-                            class="btn btn-xs h-7 min-h-7 px-2 sm:px-2.5 rounded-lg font-bold gap-1 shrink-0 btn-warning text-warning-content"
-                            title="Clear selected items"
-                        >
-                            <Icon icon="solar:close-circle-bold" class="w-3.5 h-3.5" />
-                            <span class="text-[11px] whitespace-nowrap">Clear ({{ selectedCount }})</span>
-                        </button>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- 1-Click Location Triage Bar (Shown when viewing Unassigned or when items are selected) -->
-        <div
-            v-if="(filterLocation === '__unassigned__' && (filteredCount || 0) > 0) || (selectedCount || 0) > 0"
-            class="px-3 py-1.5 rounded-xl bg-warning/10 border border-warning/35 flex flex-wrap items-center justify-between gap-2 text-xs animate-fade-in"
+  <div class="space-y-1.5">
+    <!-- Calm 1-Row Reseller Spatial Bar: Storage (Garage/Hideout) vs Selling Booths (Memory Den/Dusty Tiger) + Partner & Sort -->
+    <div class="bg-base-100 border border-base-300 rounded-xl p-1.5 sm:px-2.5 sm:py-2 shadow-2xs flex flex-col lg:flex-row lg:items-center justify-between gap-2">
+      <!-- Left: All + 📦 Storage Group + 🏪 Selling Booths Group + 🚨 Unassigned -->
+      <div class="flex items-center gap-1 overflow-x-auto scrollbar-none max-w-full">
+        <button
+          type="button"
+          class="btn btn-xs h-11 md:h-7 px-2.5 rounded-lg font-bold gap-1 shrink-0 transition-all cursor-pointer"
+          :class="getLocationTabClass('all', locationCounts.all || 0)"
+          title="All active working stock across Storage and Selling Booths"
+          @click="selectLocation('all')"
         >
-            <div class="flex items-center gap-1.5 min-w-0">
-                <span class="badge badge-2xs sm:badge-xs badge-warning text-warning-content font-extrabold uppercase tracking-wider shrink-0">
-                    Triage
-                </span>
-                <span class="font-extrabold text-base-content truncate">
-                    {{ (selectedCount || 0) > 0
-                        ? `1-Click Assign ${selectedCount} Selected Item${selectedCount === 1 ? '' : 's'} to:`
-                        : `Triage ${filteredCount} Unassigned Item${filteredCount === 1 ? '' : 's'} — Select items or 1-click assign all:` }}
-                </span>
-            </div>
-            <div class="flex items-center gap-1 flex-wrap shrink-0">
-                <button
-                    v-for="target in TRIAGE_TARGETS"
-                    :key="target.code"
-                    type="button"
-                    @click="$emit('quick-assign-location', target.code)"
-                    class="btn btn-2xs sm:btn-xs h-6 min-h-6 px-2 rounded-lg font-bold gap-1 btn-outline border-base-300 bg-base-100 hover:btn-primary hover:text-primary-content transition-all cursor-pointer shadow-2xs"
-                    :title="`Assign ${(selectedCount || 0) > 0 ? selectedCount + ' selected' : 'all ' + filteredCount + ' filtered'} item(s) to ${target.name} (${target.code})`"
-                >
-                    <span>{{ target.icon }} {{ target.code }}</span>
-                </button>
-            </div>
-        </div>
+          <span class="whitespace-nowrap text-[11px] sm:text-xs">All</span>
+          <span
+            class="badge badge-2xs font-mono font-extrabold border-0 px-1.5 whitespace-nowrap shrink-0"
+            :class="getLocationBadgeClass('all', locationCounts.all || 0)"
+          >
+            {{ locationCounts.all || 0 }}
+          </span>
+        </button>
 
-        <!-- Contextual Active Smart Queue Banner -->
-        <div
-            v-if="activeQueueMeta"
-            class="px-3 py-1.5 rounded-xl bg-secondary/10 border border-secondary/30 flex items-center justify-between gap-2 text-xs animate-fade-in"
+        <span class="text-[10px] font-extrabold uppercase tracking-wider text-base-content/50 pl-1 hidden xl:inline shrink-0">
+          Storage:
+        </span>
+        <button
+          v-for="loc in storageFacilities"
+          :key="loc.code"
+          type="button"
+          class="btn btn-xs h-11 md:h-7 px-2.5 rounded-lg font-bold gap-1 shrink-0 transition-all cursor-pointer"
+          :class="getLocationTabClass(loc.code as SpatialLocationId, locationCounts[loc.code] || 0)"
+          :title="`${loc.shortName} (${loc.code}) — Backstock Storage`"
+          @click="selectLocation(loc.code as SpatialLocationId)"
         >
-            <div class="flex items-center gap-1.5 min-w-0">
-                <span class="badge badge-2xs sm:badge-xs badge-secondary font-extrabold uppercase tracking-wider shrink-0">
-                    Queue
-                </span>
-                <span class="font-extrabold text-base-content shrink-0">{{ activeQueueMeta.label }}:</span>
-                <span class="text-base-content/75 truncate text-[11px] sm:text-xs">{{ activeQueueMeta.description }}</span>
-            </div>
-            <div class="flex items-center gap-1 shrink-0">
-                <button
-                    v-if="(filteredCount || 0) > 0 && (selectedCount || 0) < (filteredCount || 0)"
-                    type="button"
-                    @click="$emit('select-all')"
-                    class="btn btn-2xs btn-secondary text-secondary-content font-bold gap-1"
-                >
-                    <Icon icon="solar:check-square-bold" class="w-3 h-3" />
-                    <span>Select {{ filteredCount }}</span>
-                </button>
-                <button
-                    type="button"
-                    @click="$emit('update:filterSmartQueue', '')"
-                    class="btn btn-2xs btn-ghost text-secondary hover:bg-secondary/15 font-bold gap-1 shrink-0"
-                >
-                    <Icon icon="solar:close-circle-bold" class="w-3.5 h-3.5" />
-                    <span>Clear</span>
-                </button>
-            </div>
+          <span class="whitespace-nowrap text-[11px] sm:text-xs">{{ loc.icon }} {{ loc.shortName }}</span>
+          <span
+            class="badge badge-2xs font-mono font-extrabold border-0 px-1.5 whitespace-nowrap shrink-0"
+            :class="getLocationBadgeClass(loc.code as SpatialLocationId, locationCounts[loc.code] || 0)"
+          >
+            {{ locationCounts[loc.code] || 0 }}
+          </span>
+        </button>
+
+        <div class="h-4 w-px bg-base-300 mx-0.5 shrink-0"></div>
+
+        <span class="text-[10px] font-extrabold uppercase tracking-wider text-base-content/50 hidden xl:inline shrink-0">
+          Booths:
+        </span>
+        <button
+          v-for="loc in sellingBoothFacilities"
+          :key="loc.code"
+          type="button"
+          class="btn btn-xs h-11 md:h-7 px-2.5 rounded-lg font-bold gap-1 shrink-0 transition-all cursor-pointer"
+          :class="getLocationTabClass(loc.code as SpatialLocationId, locationCounts[loc.code] || 0)"
+          :title="`${loc.shortName} (${loc.code}) — Selling Booth (${loc.feePct}% fee)`"
+          @click="selectLocation(loc.code as SpatialLocationId)"
+        >
+          <span class="whitespace-nowrap text-[11px] sm:text-xs">{{ loc.icon }} {{ loc.shortName }}</span>
+          <span
+            class="badge badge-2xs font-mono font-extrabold border-0 px-1.5 whitespace-nowrap shrink-0"
+            :class="getLocationBadgeClass(loc.code as SpatialLocationId, locationCounts[loc.code] || 0)"
+          >
+            {{ locationCounts[loc.code] || 0 }}
+          </span>
+        </button>
+
+        <button
+          v-if="(locationCounts.__unassigned__ || 0) > 0 || filterLocation === '__unassigned__'"
+          type="button"
+          class="btn btn-xs h-11 md:h-7 px-2.5 rounded-lg font-bold gap-1 shrink-0 transition-all cursor-pointer"
+          :class="getLocationTabClass('__unassigned__', locationCounts.__unassigned__ || 0)"
+          title="Items missing a physical location (Golden Rule #1 triage)"
+          @click="selectLocation('__unassigned__')"
+        >
+          <span class="whitespace-nowrap text-[11px] sm:text-xs">🚨 Unassigned</span>
+          <span
+            class="badge badge-2xs font-mono font-extrabold border-0 px-1.5 whitespace-nowrap shrink-0"
+            :class="getLocationBadgeClass('__unassigned__', locationCounts.__unassigned__ || 0)"
+          >
+            {{ locationCounts.__unassigned__ || 0 }}
+          </span>
+        </button>
+      </div>
+
+      <!-- Right: Compact Partner Select + Sort Select + Conditional Select All / Clear -->
+      <div class="flex items-center justify-between lg:justify-end gap-1.5 flex-wrap sm:flex-nowrap shrink-0">
+        <select
+          :value="currentPartnerValue"
+          aria-label="Filter by Partner Barcode Prefix"
+          title="Filter by Partner Barcode Prefix"
+          class="select select-bordered select-xs h-11 md:h-7 rounded-lg font-mono font-bold text-[11px] bg-base-200/70 border-base-300 text-base-content pr-6 pl-2 cursor-pointer"
+          @change="onPartnerChange"
+        >
+          <option v-for="p in PARTNER_PREFIXES" :key="p.id" :value="p.id">
+            {{ p.id === 'all' ? 'All Partners' : p.label }} ({{ partnerCounts[p.id] || 0 }})
+          </option>
+        </select>
+
+        <select
+          v-if="showSort"
+          :value="currentSortValue"
+          aria-label="Sort inventory items"
+          title="Sort inventory items"
+          class="select select-bordered select-xs h-11 md:h-7 rounded-lg font-bold text-[11px] bg-base-200/70 border-base-300 text-base-content pr-6 pl-2 cursor-pointer"
+          @change="onSortChange"
+        >
+          <option value="$createdAt:desc">🆕 Newest Added</option>
+          <option value="$createdAt:asc">🌱 Oldest Added</option>
+          <option value="upc:desc">🔢 Barcode (High → Low)</option>
+          <option value="upc:asc">🔢 Barcode (Low → High)</option>
+          <option value="resalePrice:desc">💰 Price: High → Low</option>
+          <option value="resalePrice:asc">💸 Price: Low → High</option>
+          <option value="margin:desc">📈 Highest ROI %</option>
+          <option value="title:asc">🔤 Title (A → Z)</option>
+          <option value="$updatedAt:desc">🕒 Recently Edited</option>
+          <option v-if="sortColumn === 'soldDate'" value="soldDate:desc">🏷️ Sold Date (Newest)</option>
+        </select>
+
+        <div v-if="(filteredCount || 0) > 0" class="flex items-center gap-1 shrink-0">
+          <button
+            v-if="(selectedCount || 0) > 0"
+            type="button"
+            class="btn btn-xs h-11 md:h-7 px-2.5 rounded-lg font-bold gap-1 shrink-0 btn-warning text-warning-content"
+            title="Clear selected items"
+            @click="$emit('clear-selection')"
+          >
+            <Icon icon="solar:close-circle-bold" class="w-3.5 h-3.5" />
+            <span class="text-[11px] whitespace-nowrap">Clear ({{ selectedCount }})</span>
+          </button>
+          <button
+            v-else
+            type="button"
+            class="btn btn-xs h-11 md:h-7 px-2.5 rounded-lg font-bold gap-1 shrink-0 btn-outline border-primary/40 text-primary hover:bg-primary hover:text-primary-content"
+            title="Select all items matching current filter"
+            @click="$emit('select-all')"
+          >
+            <Icon icon="solar:check-square-bold" class="w-3.5 h-3.5" />
+            <span class="text-[11px] whitespace-nowrap">Select All ({{ filteredCount }})</span>
+          </button>
         </div>
+      </div>
     </div>
+
+    <!-- 1-Click Location Triage Bar (Shown when viewing Unassigned or when items are selected) -->
+    <div
+      v-if="showQuickAssign && ((filterLocation === '__unassigned__' && (filteredCount || 0) > 0) || (selectedCount || 0) > 0)"
+      class="px-3 py-1.5 rounded-xl bg-warning/10 border border-warning/35 flex flex-wrap items-center justify-between gap-2 text-xs"
+    >
+      <div class="flex items-center gap-1.5 min-w-0">
+        <span class="badge badge-2xs sm:badge-xs badge-warning text-warning-content font-extrabold uppercase tracking-wider whitespace-nowrap shrink-0">
+          Assign Location
+        </span>
+        <span class="font-extrabold text-base-content truncate">
+          {{
+            (selectedCount || 0) > 0
+              ? `Move ${selectedCount} selected item${selectedCount === 1 ? '' : 's'} to:`
+              : `Assign ${filteredCount} unassigned item${filteredCount === 1 ? '' : 's'} to:`
+          }}
+        </span>
+      </div>
+      <div class="flex items-center gap-1 flex-wrap shrink-0">
+        <button
+          v-for="target in triageTargets"
+          :key="target.code"
+          type="button"
+          class="btn btn-2xs sm:btn-xs h-11 md:h-6 px-2.5 rounded-lg font-bold gap-1 btn-outline border-base-300 bg-base-100 hover:btn-primary hover:text-primary-content transition-all cursor-pointer"
+          :title="`Assign to ${target.shortName} (${target.code})`"
+          @click="$emit('quick-assign-location', target.code)"
+        >
+          <span>{{ target.icon }} {{ target.code }}</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Contextual Active Queue Banner -->
+    <div
+      v-if="activeQueueMeta"
+      class="px-3 py-1.5 rounded-xl bg-secondary/10 border border-secondary/30 flex items-center justify-between gap-2 text-xs flex-wrap"
+    >
+      <div class="flex items-center gap-1.5 min-w-0">
+        <span class="badge badge-2xs sm:badge-xs badge-secondary text-secondary-content font-extrabold uppercase tracking-wider whitespace-nowrap shrink-0">
+          Active Queue
+        </span>
+        <span class="font-extrabold text-base-content shrink-0">{{ activeQueueMeta.label }}</span>
+        <span class="text-base-content/75 truncate text-[11px] sm:text-xs hidden md:inline">— {{ activeQueueMeta.description }}</span>
+      </div>
+      <div class="flex items-center gap-1 shrink-0 ml-auto">
+        <button
+          type="button"
+          class="btn btn-2xs h-11 md:h-6 px-2.5 btn-outline btn-secondary font-bold gap-1 rounded-lg"
+          @click="$emit('open-queues')"
+        >
+          <span>Switch Queue</span>
+        </button>
+        <button
+          type="button"
+          class="btn btn-2xs h-11 md:h-6 px-2 btn-ghost text-secondary hover:bg-secondary/15 font-bold gap-1 rounded-lg"
+          @click="$emit('update:filterSmartQueue', '')"
+        >
+          <Icon icon="solar:close-circle-bold" class="w-3.5 h-3.5" />
+          <span>Clear</span>
+        </button>
+      </div>
+    </div>
+  </div>
 </template>
 
 <script setup lang="ts">
 import { computed } from 'vue';
 import { Icon } from '@iconify/vue';
 import {
-    SPATIAL_LOCATIONS,
-    SMART_QUEUES,
-    PARTNER_PREFIXES,
-    isWorkingStockItem,
-    matchesSpatialLocation,
-    matchesSmartQueue,
-    matchesPartnerPrefix,
-    type SmartQueueId,
-    type SpatialLocationId,
-    type PartnerPrefixId
+  SPATIAL_LOCATIONS,
+  SMART_QUEUES,
+  PARTNER_PREFIXES,
+  isWorkingStockItem,
+  matchesSpatialLocation,
+  matchesPartnerPrefix,
+  type SpatialLocationId,
+  type PartnerPrefixId,
 } from '../../lib/inventoryVibes';
-import { getAllLocationSettingMetas } from '../../lib/warehouses';
+import {
+  getAllLocationSettingMetas,
+  getBackstockStorageMetas,
+  getSellingBoothMetas,
+} from '../../lib/warehouses';
 
-const props = defineProps<{
+const props = withDefaults(
+  defineProps<{
     inventoryItems: any[];
     filterLocation: string;
     filterSmartQueue: string;
@@ -223,166 +234,147 @@ const props = defineProps<{
     selectedCount?: number;
     sortColumn?: string;
     sortDirection?: 'asc' | 'desc';
-}>();
+    showSort?: boolean;
+    showQuickAssign?: boolean;
+  }>(),
+  {
+    showSort: true,
+    showQuickAssign: true,
+  }
+);
 
 const emit = defineEmits<{
-    (e: 'update:filterLocation', val: string): void;
-    (e: 'update:filterSmartQueue', val: string): void;
-    (e: 'update:filterBarcode', val: string): void;
-    (e: 'select-all'): void;
-    (e: 'clear-selection'): void;
-    (e: 'update-sort', payload: { column: string; direction: 'asc' | 'desc' }): void;
-    (e: 'quick-assign-location', code: string): void;
+  (e: 'update:filterLocation', val: string): void;
+  (e: 'update:filterSmartQueue', val: string): void;
+  (e: 'update:filterBarcode', val: string): void;
+  (e: 'select-all'): void;
+  (e: 'clear-selection'): void;
+  (e: 'update-sort', payload: { column: string; direction: 'asc' | 'desc' }): void;
+  (e: 'quick-assign-location', code: string): void;
+  (e: 'open-queues'): void;
 }>();
 
-const TRIAGE_TARGETS = getAllLocationSettingMetas();
+const storageFacilities = getBackstockStorageMetas();
+const sellingBoothFacilities = getSellingBoothMetas();
+const triageTargets = getAllLocationSettingMetas();
+
+const currentPartnerValue = computed<PartnerPrefixId>(() => {
+  const raw = (props.filterBarcode || 'all').trim();
+  const found = PARTNER_PREFIXES.find((p) => p.id.toUpperCase() === raw.toUpperCase());
+  return found ? found.id : 'all';
+});
 
 const currentSortValue = computed(() => {
-    const col = props.sortColumn || '$createdAt';
-    const dir = props.sortDirection || 'desc';
-    const candidate = `${col}:${dir}`;
-    const validOptions = new Set([
-        '$createdAt:desc',
-        '$createdAt:asc',
-        'upc:desc',
-        'upc:asc',
-        'resalePrice:desc',
-        'resalePrice:asc',
-        'margin:desc',
-        'title:asc',
-        '$updatedAt:desc',
-        'soldDate:desc'
-    ]);
-    return validOptions.has(candidate) ? candidate : '$createdAt:desc';
+  const col = props.sortColumn || '$createdAt';
+  const dir = props.sortDirection || 'desc';
+  const candidate = `${col}:${dir}`;
+  const validOptions = new Set([
+    '$createdAt:desc',
+    '$createdAt:asc',
+    'upc:desc',
+    'upc:asc',
+    'resalePrice:desc',
+    'resalePrice:asc',
+    'margin:desc',
+    'title:asc',
+    '$updatedAt:desc',
+    'soldDate:desc',
+  ]);
+  return validOptions.has(candidate) ? candidate : '$createdAt:desc';
 });
 
-function onSortChange(e: Event) {
-    const val = (e.target as HTMLSelectElement).value;
-    const [column, direction] = val.split(':');
-    if (column && (direction === 'asc' || direction === 'desc')) {
-        emit('update-sort', { column, direction });
-    }
+function onPartnerChange(e: Event) {
+  const val = (e.target as HTMLSelectElement).value as PartnerPrefixId;
+  emit('update:filterBarcode', val || 'all');
 }
 
-const activeItems = computed(() => {
-    return (props.inventoryItems || []).filter(item => isWorkingStockItem(item));
-});
+function onSortChange(e: Event) {
+  const val = (e.target as HTMLSelectElement).value;
+  const [column, direction] = val.split(':');
+  if (column && (direction === 'asc' || direction === 'desc')) {
+    emit('update-sort', { column, direction });
+  }
+}
+
+const activeItems = computed(() =>
+  (props.inventoryItems || []).filter((item) => isWorkingStockItem(item))
+);
 
 const locationCounts = computed<Record<string, number>>(() => {
-    const counts: Record<string, number> = {
-        all: activeItems.value.length,
-        __unassigned__: 0,
-        MD: 0,
-        DT: 0,
-        HG: 0,
-        HH: 0,
-        HD: 0
-    };
-    for (const item of activeItems.value) {
-        for (const loc of SPATIAL_LOCATIONS) {
-            if (loc.id === 'all') continue;
-            if (matchesSpatialLocation(item, loc.id)) {
-                counts[loc.id] = (counts[loc.id] || 0) + 1;
-            }
-        }
+  const counts: Record<string, number> = {
+    all: activeItems.value.length,
+    __unassigned__: 0,
+    MD: 0,
+    DT: 0,
+    HG: 0,
+    HH: 0,
+    HD: 0,
+  };
+  for (const item of activeItems.value) {
+    for (const loc of SPATIAL_LOCATIONS) {
+      if (loc.id === 'all') continue;
+      if (matchesSpatialLocation(item, loc.id)) {
+        counts[loc.id] = (counts[loc.id] || 0) + 1;
+      }
     }
-    return counts;
-});
-
-const queueCounts = computed<Record<string, number>>(() => {
-    const counts: Record<string, number> = {};
-    for (const q of SMART_QUEUES) {
-        counts[q.id] = 0;
-    }
-    for (const item of activeItems.value) {
-        for (const q of SMART_QUEUES) {
-            if (matchesSmartQueue(item, q.id)) {
-                counts[q.id] = (counts[q.id] || 0) + 1;
-            }
-        }
-    }
-    return counts;
+  }
+  return counts;
 });
 
 const partnerCounts = computed<Record<string, number>>(() => {
-    const counts: Record<string, number> = {
-        all: activeItems.value.length,
-        'HUCK-': 0,
-        'PDXGL-': 0,
-        'BB-': 0,
-        '0EJ': 0
-    };
-    for (const item of activeItems.value) {
-        for (const p of PARTNER_PREFIXES) {
-            if (p.id === 'all') continue;
-            if (matchesPartnerPrefix(item, p.id)) {
-                counts[p.id] = (counts[p.id] || 0) + 1;
-            }
-        }
+  const counts: Record<string, number> = {
+    all: activeItems.value.length,
+    'HUCK-': 0,
+    'PDXGL-': 0,
+    'BB-': 0,
+    '0EJ': 0,
+  };
+  for (const item of activeItems.value) {
+    for (const p of PARTNER_PREFIXES) {
+      if (p.id === 'all') continue;
+      if (matchesPartnerPrefix(item, p.id)) {
+        counts[p.id] = (counts[p.id] || 0) + 1;
+      }
     }
-    return counts;
+  }
+  return counts;
 });
 
 const activeQueueMeta = computed(() => {
-    if (!props.filterSmartQueue) return null;
-    return SMART_QUEUES.find(q => q.id === props.filterSmartQueue) || null;
+  if (!props.filterSmartQueue) return null;
+  return SMART_QUEUES.find((q) => q.id === props.filterSmartQueue) || null;
 });
 
 function selectLocation(locId: SpatialLocationId) {
-    if (props.filterLocation === locId && locId !== 'all') {
-        emit('update:filterLocation', 'all');
-    } else {
-        emit('update:filterLocation', locId);
-    }
-}
-
-function toggleQueue(queueId: SmartQueueId) {
-    if (props.filterSmartQueue === queueId) {
-        emit('update:filterSmartQueue', '');
-    } else {
-        emit('update:filterSmartQueue', queueId);
-    }
-}
-
-function isPartnerActive(partnerId: PartnerPrefixId): boolean {
-    if (partnerId === 'all') {
-        return !props.filterBarcode || props.filterBarcode === 'all';
-    }
-    return (props.filterBarcode || '').toUpperCase() === partnerId.toUpperCase();
-}
-
-function selectPartner(partnerId: PartnerPrefixId) {
-    if (partnerId === 'all') {
-        emit('update:filterBarcode', 'all');
-    } else if ((props.filterBarcode || '').toUpperCase() === partnerId.toUpperCase()) {
-        emit('update:filterBarcode', 'all');
-    } else {
-        emit('update:filterBarcode', partnerId);
-    }
+  if (props.filterLocation === locId && locId !== 'all') {
+    emit('update:filterLocation', 'all');
+  } else {
+    emit('update:filterLocation', locId);
+  }
 }
 
 function getLocationTabClass(locId: SpatialLocationId, count: number): string {
-    const isActive = (props.filterLocation || 'all').toLowerCase() === locId.toLowerCase();
-    if (isActive) {
-        if (locId === '__unassigned__') {
-            return 'btn-warning text-warning-content shadow-xs ring-1 ring-warning';
-        }
-        return 'btn-primary text-primary-content shadow-xs ring-1 ring-primary';
+  const isActive = (props.filterLocation || 'all').toLowerCase() === locId.toLowerCase();
+  if (isActive) {
+    if (locId === '__unassigned__') {
+      return 'btn-warning text-warning-content shadow-xs ring-1 ring-warning';
     }
-    if (locId === '__unassigned__' && count > 0) {
-        return 'bg-warning/15 hover:bg-warning/25 text-warning-content border border-warning/40';
-    }
-    return 'btn-ghost bg-base-200/60 hover:bg-base-200 text-base-content/80 border border-base-300/60';
+    return 'btn-primary text-primary-content shadow-xs ring-1 ring-primary';
+  }
+  if (locId === '__unassigned__' && count > 0) {
+    return 'bg-warning/15 hover:bg-warning/25 text-warning-content border border-warning/40';
+  }
+  return 'btn-ghost bg-base-200/60 hover:bg-base-200 text-base-content/80 border border-base-300/60';
 }
 
 function getLocationBadgeClass(locId: SpatialLocationId, count: number): string {
-    const isActive = (props.filterLocation || 'all').toLowerCase() === locId.toLowerCase();
-    if (isActive) {
-        return 'bg-base-100/25 text-current';
-    }
-    if (locId === '__unassigned__' && count > 0) {
-        return 'badge-warning text-warning-content';
-    }
-    return 'bg-base-300 text-base-content/75';
+  const isActive = (props.filterLocation || 'all').toLowerCase() === locId.toLowerCase();
+  if (isActive) {
+    return 'bg-base-100/25 text-current';
+  }
+  if (locId === '__unassigned__' && count > 0) {
+    return 'badge-warning text-warning-content';
+  }
+  return 'bg-base-300 text-base-content/75';
 }
 </script>

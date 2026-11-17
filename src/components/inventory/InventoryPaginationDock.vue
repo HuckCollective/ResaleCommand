@@ -12,7 +12,7 @@
         <!-- ========================================================================= -->
         <Transition name="slide-up">
             <div 
-                v-if="!isTrayOpen"
+                v-if="activeInventorySurface === 'none' && !isTrayOpen"
                 ref="dockEl"
                 class="fixed bottom-0 inset-x-0 z-40 bg-base-100/95 dark:bg-base-200/95 backdrop-blur-2xl border-t border-base-300 shadow-[0_-4px_25px_rgba(0,0,0,0.18)] select-none pointer-events-auto flex flex-col pb-[env(safe-area-inset-bottom,0px)]"
             >
@@ -427,6 +427,8 @@ const {
     resumeManifest,
     isManifestTrayOpen,
     isActionTrayOpen,
+    isQueuesTrayOpen,
+    activeInventorySurface,
     openManifestTray,
     openActionTray,
     unlockActiveManifest
@@ -602,6 +604,13 @@ const handleOpenManifest = () => {
 
 // Mutual Exclusivity: Swap Trays (close one when the other opens)
 watch(isManifestTrayOpen, (isOpen) => {
+    if (isOpen) {
+        isTrayOpen.value = false;
+        isActionTrayOpen.value = false;
+    }
+});
+
+watch(isQueuesTrayOpen, (isOpen) => {
     if (isOpen) {
         isTrayOpen.value = false;
         isActionTrayOpen.value = false;

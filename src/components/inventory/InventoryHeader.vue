@@ -1,559 +1,452 @@
 <template>
-    <div class="sticky top-0 z-30 bg-base-100/95 backdrop-blur-md border-b border-base-200 py-3 -mx-2 px-2 sm:mx-0 sm:px-0 shadow-xs w-full max-w-full min-w-0">
-        <div class="flex flex-col gap-2 sm:gap-3">
-            <!-- Row 1: Title & Live Counts on Left, View Switcher on Right -->
-            <div class="flex items-center justify-between gap-2">
-                <div class="flex items-center gap-2 sm:gap-2.5 min-w-0">
-                    <div class="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-primary/10 flex items-center justify-center text-primary shrink-0">
-                        <Icon icon="solar:widget-2-bold" class="w-4 h-4 sm:w-5 sm:h-5" />
-                    </div>
-                    <div class="min-w-0">
-                        <div class="flex items-center gap-1.5 sm:gap-2">
-                            <h1 class="text-base sm:text-xl font-bold tracking-tight text-base-content leading-none truncate">{{ title }}</h1>
-                            <span class="badge badge-xs sm:badge-sm badge-neutral font-mono font-bold">{{ filteredCount }}</span>
-                            <span v-if="loading" class="loading loading-spinner loading-xs text-primary"></span>
-                        </div>
-                        <span class="text-[10px] sm:text-[11px] opacity-60 font-medium truncate block">
-                            {{ viewMode === 'grid' ? 'Visual Card Grid View' : subtitle }}
-                        </span>
-                    </div>
-                </div>
+  <div class="sticky top-0 z-30 bg-base-100/95 backdrop-blur-md border-b border-base-200 py-2.5 -mx-2 px-2 sm:mx-0 sm:px-0 shadow-2xs w-full max-w-full min-w-0 space-y-2">
+    <!-- Row 1: Title + Count | Omnibox Search + Scan | Status + ⚡ Queues + ⚙ Filters + View Switcher + Add -->
+    <div class="flex flex-wrap lg:flex-nowrap items-center justify-between gap-2">
+      <!-- Left: Title & Live Count (Krug #5 Trunk Test) -->
+      <div class="flex items-center gap-2 shrink-0">
+        <h1 class="text-lg sm:text-xl font-black tracking-tight text-base-content leading-none">{{ title }}</h1>
+        <span class="badge badge-sm badge-neutral text-neutral-content font-mono font-bold whitespace-nowrap shrink-0">
+          {{ filteredCount }}
+        </span>
+        <span v-if="loading" class="loading loading-spinner loading-xs text-primary"></span>
+      </div>
 
-                <!-- View Mode Segmented Control or Fallback Link -->
-                <div v-if="viewMode" class="join bg-base-200/80 p-0.5 rounded-lg border border-base-300 shrink-0">
-                    <button 
-                        type="button"
-                        class="join-item btn btn-xs gap-1 font-bold transition-all px-2 sm:px-2.5"
-                        :class="viewMode === 'table' ? 'btn-primary text-primary-content shadow-xs' : 'btn-ghost opacity-70 hover:opacity-100'"
-                        @click="$emit('update:viewMode', 'table')"
-                        title="Spreadsheet Table View"
-                    >
-                        <Icon icon="solar:list-bold" class="w-3.5 h-3.5" />
-                        <span class="text-[11px]">Table</span>
-                    </button>
-                    <button 
-                        type="button"
-                        class="join-item btn btn-xs gap-1 font-bold transition-all px-2 sm:px-2.5"
-                        :class="viewMode === 'grid' ? 'btn-primary text-primary-content shadow-xs' : 'btn-ghost opacity-70 hover:opacity-100'"
-                        @click="$emit('update:viewMode', 'grid')"
-                        title="Visual Card Grid View"
-                    >
-                        <Icon icon="solar:gallery-wide-bold" class="w-3.5 h-3.5" />
-                        <span class="text-[11px]">Cards</span>
-                    </button>
-                </div>
-                <a v-else :href="switchViewHref" class="btn btn-xs sm:btn-sm btn-ghost border border-base-300 gap-1.5 shrink-0" :title="switchViewTitle">
-                    <Icon :icon="switchViewIcon" class="w-4 h-4" />
-                    <span class="text-xs font-bold">{{ switchViewLabel }}</span>
-                </a>
-            </div>
+      <!-- Center: Prominent Omnibox Search + Camera Scan -->
+      <div class="relative order-3 lg:order-2 w-full lg:flex-1 lg:max-w-xl min-w-0">
+        <Icon icon="solar:magnifer-linear" class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 opacity-45 pointer-events-none" />
+        <input
+          type="text"
+          :value="searchQuery"
+          placeholder="Search title, barcode, booth SKU, PO, location…"
+          aria-label="Search inventory"
+          class="input input-bordered input-sm h-11 md:h-8 w-full pl-9 pr-20 md:pr-16 bg-base-200/60 focus:bg-base-100 font-mono text-xs rounded-xl"
+          @input="$emit('update:searchQuery', ($event.target as HTMLInputElement).value)"
+        />
+        <div class="absolute right-1 top-1/2 -translate-y-1/2 flex items-center gap-0.5">
+          <button
+            v-if="searchQuery"
+            type="button"
+            class="btn btn-ghost btn-circle btn-xs w-9 h-9 md:w-6 md:h-6 opacity-65 hover:opacity-100 font-bold text-xs"
+            title="Clear search"
+            aria-label="Clear search"
+            @click="$emit('update:searchQuery', '')"
+          >
+            ✕
+          </button>
+          <button
+            type="button"
+            class="btn btn-ghost btn-circle btn-xs w-9 h-9 md:w-6 md:h-6 text-primary hover:bg-primary/10"
+            title="Scan Barcode or Mini QR with Camera"
+            aria-label="Scan Barcode or Mini QR with Camera"
+            @click="isScannerOpen = true"
+          >
+            <Icon icon="solar:camera-linear" class="w-4 h-4 md:w-3.5 md:h-3.5" />
+          </button>
+        </div>
+      </div>
 
-            <!-- Row 2: Full-Width Omnibox Search -->
-            <div class="relative w-full">
-                <Icon icon="solar:magnifer-linear" class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 opacity-40 pointer-events-none" />
-                <input 
-                    type="text" 
-                    :value="searchQuery" 
-                    @input="$emit('update:searchQuery', $event.target.value)"
-                    placeholder="Search title, UPC, PO, vendor, location..." 
-                    class="input input-bordered input-sm w-full pl-9 pr-14 bg-base-200/60 focus:bg-base-100 font-mono text-xs shadow-inner rounded-lg" 
-                />
-                <div class="absolute right-1.5 top-1/2 -translate-y-1/2 flex items-center gap-0.5">
-                    <button 
-                        v-if="searchQuery" 
-                        type="button"
-                        @click="$emit('update:searchQuery', '')" 
-                        class="btn btn-ghost btn-circle btn-xs opacity-60 hover:opacity-100 w-6 h-6 min-h-6 flex items-center justify-center font-bold text-xs"
-                        title="Clear search"
-                        aria-label="Clear search"
-                    >✕</button>
-                    <button 
-                        type="button"
-                        @click="isScannerOpen = true"
-                        class="btn btn-ghost btn-circle btn-xs text-primary hover:bg-primary/10 transition-colors flex items-center justify-center w-6 h-6 min-h-6"
-                        title="Scan Barcode or Mini QR with Camera"
-                        aria-label="Scan Barcode or Mini QR with Camera"
-                    >
-                        <Icon icon="solar:camera-linear" class="w-3.5 h-3.5" />
-                    </button>
-                </div>
-            </div>
+      <!-- Right: Status Select + ⚡ Queues & Lists + ⚙ Filters + Table|Cards + Add -->
+      <div class="flex items-center gap-1.5 order-2 lg:order-3 shrink-0 ml-auto lg:ml-0">
+        <select
+          :value="filterStatus"
+          aria-label="Filter by inventory status"
+          title="Filter by inventory status"
+          class="hidden md:inline-flex select select-bordered select-xs h-8 rounded-xl font-bold text-xs bg-base-200/70 border-base-300 pr-6 pl-2.5 cursor-pointer"
+          @change="$emit('update:filterStatus', ($event.target as HTMLSelectElement).value)"
+        >
+          <option value="active">Active Stock ({{ getStatusCount('active') }})</option>
+          <option value="acquired">Acquired ({{ getStatusCount('acquired') }})</option>
+          <option value="received">Received ({{ getStatusCount('received') }})</option>
+          <option value="placed">Placed ({{ getStatusCount('placed') }})</option>
+          <option value="tracked">Tracked ({{ getStatusCount('tracked') }})</option>
+          <option value="sold">Sold ({{ getStatusCount('sold') }})</option>
+          <option value="all">All Records ({{ totalCount }})</option>
+        </select>
+
+        <button
+          type="button"
+          class="btn btn-xs sm:btn-sm h-11 md:h-8 px-2.5 rounded-xl font-bold gap-1 shrink-0 transition-all"
+          :class="
+            activeQueueMeta
+              ? 'btn-secondary text-secondary-content shadow-xs'
+              : 'btn-outline border-base-300 bg-base-200/60 text-base-content hover:bg-base-200'
+          "
+          title="Open Booth Restock Lists, Shared Online Ready Bin & Tag Health Queues"
+          @click="$emit('open-queues')"
+        >
+          <span>⚡</span>
+          <span class="text-xs whitespace-nowrap">{{ activeQueueMeta ? activeQueueMeta.shortLabel : 'Queues & Lists' }}</span>
+        </button>
+
+        <button
+          type="button"
+          class="btn btn-xs sm:btn-sm h-11 md:h-8 px-2.5 rounded-xl font-bold gap-1 shrink-0 transition-all"
+          :class="
+            activeFilterChips.length > 0
+              ? 'btn-outline btn-primary shadow-2xs'
+              : 'btn-outline border-base-300 bg-base-200/60 text-base-content hover:bg-base-200'
+          "
+          title="Open Filters & Exclusions"
+          @click="isFiltersOpen = true"
+        >
+          <Icon icon="solar:tuning-square-2-bold-duotone" class="w-3.5 h-3.5" />
+          <span class="hidden sm:inline text-xs">Filters</span>
+          <span
+            v-if="activeFilterChips.length > 0"
+            class="badge badge-2xs badge-primary text-primary-content font-mono font-bold whitespace-nowrap shrink-0"
+          >
+            {{ activeFilterChips.length }}
+          </span>
+        </button>
+
+        <div v-if="viewMode" class="join bg-base-200/80 p-0.5 rounded-xl border border-base-300 shrink-0">
+          <button
+            type="button"
+            class="join-item btn btn-xs h-11 md:h-7 gap-1 font-bold transition-all px-2.5 rounded-lg"
+            :class="viewMode === 'table' ? 'btn-neutral text-neutral-content shadow-xs' : 'btn-ghost opacity-70 hover:opacity-100'"
+            title="Spreadsheet Table View"
+            @click="$emit('update:viewMode', 'table')"
+          >
+            <Icon icon="solar:list-bold" class="w-3.5 h-3.5" />
+            <span class="hidden sm:inline text-[11px]">Table</span>
+          </button>
+          <button
+            type="button"
+            class="join-item btn btn-xs h-11 md:h-7 gap-1 font-bold transition-all px-2.5 rounded-lg"
+            :class="viewMode === 'grid' ? 'btn-neutral text-neutral-content shadow-xs' : 'btn-ghost opacity-70 hover:opacity-100'"
+            title="Visual Card Grid View"
+            @click="$emit('update:viewMode', 'grid')"
+          >
+            <Icon icon="solar:gallery-wide-bold" class="w-3.5 h-3.5" />
+            <span class="hidden sm:inline text-[11px]">Cards</span>
+          </button>
         </div>
 
-        <!-- ------------------------------------------------------------- -->
-        <!-- HORIZONTAL STATUS PIPELINE TABS                               -->
-        <!-- ------------------------------------------------------------- -->
-        <div class="flex items-center gap-2 overflow-x-auto pt-3 mt-1 pb-1 scrollbar-none w-full max-w-full min-w-0 overscroll-x-contain">
-            <!-- Status Tab: Active Stock (Default on-hand physical inventory) -->
-            <button 
-                type="button"
-                @click="$emit('update:filterStatus', 'active')"
-                class="btn btn-xs gap-1.5 transition-all font-bold shrink-0"
-                :class="filterStatus === 'active' ? 'btn-primary text-primary-content shadow-sm' : 'btn-ghost bg-base-200/70 text-base-content/80 hover:bg-base-200'"
-                title="Active on-hand inventory (excludes sold, unacquired trackers, and combined lots)"
-            >
-                <Icon icon="solar:box-minimalistic-bold" class="w-3.5 h-3.5" />
-                <span>Active Stock</span>
-                <span class="badge badge-xs" :class="filterStatus === 'active' ? 'badge-neutral' : 'badge-ghost'">{{ getStatusCount('active') }}</span>
-            </button>
-
-            <div class="h-3 w-px bg-base-content/20 shrink-0"></div>
-
-            <!-- Status Tab: Acquired -->
-            <button 
-                type="button"
-                @click="$emit('update:filterStatus', 'acquired')"
-                class="btn btn-xs gap-1.5 transition-all font-bold shrink-0"
-                :class="filterStatus === 'acquired' ? 'bg-warning text-warning-content shadow-sm' : 'btn-ghost bg-base-200/70 opacity-70 hover:opacity-100'"
-            >
-                <span>Acquired</span>
-                <span class="badge badge-xs" :class="filterStatus === 'acquired' ? 'badge-neutral' : 'badge-ghost'">{{ getStatusCount('acquired') }}</span>
-            </button>
-
-            <Icon icon="solar:alt-arrow-right-linear" class="w-3.5 h-3.5 opacity-30 shrink-0" />
-
-            <!-- Status Tab: Received -->
-            <button 
-                type="button"
-                @click="$emit('update:filterStatus', 'received')"
-                class="btn btn-xs gap-1.5 transition-all font-bold shrink-0"
-                :class="filterStatus === 'received' ? 'bg-info text-info-content shadow-sm' : 'btn-ghost bg-base-200/70 opacity-70 hover:opacity-100'"
-            >
-                <span>Received</span>
-                <span class="badge badge-xs" :class="filterStatus === 'received' ? 'badge-neutral' : 'badge-ghost'">{{ getStatusCount('received') }}</span>
-            </button>
-
-            <Icon icon="solar:alt-arrow-right-linear" class="w-3.5 h-3.5 opacity-30 shrink-0" />
-
-            <!-- Status Tab: Placed -->
-            <button 
-                type="button"
-                @click="$emit('update:filterStatus', 'placed')"
-                class="btn btn-xs gap-1.5 transition-all font-bold shrink-0"
-                :class="filterStatus === 'placed' ? 'bg-success text-success-content shadow-sm' : 'btn-ghost bg-base-200/70 opacity-70 hover:opacity-100'"
-            >
-                <span>Placed</span>
-                <span class="badge badge-xs" :class="filterStatus === 'placed' ? 'badge-neutral' : 'badge-ghost'">{{ getStatusCount('placed') }}</span>
-            </button>
-
-            <div class="h-3 w-px bg-base-content/20 shrink-0"></div>
-
-            <!-- Status Tab: Tracked (Unacquired Items in Trackers / Shopping Cart) -->
-            <button 
-                type="button"
-                @click="$emit('update:filterStatus', 'tracked')"
-                class="btn btn-xs gap-1.5 transition-all font-bold shrink-0"
-                :class="filterStatus === 'tracked' ? 'bg-secondary text-secondary-content shadow-sm' : 'btn-ghost bg-base-200/70 opacity-70 hover:opacity-100'"
-                title="Unacquired items currently in online trackers, auctions, or scout cart"
-            >
-                <Icon icon="solar:radar-2-bold" class="w-3.5 h-3.5" />
-                <span>Tracked (Unacquired)</span>
-                <span class="badge badge-xs" :class="filterStatus === 'tracked' ? 'badge-neutral' : 'badge-ghost'">{{ getStatusCount('tracked') }}</span>
-            </button>
-
-            <!-- Status Tab: Sold -->
-            <button 
-                type="button"
-                @click="$emit('update:filterStatus', 'sold')"
-                class="btn btn-xs gap-1.5 transition-all font-bold shrink-0"
-                :class="filterStatus === 'sold' ? 'bg-neutral text-neutral-content shadow-sm' : 'btn-ghost bg-base-200/70 opacity-70 hover:opacity-100'"
-            >
-                <span>Sold</span>
-                <span class="badge badge-xs badge-ghost">{{ getStatusCount('sold') }}</span>
-            </button>
-
-            <!-- Status Tab: All -->
-            <button 
-                type="button"
-                @click="$emit('update:filterStatus', 'all')"
-                class="btn btn-xs gap-1.5 transition-all font-bold shrink-0"
-                :class="filterStatus === 'all' ? 'btn-outline border-base-content/30 font-black shadow-sm' : 'btn-ghost opacity-60 hover:opacity-100'"
-                title="All database records including sold and tracker items"
-            >
-                <span>All ({{ totalCount }})</span>
-            </button>
-
-            <div class="h-3 w-px bg-base-content/20 shrink-0"></div>
-
-            <!-- Quick Insight: Ready to List -->
-            <button 
-                type="button"
-                @click="$emit('update:filterInsight', filterInsight === 'ready_to_list' ? '' : 'ready_to_list')"
-                class="btn btn-xs gap-1 transition-all font-bold shrink-0"
-                :class="filterInsight === 'ready_to_list' ? 'btn-secondary text-secondary-content shadow-sm' : 'btn-ghost bg-base-200/70 text-base-content/80 hover:bg-base-200'"
-                title="Items ready to list"
-            >
-                <Icon icon="solar:checklist-linear" class="w-3 h-3" />
-                <span>Ready to List</span>
-            </button>
-
-            <!-- Quick Insight: Missing Photos -->
-            <button 
-                type="button"
-                @click="$emit('update:filterInsight', filterInsight === 'missing_photos' ? '' : 'missing_photos')"
-                class="btn btn-xs gap-1 transition-all font-bold shrink-0"
-                :class="filterInsight === 'missing_photos' ? 'bg-error text-error-content shadow-sm' : 'btn-ghost bg-base-200/70 text-base-content/80 hover:bg-base-200'"
-                title="Items missing photos"
-            >
-                <Icon icon="solar:camera-linear" class="w-3 h-3" />
-                <span>Missing Photos</span>
-            </button>
-
-            <!-- Quick Insight: Missing Pricing -->
-            <button 
-                type="button"
-                @click="$emit('update:filterInsight', filterInsight === 'missing_est_value' ? '' : 'missing_est_value')"
-                class="btn btn-xs gap-1 transition-all font-bold shrink-0"
-                :class="filterInsight === 'missing_est_value' ? 'bg-warning text-warning-content shadow-sm' : 'btn-ghost bg-base-200/70 text-base-content/80 hover:bg-base-200'"
-                title="Items missing pricing"
-            >
-                <Icon icon="solar:dollar-linear" class="w-3 h-3" />
-                <span>Missing Pricing</span>
-            </button>
-
-            <!-- Quick Insight: Needs Shop Update -->
-            <button 
-                type="button"
-                @click="$emit('update:filterInsight', filterInsight === 'needs_shop_update' ? '' : 'needs_shop_update')"
-                class="btn btn-xs gap-1 transition-all font-bold shrink-0"
-                :class="filterInsight === 'needs_shop_update' ? 'bg-warning text-warning-content shadow-sm' : 'btn-ghost bg-base-200/70 text-base-content/80 hover:bg-base-200'"
-                title="Items needing UPC or price updates in Ricochet POS / shop UI"
-            >
-                <Icon icon="solar:danger-triangle-bold" class="w-3 h-3" />
-                <span>Needs Shop Update</span>
-            </button>
-
-            <div class="h-3 w-px bg-base-content/20 shrink-0"></div>
-
-            <!-- Quick Location Filter Dropdown -->
-            <div class="shrink-0 flex items-center">
-                <select 
-                    :value="filterLocation" 
-                    @change="$emit('update:filterLocation', $event.target.value)"
-                    class="select select-bordered select-xs rounded-sm h-6 min-h-6 text-[11px] font-bold bg-base-200/70 shrink-0"
-                    title="Filter by storage location or warehouse facility"
-                >
-                    <option value="all">All Locations</option>
-                    <option v-for="loc in locations" :key="loc.value || loc" :value="loc.value || loc">{{ loc.label || loc }}</option>
-                </select>
-            </div>
-
-            <!-- Filters & Exclusions Modal Trigger Button -->
-            <button 
-                type="button" 
-                @click="isFiltersOpen = true"
-                class="btn btn-xs gap-1 font-bold shrink-0 transition-all border border-base-300"
-                :class="activeFilterChips.length > 0 ? 'btn-primary text-primary-content shadow-xs' : 'btn-ghost bg-base-200/70 text-base-content/80 hover:bg-base-200'"
-                title="Open Advanced Filters & Exclusions"
-            >
-                <Icon icon="solar:tuning-square-2-bold-duotone" class="w-3.5 h-3.5" />
-                <span>Filters</span>
-                <span v-if="activeFilterChips.length > 0" class="badge badge-xs badge-neutral font-mono font-bold">{{ activeFilterChips.length }}</span>
-            </button>
-        </div>
-
-        <!-- ------------------------------------------------------------- -->
-        <!-- ACTIVE FILTER CHIPS ROW                                       -->
-        <!-- ------------------------------------------------------------- -->
-        <div v-if="activeFilterChips.length > 0" class="flex items-center gap-1.5 flex-wrap pt-2.5 border-t border-base-200 mt-2">
-            <span class="text-[11px] font-bold opacity-60 shrink-0">Active Filters:</span>
-            <span 
-                v-for="chip in activeFilterChips" 
-                :key="chip.id" 
-                class="badge badge-sm badge-neutral gap-1.5 font-bold shadow-2xs py-1 px-2 text-xs"
-            >
-                <span>{{ chip.label }}</span>
-                <button 
-                    type="button" 
-                    class="opacity-60 hover:opacity-100 hover:text-error transition-colors font-bold text-xs" 
-                    @click="chip.onRemove"
-                    title="Remove filter"
-                >✕</button>
-            </span>
-            <button 
-                type="button" 
-                class="btn btn-ghost btn-xs text-error font-bold ml-1 hover:bg-error/10" 
-                @click="$emit('clear-filters')"
-            >
-                Clear All
-            </button>
-        </div>
+        <button
+          type="button"
+          class="hidden sm:inline-flex btn btn-xs sm:btn-sm h-11 md:h-8 px-3 btn-primary text-primary-content font-black rounded-xl gap-1 shadow-xs shrink-0"
+          @click="$emit('add')"
+        >
+          <Icon icon="solar:add-circle-bold" class="w-4 h-4" />
+          <span class="text-xs">Add</span>
+        </button>
+      </div>
     </div>
 
-    <!-- FILTERS & VISIBILITY MODAL BOTTOM SHEET / DIALOG (No Clipping on Mobile!) -->
-    <dialog class="modal modal-bottom sm:modal-middle" :class="{'modal-open': isFiltersOpen}">
-        <div class="modal-box bg-base-100 border-2 border-base-300 p-4 sm:p-5 max-w-lg shadow-2xl space-y-4 max-h-[85vh] overflow-y-auto">
-            <div class="flex items-center justify-between pb-2 border-b border-base-200">
-                <span class="font-bold flex items-center gap-2 text-base text-base-content">
-                    <Icon icon="solar:tuning-square-2-bold-duotone" class="w-5 h-5 text-primary" /> Filters &amp; Exclusions
-                </span>
-                <button type="button" @click="isFiltersOpen = false" class="btn btn-sm btn-circle btn-ghost text-base-content/70 hover:text-base-content">✕</button>
-            </div>
+    <!-- Row 2: Projected Spatial Location Bar (Storage vs Selling Booths) -->
+    <slot name="spatial-bar" />
 
-            <!-- Visibility "No-Show" Toggles -->
-            <div class="space-y-1.5 bg-base-200/60 p-3 rounded-xl border border-base-300/60">
-                <div class="flex items-center justify-between pb-1">
-                    <div class="text-[11px] uppercase font-bold tracking-wider text-base-content/70 flex items-center gap-1.5">
-                        <Icon icon="solar:eye-closed-bold" class="w-3.5 h-3.5 text-primary" />
-                        <span>Exclusions ("No-Show")</span>
-                    </div>
-                </div>
+    <!-- Conditional Active Filter Chips Row -->
+    <div v-if="activeFilterChips.length > 0" class="flex items-center gap-1.5 flex-wrap pt-1">
+      <span
+        v-for="chip in activeFilterChips"
+        :key="chip.id"
+        class="badge badge-sm badge-outline gap-1.5 font-semibold bg-base-100 border-base-300 px-2.5 whitespace-nowrap shrink-0"
+      >
+        <span>{{ chip.label }}</span>
+        <button
+          type="button"
+          class="opacity-65 hover:opacity-100 hover:text-error font-bold text-xs"
+          title="Remove filter"
+          @click="chip.onRemove && chip.onRemove()"
+        >
+          ✕
+        </button>
+      </span>
+      <button
+        type="button"
+        class="btn btn-ghost btn-xs h-11 md:h-7 text-error font-bold hover:bg-error/10 rounded-lg"
+        @click="$emit('clear-filters')"
+      >
+        Reset All
+      </button>
+    </div>
 
-                <!-- Toggle 1: Hide Deconstructed Lots -->
-                <div 
-                    class="p-2 rounded-xl border border-base-300 bg-base-100 hover:border-primary/40 hover:bg-base-100/90 transition-all flex items-center justify-between gap-2.5 cursor-pointer select-none"
-                    @click="$emit('update:hideDeconstructed', !hideDeconstructed)"
-                >
-                    <div class="flex items-center gap-2 min-w-0">
-                        <div class="w-6 h-6 rounded-lg bg-warning/15 text-warning flex items-center justify-center shrink-0">
-                            <Icon icon="solar:scissors-bold" class="w-3.5 h-3.5" />
-                        </div>
-                        <div class="min-w-0">
-                            <span class="font-bold text-xs text-base-content block leading-tight">Hide Deconstructed Lots</span>
-                            <span class="text-[10px] opacity-60 leading-tight block truncate">Parent lots already split into child items</span>
-                        </div>
-                    </div>
-                    <input 
-                        type="checkbox" 
-                        :checked="hideDeconstructed" 
-                        @click.stop 
-                        @change="$emit('update:hideDeconstructed', $event.target.checked)" 
-                        class="toggle toggle-sm toggle-primary shrink-0" 
-                    />
-                </div>
-
-                <!-- Toggle 2: Hide Merged Items -->
-                <div 
-                    class="p-2 rounded-xl border border-base-300 bg-base-100 hover:border-primary/40 hover:bg-base-100/90 transition-all flex items-center justify-between gap-2.5 cursor-pointer select-none"
-                    @click="$emit('update:hideCombined', !hideCombined)"
-                >
-                    <div class="flex items-center gap-2 min-w-0">
-                        <div class="w-6 h-6 rounded-lg bg-info/15 text-info flex items-center justify-center shrink-0">
-                            <Icon icon="solar:layers-bold" class="w-3.5 h-3.5" />
-                        </div>
-                        <div class="min-w-0">
-                            <span class="font-bold text-xs text-base-content block leading-tight">Hide Merged Items</span>
-                            <span class="text-[10px] opacity-60 leading-tight block truncate">Items absorbed into batches or lots</span>
-                        </div>
-                    </div>
-                    <input 
-                        type="checkbox" 
-                        :checked="hideCombined" 
-                        @click.stop 
-                        @change="$emit('update:hideCombined', $event.target.checked)" 
-                        class="toggle toggle-sm toggle-primary shrink-0" 
-                    />
-                </div>
-
-                <!-- Toggle 3: Hide Sold Items -->
-                <div 
-                    class="p-2 rounded-xl border border-base-300 bg-base-100 hover:border-primary/40 hover:bg-base-100/90 transition-all flex items-center justify-between gap-2.5 cursor-pointer select-none"
-                    @click="$emit('update:hideSold', !hideSold)"
-                >
-                    <div class="flex items-center gap-2 min-w-0">
-                        <div class="w-6 h-6 rounded-lg bg-success/15 text-success flex items-center justify-center shrink-0">
-                            <Icon icon="solar:tag-price-bold" class="w-3.5 h-3.5" />
-                        </div>
-                        <div class="min-w-0">
-                            <span class="font-bold text-xs text-base-content block leading-tight">Hide Sold Items</span>
-                            <span class="text-[10px] opacity-60 leading-tight block truncate">Completed sales and historical records</span>
-                        </div>
-                    </div>
-                    <input 
-                        type="checkbox" 
-                        :checked="hideSold" 
-                        @click.stop 
-                        @change="$emit('update:hideSold', $event.target.checked)" 
-                        class="toggle toggle-sm toggle-primary shrink-0" 
-                    />
-                </div>
-
-                <!-- Toggle 4: Hide Trackers / Unacquired -->
-                <div 
-                    class="p-2 rounded-xl border border-base-300 bg-base-100 hover:border-primary/40 hover:bg-base-100/90 transition-all flex items-center justify-between gap-2.5 cursor-pointer select-none"
-                    @click="$emit('update:hideTracked', !hideTracked)"
-                >
-                    <div class="flex items-center gap-2 min-w-0">
-                        <div class="w-6 h-6 rounded-lg bg-secondary/15 text-secondary flex items-center justify-center shrink-0">
-                            <Icon icon="solar:radar-bold" class="w-3.5 h-3.5" />
-                        </div>
-                        <div class="min-w-0">
-                            <span class="font-bold text-xs text-base-content block leading-tight">Hide Trackers &amp; Scouted</span>
-                            <span class="text-[10px] opacity-60 leading-tight block truncate">Watchlists and unacquired items</span>
-                        </div>
-                    </div>
-                    <input 
-                        type="checkbox" 
-                        :checked="hideTracked" 
-                        @click.stop 
-                        @change="$emit('update:hideTracked', $event.target.checked)" 
-                        class="toggle toggle-sm toggle-primary shrink-0" 
-                    />
-                </div>
-
-                <!-- Toggle 5: Only Placed & Located -->
-                <div 
-                    class="p-2 rounded-xl border border-base-300 bg-base-100 hover:border-primary/40 hover:bg-base-100/90 transition-all flex items-center justify-between gap-2.5 cursor-pointer select-none"
-                    @click="$emit('update:filterPlacedLocated', !filterPlacedLocated)"
-                >
-                    <div class="flex items-center gap-2 min-w-0">
-                        <div class="w-6 h-6 rounded-lg bg-primary/15 text-primary flex items-center justify-center shrink-0">
-                            <Icon icon="solar:map-point-bold" class="w-3.5 h-3.5" />
-                        </div>
-                        <div class="min-w-0">
-                            <span class="font-bold text-xs text-base-content block leading-tight">Only Placed &amp; Located</span>
-                            <span class="text-[10px] opacity-60 leading-tight block truncate">Physical booth or shelf location</span>
-                        </div>
-                    </div>
-                    <input 
-                        type="checkbox" 
-                        :checked="filterPlacedLocated" 
-                        @click.stop 
-                        @change="$emit('update:filterPlacedLocated', $event.target.checked)" 
-                        class="toggle toggle-sm toggle-primary shrink-0" 
-                    />
-                </div>
-            </div>
-
-            <!-- Location Filter -->
-            <div class="space-y-1.5">
-                <div class="text-[11px] uppercase font-bold tracking-wider text-base-content/70">Location / Facility</div>
-                <select :value="filterLocation" @change="$emit('update:filterLocation', $event.target.value)" class="select select-bordered select-sm w-full bg-base-100 font-bold text-xs">
-                    <option value="all">All Locations</option>
-                    <option v-for="loc in locations" :key="loc.value || loc" :value="loc.value || loc">{{ loc.label || loc }}</option>
-                </select>
-            </div>
-
-            <!-- AI Health Insights -->
-            <div class="space-y-1.5">
-                <div class="text-[11px] uppercase font-bold tracking-wider text-base-content/70">AI Health Insights</div>
-                <select :value="filterInsight" @change="$emit('update:filterInsight', $event.target.value)" class="select select-bordered select-sm w-full bg-base-100 font-bold text-xs">
-                    <option value="">All Health Statuses</option>
-                    <option value="needs_shop_update">Needs Shop Update</option>
-                    <option value="ready_to_list">Ready to List</option>
-                    <option value="missing_photos">Missing Photos</option>
-                    <option value="missing_pricing">Missing Pricing</option>
-                    <option value="missing_cost">Missing Cost Basis</option>
-                </select>
-            </div>
-
-            <!-- Barcode & Prefix -->
-            <div class="space-y-1.5">
-                <div class="text-[11px] uppercase font-bold tracking-wider text-base-content/70">Barcode &amp; Prefix</div>
-                <select :value="filterBarcode" @change="$emit('update:filterBarcode', $event.target.value)" class="select select-bordered select-sm w-full bg-base-100 font-bold text-xs">
-                    <option value="all">All Barcodes</option>
-                    <option value="__missing__">Missing Barcode (No UPC)</option>
-                    <option value="__has_barcode__">Has Barcode (Any UPC)</option>
-                    <option v-for="p in prefixes" :key="p.prefix" :value="p.prefix">{{ p.prefix }} ({{ p.count }})</option>
-                </select>
-            </div>
-
-            <!-- Lot Lineage -->
-            <div class="space-y-1.5">
-                <div class="text-[11px] uppercase font-bold tracking-wider text-base-content/70">Lot Lineage</div>
-                <select :value="filterLotType" @change="$emit('update:filterLotType', $event.target.value)" class="select select-bordered select-sm w-full bg-base-100 font-bold text-xs">
-                    <option value="all">All Items</option>
-                    <option value="lots_only">Parent Lots Only</option>
-                    <option value="extracted_only">Extracted Children Only</option>
-                    <option value="standalone_only">Standalone Items Only</option>
-                </select>
-            </div>
-
-            <!-- Modal Actions -->
-            <div class="modal-action justify-between pt-2 border-t border-base-200">
-                <button 
-                    v-if="activeFilterChips.length > 0" 
-                    type="button" 
-                    @click="$emit('clear-filters')" 
-                    class="btn btn-sm btn-ghost text-error font-bold"
-                >
-                    Reset All
-                </button>
-                <div v-else></div>
-                <button type="button" @click="isFiltersOpen = false" class="btn btn-sm btn-primary font-bold px-5">
-                    Done
-                </button>
-            </div>
+    <!-- Canonical Slide-Over Drawer for Advanced Filters & Exclusions (Jakob's Law) -->
+    <SlideOverDrawer
+      v-model="isFiltersOpen"
+      title="Filters & Exclusions"
+      subtitle="Refine status, health checks, lot lineage, and hidden item groups."
+    >
+      <div class="space-y-5">
+        <!-- Status Pipeline (especially handy on mobile) -->
+        <div class="flex flex-col gap-1">
+          <label for="hdr-filter-status" class="text-xs font-bold text-base-content/80">Inventory Status</label>
+          <select
+            id="hdr-filter-status"
+            :value="filterStatus"
+            class="select select-bordered select-sm h-11 md:h-9 w-full rounded-xl bg-base-100 font-bold text-xs"
+            @change="$emit('update:filterStatus', ($event.target as HTMLSelectElement).value)"
+          >
+            <option value="active">Active Stock ({{ getStatusCount('active') }})</option>
+            <option value="acquired">Acquired ({{ getStatusCount('acquired') }})</option>
+            <option value="received">Received ({{ getStatusCount('received') }})</option>
+            <option value="placed">Placed ({{ getStatusCount('placed') }})</option>
+            <option value="tracked">Tracked / Unacquired ({{ getStatusCount('tracked') }})</option>
+            <option value="sold">Sold ({{ getStatusCount('sold') }})</option>
+            <option value="all">All Records ({{ totalCount }})</option>
+          </select>
         </div>
-        <form method="dialog" class="modal-backdrop" @click="isFiltersOpen = false">
-            <button type="button">close</button>
-        </form>
-    </dialog>
+
+        <!-- Visibility Toggles -->
+        <div class="space-y-2 rounded-2xl bg-base-200/60 border border-base-300 p-3.5">
+          <div class="text-xs font-extrabold uppercase tracking-wider text-base-content/75">
+            Visibility &amp; Exclusions
+          </div>
+
+          <label class="flex items-center justify-between gap-3 p-2 rounded-xl bg-base-100 border border-base-300 cursor-pointer">
+            <span class="text-xs font-bold text-base-content">Hide Deconstructed Parent Lots</span>
+            <input
+              type="checkbox"
+              :checked="hideDeconstructed"
+              class="toggle toggle-sm toggle-primary shrink-0"
+              @change="$emit('update:hideDeconstructed', ($event.target as HTMLInputElement).checked)"
+            />
+          </label>
+
+          <label class="flex items-center justify-between gap-3 p-2 rounded-xl bg-base-100 border border-base-300 cursor-pointer">
+            <span class="text-xs font-bold text-base-content">Hide Combined / Merged Source Items</span>
+            <input
+              type="checkbox"
+              :checked="hideCombined"
+              class="toggle toggle-sm toggle-primary shrink-0"
+              @change="$emit('update:hideCombined', ($event.target as HTMLInputElement).checked)"
+            />
+          </label>
+
+          <label class="flex items-center justify-between gap-3 p-2 rounded-xl bg-base-100 border border-base-300 cursor-pointer">
+            <span class="text-xs font-bold text-base-content">Hide Sold Items</span>
+            <input
+              type="checkbox"
+              :checked="hideSold"
+              class="toggle toggle-sm toggle-primary shrink-0"
+              @change="$emit('update:hideSold', ($event.target as HTMLInputElement).checked)"
+            />
+          </label>
+
+          <label class="flex items-center justify-between gap-3 p-2 rounded-xl bg-base-100 border border-base-300 cursor-pointer">
+            <span class="text-xs font-bold text-base-content">Hide Unacquired Trackers &amp; Scout Cart</span>
+            <input
+              type="checkbox"
+              :checked="hideTracked"
+              class="toggle toggle-sm toggle-primary shrink-0"
+              @change="$emit('update:hideTracked', ($event.target as HTMLInputElement).checked)"
+            />
+          </label>
+
+          <label class="flex items-center justify-between gap-3 p-2 rounded-xl bg-base-100 border border-base-300 cursor-pointer">
+            <span class="text-xs font-bold text-base-content">Only Placed &amp; Located Stock</span>
+            <input
+              type="checkbox"
+              :checked="filterPlacedLocated"
+              class="toggle toggle-sm toggle-primary shrink-0"
+              @change="$emit('update:filterPlacedLocated', ($event.target as HTMLInputElement).checked)"
+            />
+          </label>
+        </div>
+
+        <!-- Location / Bin -->
+        <div class="flex flex-col gap-1">
+          <label for="hdr-filter-loc" class="text-xs font-bold text-base-content/80">Specific Location or Shelf Bin</label>
+          <select
+            id="hdr-filter-loc"
+            :value="filterLocation"
+            class="select select-bordered select-sm h-11 md:h-9 w-full rounded-xl bg-base-100 font-bold text-xs"
+            @change="$emit('update:filterLocation', ($event.target as HTMLSelectElement).value)"
+          >
+            <option value="all">All Locations</option>
+            <option v-for="loc in locations" :key="loc.value || loc" :value="loc.value || loc">{{ loc.label || loc }}</option>
+          </select>
+        </div>
+
+        <!-- Health Insights -->
+        <div class="flex flex-col gap-1">
+          <label for="hdr-filter-insight" class="text-xs font-bold text-base-content/80">Catalog Health Check</label>
+          <select
+            id="hdr-filter-insight"
+            :value="filterInsight"
+            class="select select-bordered select-sm h-11 md:h-9 w-full rounded-xl bg-base-100 font-bold text-xs"
+            @change="$emit('update:filterInsight', ($event.target as HTMLSelectElement).value)"
+          >
+            <option value="">All Health Statuses</option>
+            <option value="needs_shop_update">Needs Shop Update</option>
+            <option value="ready_to_list">Ready to List</option>
+            <option value="missing_photos">Missing Photos</option>
+            <option value="missing_est_value">Missing Pricing</option>
+            <option value="missing_cost">Missing Cost Basis</option>
+          </select>
+        </div>
+
+        <!-- Barcode Prefix -->
+        <div class="flex flex-col gap-1">
+          <label for="hdr-filter-barcode" class="text-xs font-bold text-base-content/80">Barcode &amp; Partner Prefix</label>
+          <select
+            id="hdr-filter-barcode"
+            :value="filterBarcode"
+            class="select select-bordered select-sm h-11 md:h-9 w-full rounded-xl bg-base-100 font-bold text-xs"
+            @change="$emit('update:filterBarcode', ($event.target as HTMLSelectElement).value)"
+          >
+            <option value="all">All Barcodes</option>
+            <option value="__missing__">Missing Barcode (No UPC)</option>
+            <option value="__has_barcode__">Has Barcode (Any UPC)</option>
+            <option v-for="p in prefixes" :key="p.prefix" :value="p.prefix">{{ p.prefix }} ({{ p.count }})</option>
+          </select>
+        </div>
+
+        <!-- Lot Lineage -->
+        <div class="flex flex-col gap-1">
+          <label for="hdr-filter-lot" class="text-xs font-bold text-base-content/80">Lot Lineage</label>
+          <select
+            id="hdr-filter-lot"
+            :value="filterLotType"
+            class="select select-bordered select-sm h-11 md:h-9 w-full rounded-xl bg-base-100 font-bold text-xs"
+            @change="$emit('update:filterLotType', ($event.target as HTMLSelectElement).value)"
+          >
+            <option value="all">All Items</option>
+            <option value="lots_only">Parent Lots Only</option>
+            <option value="extracted_only">Split Children Only</option>
+            <option value="standalone_only">Standalone Items Only</option>
+          </select>
+        </div>
+      </div>
+
+      <template #footer>
+        <div class="flex items-center justify-between gap-2">
+          <button
+            v-if="activeFilterChips.length > 0"
+            type="button"
+            class="btn btn-sm h-11 md:h-9 btn-ghost text-error rounded-xl font-bold"
+            @click="$emit('clear-filters')"
+          >
+            Reset All Filters
+          </button>
+          <span v-else></span>
+          <button
+            type="button"
+            class="btn btn-sm h-11 md:h-9 btn-primary text-primary-content rounded-xl font-black px-5"
+            @click="isFiltersOpen = false"
+          >
+            Apply &amp; Close
+          </button>
+        </div>
+      </template>
+    </SlideOverDrawer>
 
     <!-- BARCODE & MINI QR CAMERA SCANNER -->
-    <BarcodeScannerModal 
-        :is-open="isScannerOpen"
-        title="Scan Tag to Filter Inventory"
-        subtitle="Point camera at barcode or Mini QR to instantly search"
-        @close="isScannerOpen = false"
-        @scan="handleScannedCode"
+    <BarcodeScannerModal
+      :is-open="isScannerOpen"
+      title="Scan Tag to Filter Inventory"
+      subtitle="Point camera at barcode or Mini QR to instantly search"
+      @close="isScannerOpen = false"
+      @scan="handleScannedCode"
     />
+  </div>
 </template>
 
-<script setup>
-import { ref } from 'vue';
+<script setup lang="ts">
+import { computed, ref } from 'vue';
 import { Icon } from '@iconify/vue';
 import BarcodeScannerModal from '../common/BarcodeScannerModal.vue';
+import SlideOverDrawer from '../common/SlideOverDrawer.vue';
+import { SMART_QUEUES } from '../../lib/inventoryVibes';
 import { addToast } from '../../stores/toast';
 
 const isFiltersOpen = ref(false);
 const isScannerOpen = ref(false);
 
-const handleScannedCode = (res) => {
-    if (!res?.rawValue) return;
-    emit('update:searchQuery', res.rawValue);
-    addToast(`Scanned: ${res.rawValue} (${res.format || 'code'})`, 'success');
-};
-
-const props = defineProps({
-    title: { type: String, default: 'Inventory' },
-    subtitle: { type: String, default: 'Spreadsheet / High-Density View' },
-    searchQuery: { type: String, default: '' },
-    filterStatus: { type: String, default: 'active' },
-    filterLocation: { type: String, default: 'all' },
-    filterChannel: { type: String, default: 'all' },
-    hideSold: { type: Boolean, default: true },
-    hideTracked: { type: Boolean, default: true },
-    hideCombined: { type: Boolean, default: true },
-    hideDeconstructed: { type: Boolean, default: true },
-    filterPlacedLocated: { type: Boolean, default: false },
-    filterInsight: { type: String, default: '' },
-    filterBarcode: { type: String, default: 'all' },
-    filterLotType: { type: String, default: 'all' },
-    locations: { type: Array, default: () => [] },
-    prefixes: { type: Array, default: () => [] },
-    activeFilterChips: { type: Array, default: () => [] },
-    totalCount: { type: Number, default: 0 },
-    filteredCount: { type: Number, default: 0 },
-    loading: { type: Boolean, default: false },
-    statusCounts: { type: Object, default: () => ({}) },
-    switchViewHref: { type: String, default: '/inventory' },
-    switchViewLabel: { type: String, default: 'Card Grid' },
-    switchViewIcon: { type: String, default: 'solar:gallery-wide-linear' },
-    switchViewTitle: { type: String, default: 'Switch to Visual Card Grid' },
-    viewMode: { type: String, default: '' }
-});
+const props = withDefaults(
+  defineProps<{
+    title?: string;
+    subtitle?: string;
+    searchQuery?: string;
+    filterStatus?: string;
+    filterLocation?: string;
+    filterChannel?: string;
+    filterSmartQueue?: string;
+    hideSold?: boolean;
+    hideTracked?: boolean;
+    hideCombined?: boolean;
+    hideDeconstructed?: boolean;
+    filterPlacedLocated?: boolean;
+    filterInsight?: string;
+    filterBarcode?: string;
+    filterLotType?: string;
+    locations?: any[];
+    prefixes?: any[];
+    activeFilterChips?: any[];
+    totalCount?: number;
+    filteredCount?: number;
+    loading?: boolean;
+    statusCounts?: Record<string, number>;
+    switchViewHref?: string;
+    switchViewLabel?: string;
+    switchViewIcon?: string;
+    switchViewTitle?: string;
+    viewMode?: string;
+  }>(),
+  {
+    title: 'Inventory',
+    subtitle: 'Spreadsheet / High-Density View',
+    searchQuery: '',
+    filterStatus: 'active',
+    filterLocation: 'all',
+    filterChannel: 'all',
+    filterSmartQueue: '',
+    hideSold: true,
+    hideTracked: true,
+    hideCombined: true,
+    hideDeconstructed: true,
+    filterPlacedLocated: false,
+    filterInsight: '',
+    filterBarcode: 'all',
+    filterLotType: 'all',
+    locations: () => [],
+    prefixes: () => [],
+    activeFilterChips: () => [],
+    totalCount: 0,
+    filteredCount: 0,
+    loading: false,
+    statusCounts: () => ({}),
+    switchViewHref: '/inventory',
+    switchViewLabel: 'Card Grid',
+    switchViewIcon: 'solar:gallery-wide-linear',
+    switchViewTitle: 'Switch to Visual Card Grid',
+    viewMode: '',
+  }
+);
 
 const emit = defineEmits([
-    'update:searchQuery',
-    'update:filterStatus',
-    'update:filterLocation',
-    'update:filterChannel',
-    'update:hideSold',
-    'update:hideTracked',
-    'update:hideCombined',
-    'update:hideDeconstructed',
-    'update:filterPlacedLocated',
-    'update:filterInsight',
-    'update:filterBarcode',
-    'update:filterLotType',
-    'update:viewMode',
-    'add',
-    'import',
-    'clear-filters'
+  'update:searchQuery',
+  'update:filterStatus',
+  'update:filterLocation',
+  'update:filterChannel',
+  'update:hideSold',
+  'update:hideTracked',
+  'update:hideCombined',
+  'update:hideDeconstructed',
+  'update:filterPlacedLocated',
+  'update:filterInsight',
+  'update:filterBarcode',
+  'update:filterLotType',
+  'update:viewMode',
+  'open-queues',
+  'add',
+  'import',
+  'clear-filters',
 ]);
 
-const getStatusCount = (status) => {
-    return props.statusCounts[status] || 0;
+const activeQueueMeta = computed(() => {
+  if (!props.filterSmartQueue) return null;
+  return SMART_QUEUES.find((q) => q.id === props.filterSmartQueue) || null;
+});
+
+const handleScannedCode = (res: any) => {
+  if (!res?.rawValue) return;
+  emit('update:searchQuery', res.rawValue);
+  addToast(`Scanned: ${res.rawValue} (${res.format || 'code'})`, 'success');
+};
+
+const getStatusCount = (status: string) => {
+  return props.statusCounts?.[status] || 0;
 };
 </script>

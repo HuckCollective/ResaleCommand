@@ -182,14 +182,14 @@
               <div class="flex items-center justify-between gap-2 pt-0.5 text-xs flex-wrap">
                 <a
                   :href="'/inventory?location=' + encodeURIComponent(warehouse.code || warehouse.name)"
-                  class="font-bold text-primary hover:underline inline-flex items-center gap-1 min-h-9"
+                  class="font-bold text-primary hover:underline inline-flex items-center gap-1 min-h-11 md:min-h-7"
                 >
                   <Icon icon="solar:box-minimalistic-linear" class="w-3.5 h-3.5" />
                   <span>Browse Booth Items ({{ getItemsForWarehouse(warehouse).length }})</span>
                 </a>
                 <button
                   type="button"
-                  class="btn btn-xs h-9 md:h-7 btn-ghost text-error hover:bg-error/10 rounded-lg font-bold"
+                  class="btn btn-xs h-11 md:h-7 btn-ghost text-error hover:bg-error/10 rounded-lg font-bold"
                   @click="confirmDelete(warehouse)"
                 >
                   Delete Booth
@@ -297,7 +297,7 @@
                 <button
                   v-if="!isWarehouseDefault(warehouse)"
                   type="button"
-                  class="btn btn-xs h-9 md:h-7 btn-ghost gap-1 font-bold text-base-content/80 hover:text-warning rounded-lg"
+                  class="btn btn-xs h-11 md:h-7 btn-ghost gap-1 font-bold text-base-content/80 hover:text-warning rounded-lg"
                   @click="setAsDefaultBackstock(warehouse)"
                 >
                   <Icon icon="solar:star-linear" class="w-3.5 h-3.5 text-warning" />
@@ -307,7 +307,7 @@
 
                 <button
                   type="button"
-                  class="btn btn-xs h-9 md:h-7 btn-ghost text-error hover:bg-error/10 rounded-lg font-bold"
+                  class="btn btn-xs h-11 md:h-7 btn-ghost text-error hover:bg-error/10 rounded-lg font-bold"
                   @click="confirmDelete(warehouse)"
                 >
                   Delete Storage
@@ -410,21 +410,21 @@
             <span class="text-[10px] font-bold uppercase opacity-55">Quick Exclusions:</span>
             <button
               type="button"
-              class="btn btn-2xs h-7 btn-outline rounded-lg font-bold"
+              class="btn btn-2xs h-11 md:h-7 btn-outline rounded-lg font-bold"
               @click="appendRuleToTextarea('NO Clothes')"
             >
               ⛔ NO Clothes
             </button>
             <button
               type="button"
-              class="btn btn-2xs h-7 btn-outline rounded-lg font-bold"
+              class="btn btn-2xs h-11 md:h-7 btn-outline rounded-lg font-bold"
               @click="appendRuleToTextarea('NO Large Toys')"
             >
               ⛔ NO Large Toys
             </button>
             <button
               type="button"
-              class="btn btn-2xs h-7 btn-outline rounded-lg font-bold"
+              class="btn btn-2xs h-11 md:h-7 btn-outline rounded-lg font-bold"
               @click="appendRuleToTextarea('Under 8 inches only')"
             >
               📏 Under 8" Only
@@ -465,13 +465,13 @@
               v-model="newWatchTag"
               type="text"
               placeholder="Add tag or brand (e.g. Sterling 925, Star Trek)"
-              class="input input-bordered input-sm h-10 join-item flex-1 bg-base-100 text-xs font-semibold"
+              class="input input-bordered input-sm h-11 md:h-9 join-item flex-1 bg-base-100 text-xs font-semibold"
               @keydown.enter.prevent="addWatchTag()"
             />
             <button
               type="button"
               :disabled="!newWatchTag.trim()"
-              class="btn btn-sm h-10 join-item btn-outline font-bold"
+              class="btn btn-sm h-11 md:h-9 join-item btn-outline font-bold"
               @click="addWatchTag()"
             >
               Add Tag

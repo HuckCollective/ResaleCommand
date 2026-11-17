@@ -163,7 +163,7 @@
 
             <!-- Collapsible First-Time Phone Setup (Progressive Disclosure — Krug #3) -->
             <details class="group rounded-xl border border-base-300 bg-base-200/50 px-3 py-2 text-[11px]">
-              <summary class="cursor-pointer font-extrabold text-base-content flex items-center justify-between gap-2 select-none min-h-9 list-none">
+              <summary class="cursor-pointer font-extrabold text-base-content flex items-center justify-between gap-2 select-none min-h-11 md:min-h-9 list-none">
                 <span>📲 First-time phone setup</span>
                 <span class="text-xs opacity-60 group-open:rotate-180 transition-transform">▾</span>
               </summary>
@@ -325,7 +325,7 @@
           href="https://shopgoodwill.com/shopgoodwill/inprogress-auctions"
           target="_blank"
           rel="noopener noreferrer"
-          class="btn btn-2xs h-9 md:h-6 btn-outline font-mono font-bold gap-1 rounded-lg"
+          class="btn btn-2xs h-11 md:h-6 btn-outline font-mono font-bold gap-1 rounded-lg"
         >
           <span>1. inprogress-auctions ↗</span>
         </a>
@@ -333,7 +333,7 @@
           href="https://shopgoodwill.com/shopgoodwill/closed-auctions"
           target="_blank"
           rel="noopener noreferrer"
-          class="btn btn-2xs h-9 md:h-6 btn-outline font-mono font-bold gap-1 rounded-lg"
+          class="btn btn-2xs h-11 md:h-6 btn-outline font-mono font-bold gap-1 rounded-lg"
         >
           <span>2. closed-auctions ↗</span>
         </a>
@@ -341,7 +341,7 @@
           href="https://shopgoodwill.com/shopgoodwill/shipped-orders"
           target="_blank"
           rel="noopener noreferrer"
-          class="btn btn-2xs h-9 md:h-6 btn-outline font-mono font-bold gap-1 rounded-lg"
+          class="btn btn-2xs h-11 md:h-6 btn-outline font-mono font-bold gap-1 rounded-lg"
         >
           <span>3. shipped-orders ↗</span>
         </a>
@@ -354,7 +354,7 @@
         <span v-if="savedMsg" class="text-success font-bold">{{ savedMsg }}</span>
         <template v-else-if="errMsg">
           <span class="text-error font-bold">{{ errMsg }}</span>
-          <button type="button" class="btn btn-xs h-9 md:h-7 btn-outline rounded-lg font-bold" @click="saveRegistry">
+          <button type="button" class="btn btn-xs h-11 md:h-7 btn-outline rounded-lg font-bold" @click="saveRegistry">
             Retry Save
           </button>
         </template>
@@ -373,9 +373,11 @@
           type="button"
           class="btn btn-xs sm:btn-sm h-11 md:h-9 rounded-xl gap-1.5"
           :class="
-            localSession || isDirty
+            localSession
               ? 'btn-primary text-primary-content font-black shadow-xs'
-              : 'btn-outline btn-primary font-bold'
+              : isDirty
+                ? 'btn-secondary text-secondary-content font-black shadow-xs'
+                : 'btn-outline btn-primary font-bold'
           "
           :disabled="!canEdit || saving"
           @click="saveRegistry"

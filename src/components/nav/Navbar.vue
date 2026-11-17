@@ -101,7 +101,7 @@
         <a
           href="/scout?quick=true"
           @click="handleScoutClick"
-          class="btn btn-xs sm:btn-sm rounded-lg gap-1.5 font-bold px-2.5 h-9 md:h-8 min-h-0 border-0 shadow-none whitespace-nowrap transition-all"
+          class="btn btn-xs sm:btn-sm rounded-lg gap-1.5 font-bold px-2.5 h-11 md:h-8 min-h-0 border-0 shadow-none whitespace-nowrap transition-all"
           :class="
             currentPath === '/scout'
               ? 'btn-primary text-primary-content shadow-xs'
@@ -123,7 +123,7 @@
         <a
           v-if="capabilities.canUseBuyTracker && showMemberNav"
           href="/scout/trackers"
-          class="btn btn-xs sm:btn-sm rounded-lg gap-1 font-bold px-2 h-9 md:h-8 min-h-0 border-0 shadow-none whitespace-nowrap transition-all"
+          class="btn btn-xs sm:btn-sm rounded-lg gap-1 font-bold px-2 h-11 md:h-8 min-h-0 border-0 shadow-none whitespace-nowrap transition-all"
           :class="
             currentPath.startsWith('/scout/tracker')
               ? 'btn-secondary text-secondary-content shadow-xs'
@@ -545,72 +545,85 @@
       </Transition>
     </Teleport>
 
-    <!-- Workspace Create / Invite Modals -->
-    <dialog class="modal" :class="{ 'modal-open': showCreateModal }">
-      <div class="modal-box rounded-2xl">
-        <h3 class="font-bold text-lg">Create New Organization</h3>
-        <p class="py-2 text-sm opacity-75">Create a shared co-op workspace.</p>
-        <div class="py-4">
-          <input
-            v-model="newTeamName"
-            type="text"
-            placeholder="Organization Name"
-            aria-label="Organization Name"
-            class="input input-bordered h-11 w-full rounded-xl"
-            @keydown.enter.prevent="handleCreateTeam"
-          />
-        </div>
-        <div class="modal-action">
-          <button type="button" class="btn h-11 md:h-9 rounded-xl" @click="showCreateModal = false">Cancel</button>
+    <!-- Canonical Slide-Over Drawers for Workspace Creation & Collective Invites (Jakob's Law) -->
+    <SlideOverDrawer
+      v-model="showCreateModal"
+      title="Create New Organization"
+      subtitle="Create a shared Collective workspace."
+    >
+      <div class="space-y-2">
+        <label for="rc-nav-org-name" class="text-xs font-bold text-base-content/80 block">Organization Name</label>
+        <input
+          id="rc-nav-org-name"
+          v-model="newTeamName"
+          type="text"
+          placeholder="e.g. The Huckleberry Collective"
+          class="input input-bordered h-11 md:h-9 w-full rounded-xl"
+          @keydown.enter.prevent="handleCreateTeam"
+        />
+      </div>
+      <template #footer>
+        <div class="flex items-center justify-end gap-2">
+          <button type="button" class="btn btn-sm h-11 md:h-9 btn-ghost rounded-xl font-bold" @click="showCreateModal = false">
+            Cancel
+          </button>
           <button
             type="button"
-            class="btn h-11 md:h-9 btn-primary text-primary-content font-bold rounded-xl"
-            :disabled="!newTeamName.trim()"
+            class="btn btn-sm h-11 md:h-9 btn-primary text-primary-content font-black rounded-xl px-4"
+            :disabled="submittingTeamAction || !newTeamName.trim()"
             @click="handleCreateTeam"
           >
-            Create Workspace
+            <span v-if="submittingTeamAction" class="loading loading-spinner loading-xs"></span>
+            <span>Create Workspace</span>
           </button>
         </div>
-      </div>
-    </dialog>
+      </template>
+    </SlideOverDrawer>
 
-    <dialog class="modal" :class="{ 'modal-open': showInviteModal }">
-      <div class="modal-box rounded-2xl">
-        <h3 class="font-bold text-lg">Invite to the Collective</h3>
-        <p class="py-2 text-sm opacity-75">Send an invitation email to join your workspace.</p>
-        <div class="py-4">
-          <input
-            v-model="inviteEmail"
-            type="email"
-            autocomplete="email"
-            autocapitalize="none"
-            spellcheck="false"
-            placeholder="member@thehc.llc"
-            aria-label="Member email address"
-            class="input input-bordered h-11 w-full rounded-xl"
-            @keydown.enter.prevent="handleInvite"
-          />
-        </div>
-        <div class="modal-action">
-          <button type="button" class="btn h-11 md:h-9 rounded-xl" @click="showInviteModal = false">Cancel</button>
+    <SlideOverDrawer
+      v-model="showInviteModal"
+      title="Invite to the Collective"
+      subtitle="Send an invitation email to join your active workspace."
+    >
+      <div class="space-y-2">
+        <label for="rc-nav-invite-email" class="text-xs font-bold text-base-content/80 block">Member Email Address</label>
+        <input
+          id="rc-nav-invite-email"
+          v-model="inviteEmail"
+          type="email"
+          autocomplete="email"
+          autocapitalize="none"
+          spellcheck="false"
+          placeholder="member@thehc.llc"
+          class="input input-bordered h-11 md:h-9 w-full rounded-xl"
+          @keydown.enter.prevent="handleInvite"
+        />
+      </div>
+      <template #footer>
+        <div class="flex items-center justify-end gap-2">
+          <button type="button" class="btn btn-sm h-11 md:h-9 btn-ghost rounded-xl font-bold" @click="showInviteModal = false">
+            Cancel
+          </button>
           <button
             type="button"
-            class="btn h-11 md:h-9 btn-primary text-primary-content font-bold rounded-xl"
-            :disabled="!inviteEmail.trim()"
+            class="btn btn-sm h-11 md:h-9 btn-primary text-primary-content font-black rounded-xl px-4"
+            :disabled="submittingTeamAction || !inviteEmail.trim()"
             @click="handleInvite"
           >
-            Send Invite
+            <span v-if="submittingTeamAction" class="loading loading-spinner loading-xs"></span>
+            <span>Send Invite</span>
           </button>
         </div>
-      </div>
-    </dialog>
+      </template>
+    </SlideOverDrawer>
   </nav>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, watch } from 'vue';
+import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue';
 import { useStore } from '@nanostores/vue';
 import { Icon } from '@iconify/vue';
+import SlideOverDrawer from '../common/SlideOverDrawer.vue';
 import ThemeSwitcher from '../ui/ThemeSwitcher.vue';
 import { isAlphaMode } from '../../stores/env';
 import { useAuth } from '../../composables/useAuth';
@@ -738,13 +751,26 @@ const mobilePrimaryLinks = computed(() => {
   return direct.slice(0, MAX_DROPDOWN_ITEMS);
 });
 
+const onMobileEscape = (e: KeyboardEvent) => {
+  if (e.key === 'Escape' && openMobile.value) {
+    openMobile.value = false;
+  }
+};
+
 onMounted(() => {
   isMounted.value = true;
   if (typeof window !== 'undefined') {
     currentPath.value = window.location.pathname;
+    window.addEventListener('keydown', onMobileEscape);
   }
   if (isAuthenticated.value) {
     loadDraftPurchases().catch((err) => console.warn('[Navbar] Failed to load draft purchases:', err));
+  }
+});
+
+onBeforeUnmount(() => {
+  if (typeof window !== 'undefined') {
+    window.removeEventListener('keydown', onMobileEscape);
   }
 });
 
@@ -779,8 +805,23 @@ const alphaMode = useStore(isAlphaMode);
 
 const showCreateModal = ref(false);
 const showInviteModal = ref(false);
+const submittingTeamAction = ref(false);
 const newTeamName = ref('');
 const inviteEmail = ref('');
+
+watch(showCreateModal, (open) => {
+  if (open) {
+    showInviteModal.value = false;
+    openMobile.value = false;
+  }
+});
+
+watch(showInviteModal, (open) => {
+  if (open) {
+    showCreateModal.value = false;
+    openMobile.value = false;
+  }
+});
 
 const userInitial = computed(() => {
   return user.value && user.value.name ? user.value.name.charAt(0).toUpperCase() : '?';
@@ -808,19 +849,23 @@ const handleMobileSwitchTeam = async (event: Event) => {
 
 const handleCreateTeam = async () => {
   const name = newTeamName.value.trim();
-  if (!name) return;
+  if (!name || submittingTeamAction.value) return;
+  submittingTeamAction.value = true;
   try {
     await createTeam(name);
     showCreateModal.value = false;
     newTeamName.value = '';
   } catch (e: any) {
     addToast({ type: 'error', message: toUserMessage(e, "Couldn't create workspace — please try again.") });
+  } finally {
+    submittingTeamAction.value = false;
   }
 };
 
 const handleInvite = async () => {
   const cleanEmail = inviteEmail.value.trim().toLowerCase();
-  if (!cleanEmail || !currentTeam.value) return;
+  if (!cleanEmail || !currentTeam.value || submittingTeamAction.value) return;
+  submittingTeamAction.value = true;
   try {
     await inviteMember(currentTeam.value.$id, cleanEmail);
     showInviteModal.value = false;
@@ -832,6 +877,8 @@ const handleInvite = async () => {
     } else {
       addToast({ type: 'error', message: toUserMessage(e, "Couldn't send invitation — please try again.") });
     }
+  } finally {
+    submittingTeamAction.value = false;
   }
 };
 

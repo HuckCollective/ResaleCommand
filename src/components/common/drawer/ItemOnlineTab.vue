@@ -9,28 +9,31 @@
         <!-- 1. ITEM SUMMARY & PIRATE SHIP SKU -->
         <div class="rounded-2xl border border-base-300 bg-base-200/50 p-3.5 sm:p-4 space-y-2.5">
           <div class="flex items-start justify-between gap-3 flex-wrap sm:flex-nowrap">
-            <div class="min-w-0">
-              <div class="flex items-center gap-2 flex-wrap mb-1">
-                <span class="badge badge-sm badge-primary text-primary-content font-mono font-bold whitespace-nowrap shrink-0">
-                  {{ effectiveUpc || 'NO-SKU' }}
-                </span>
-                <span
-                  v-if="existingRecord && existingRecord.status !== 'released'"
-                  class="badge badge-sm font-bold whitespace-nowrap shrink-0"
-                  :class="statusBadgeClass"
-                >
-                  {{ statusBadgeLabel }}
-                </span>
-                <span v-else class="badge badge-sm badge-ghost font-semibold whitespace-nowrap shrink-0">
-                  Not yet in Online Bin
-                </span>
+            <div class="flex items-start gap-3 min-w-0 flex-1">
+              <ItemThumbnail :item="item" size="sm" rounded="lg" class="shrink-0 mt-0.5" />
+              <div class="min-w-0 flex-1">
+                <div class="flex items-center gap-2 flex-wrap mb-1">
+                  <span class="badge badge-sm badge-primary text-primary-content font-mono font-bold whitespace-nowrap shrink-0">
+                    {{ effectiveUpc || 'NO-SKU' }}
+                  </span>
+                  <span
+                    v-if="existingRecord && existingRecord.status !== 'released'"
+                    class="badge badge-sm font-bold whitespace-nowrap shrink-0"
+                    :class="statusBadgeClass"
+                  >
+                    {{ statusBadgeLabel }}
+                  </span>
+                  <span v-else class="badge badge-sm badge-ghost font-semibold whitespace-nowrap shrink-0">
+                    Not yet in Online Bin
+                  </span>
+                </div>
+                <h4 class="font-bold text-sm sm:text-base text-base-content leading-snug">
+                  {{ itemTitle }}
+                </h4>
+                <p class="text-xs text-base-content/70 mt-0.5 font-mono">
+                  OG Cost: <strong>${{ itemCost.toFixed(2) }}</strong> • Est. Tag: <strong>${{ itemPrice.toFixed(2) }}</strong> • OG Partner: <strong>{{ eligibility.ogPrefix }}</strong>
+                </p>
               </div>
-              <h4 class="font-bold text-sm sm:text-base text-base-content leading-snug">
-                {{ itemTitle }}
-              </h4>
-              <p class="text-xs text-base-content/70 mt-0.5 font-mono">
-                OG Cost: <strong>${{ itemCost.toFixed(2) }}</strong> • Est. Tag: <strong>${{ itemPrice.toFixed(2) }}</strong> • OG Partner: <strong>{{ eligibility.ogPrefix }}</strong>
-              </p>
             </div>
 
             <button
@@ -105,25 +108,21 @@
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
               <button
                 type="button"
-                class="btn h-auto min-h-11 py-2.5 px-3 rounded-xl justify-start text-left border"
-                :class="binFacility === 'HH' ? 'btn-primary text-primary-content border-primary shadow-xs' : 'btn-ghost bg-base-100 border-base-300'"
+                class="w-full text-left rounded-2xl border p-3 min-h-11 transition-all cursor-pointer"
+                :class="binFacility === 'HH' ? 'border-primary bg-primary/10 ring-1 ring-primary/30' : 'border-base-300 bg-base-100 hover:border-base-content/30'"
                 @click="binFacility = 'HH'"
               >
-                <div>
-                  <div class="font-bold text-xs sm:text-sm">🏡 {{ hhMeta.code }} — {{ hhMeta.shortName }} Online Bin</div>
-                  <div class="text-[11px] opacity-80 font-normal">Apparel, media, books, jewelry &amp; smalls</div>
-                </div>
+                <div class="font-bold text-xs sm:text-sm text-base-content">🏡 {{ hhMeta.code }} — {{ hhMeta.shortName }} Online Bin</div>
+                <div class="text-[11px] text-base-content/70 mt-0.5">Apparel, media, books, jewelry &amp; smalls</div>
               </button>
               <button
                 type="button"
-                class="btn h-auto min-h-11 py-2.5 px-3 rounded-xl justify-start text-left border"
-                :class="binFacility === 'HG' ? 'btn-primary text-primary-content border-primary shadow-xs' : 'btn-ghost bg-base-100 border-base-300'"
+                class="w-full text-left rounded-2xl border p-3 min-h-11 transition-all cursor-pointer"
+                :class="binFacility === 'HG' ? 'border-primary bg-primary/10 ring-1 ring-primary/30' : 'border-base-300 bg-base-100 hover:border-base-content/30'"
                 @click="binFacility = 'HG'"
               >
-                <div>
-                  <div class="font-bold text-xs sm:text-sm">🏠 {{ hgMeta.code }} — {{ hgMeta.shortName }} Online Bin</div>
-                  <div class="text-[11px] opacity-80 font-normal">Hardgoods, toys, boxed games &amp; decor</div>
-                </div>
+                <div class="font-bold text-xs sm:text-sm text-base-content">🏠 {{ hgMeta.code }} — {{ hgMeta.shortName }} Online Bin</div>
+                <div class="text-[11px] text-base-content/70 mt-0.5">Hardgoods, toys, boxed games &amp; decor</div>
               </button>
             </div>
             <p class="text-[11px] text-base-content/65">
@@ -436,6 +435,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
 import { Icon } from '@iconify/vue';
+import ItemThumbnail from '../ItemThumbnail.vue';
 import { useAuth } from '../../../composables/useAuth';
 import { loadCoopGovernanceState } from '../../../lib/coopGovernance';
 import { getCoopJwtHeaders } from '../../../lib/coopLedgerClient';

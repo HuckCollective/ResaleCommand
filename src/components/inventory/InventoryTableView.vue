@@ -1,6 +1,6 @@
 <template>
     <div class="space-y-4 w-full max-w-full min-w-0">
-        <!-- 1. STICKY TOP OMNIBAR & STATUS PIPELINE TABS -->
+        <!-- 1. CALM 2-ROW STICKY HEADER (Omnibox + ⚡ Queues & Lists + Storage vs Booths Bar) -->
         <InventoryHeader 
             title="Inventory"
             subtitle="Spreadsheet / High-Density View"
@@ -8,6 +8,7 @@
             v-model:filterStatus="filterStatus"
             v-model:filterLocation="filterLocation"
             v-model:filterChannel="filterChannel"
+            :filterSmartQueue="filterSmartQueue"
             v-model:hideSold="hideSold"
             v-model:hideTracked="hideTracked"
             v-model:hideCombined="hideCombined"
@@ -17,7 +18,7 @@
             v-model:filterBarcode="filterBarcode"
             v-model:filterLotType="filterLotType"
             :locations="allLocations"
-            :prefixes="allUpcPrefixes.list"
+            :prefixes="allUpcPrefixes"
             :activeFilterChips="activeFilterChips"
             :totalCount="inventoryItems.length"
             :filteredCount="filteredItems.length"
@@ -36,13 +37,32 @@
             switchViewTitle="Switch to Visual Card Grid"
             :viewMode="viewMode"
             @update:viewMode="$emit('update:viewMode', $event)"
+            @open-queues="openQueuesTray"
             @add="openAdd"
             @import="showImport = true"
             @clear-filters="clearFilters"
-        />
+        >
+            <template #spatial-bar>
+                <InventorySpatialBar
+                    :inventoryItems="inventoryItems"
+                    v-model:filterLocation="filterLocation"
+                    v-model:filterSmartQueue="filterSmartQueue"
+                    v-model:filterBarcode="filterBarcode"
+                    :filteredCount="filteredItems.length"
+                    :selectedCount="selectedItems.length"
+                    :sortColumn="sortColumn"
+                    :sortDirection="sortDirection"
+                    @update-sort="handleTableSortUpdate"
+                    @select-all="toggleAll(filteredItems)"
+                    @clear-selection="clearSelection"
+                    @quick-assign-location="handleQuickAssignTableLocation"
+                    @open-queues="openQueuesTray"
+                />
+            </template>
+        </InventoryHeader>
 
-        <!-- 1.5. 4-STAT CATALOG VALUATION & SPREAD STRIP -->
-        <KpiStatGrid :items="tableKpiStats" />
+        <!-- 1.5. COLLAPSIBLE 1-LINE VALUATION & MARGIN SUMMARY STRIP -->
+        <InventoryValuationStrip :stats="tableKpiStats" />
 
         <!-- 2. DENSE SPREADSHEET TABLE -->
         <div class="card bg-base-100 border border-base-200 shadow-sm overflow-hidden rounded-xl w-full max-w-full min-w-0 mb-6">
@@ -428,6 +448,15 @@
             @open-actions="openActionTray"
         />
 
+        <!-- 7.5. INTERACTIVE BOTTOM-SHEET QUEUES & LISTS TRAY -->
+        <InventoryQueuesTray
+            v-model="isQueuesTrayOpen"
+            :inventory-items="inventoryItems"
+            :active-queue-filter="filterSmartQueue"
+            @apply-queue="val => (filterSmartQueue = val)"
+            @inspect-item="openItem"
+        />
+
         <!-- 8. ACTIVE DROPCAST STAGING TRAY (Legacy Studio opt-in only) -->
         <DropcastStagingTray v-if="isLegacyDropcastStudio" />
     </div>
@@ -446,8 +475,10 @@ import { useAuth } from '../../composables/useAuth';
 import { addToast } from '../../stores/toast';
 import { confirmDialog } from '../../stores/confirm';
 import ItemThumbnail from '../common/ItemThumbnail.vue';
-import KpiStatGrid from '../common/KpiStatGrid.vue';
 import InventoryHeader from './InventoryHeader.vue';
+import InventorySpatialBar from './InventorySpatialBar.vue';
+import InventoryValuationStrip from './InventoryValuationStrip.vue';
+import InventoryQueuesTray from './InventoryQueuesTray.vue';
 import { computeInventoryKpiStats } from '../../lib/inventoryKpiStats';
 import InventoryPaginationDock from './InventoryPaginationDock.vue';
 import LocationManifestTray from './LocationManifestTray.vue';
@@ -517,6 +548,7 @@ const {
     filterPlacedLocated,
     filterInsight,
     filterBarcode,
+    filterSmartQueue,
     filterLotType,
     sortColumn,
     sortDirection,
@@ -571,8 +603,11 @@ const {
     activeManifest,
     stagedCount: manifestItemCount,
     isTrayOpen: isManifestTrayOpen,
+    isQueuesTrayOpen,
     openManifestTray,
     openActionTray,
+    openQueuesTray,
+    closeAllTrays,
     addToActiveManifest,
     removeFromManifest,
     clearStagedItems,
@@ -651,6 +686,7 @@ const pagedInventory = computed(() => {
 // Lifecycle
 onMounted(async () => {
     initFromUrl();
+    closeAllTrays();
     if (inventoryItems.value.length === 0) {
         await fetchInventory();
     }
@@ -658,9 +694,20 @@ onMounted(async () => {
 });
 
 // Reset page on filter change
-watch([searchQuery, filterStatus, filterLocation, filterChannel, hideSold, hideTracked, hideCombined, hideDeconstructed, filterPlacedLocated, filterInsight, filterBarcode, filterLotType], () => {
+watch([searchQuery, filterStatus, filterLocation, filterChannel, hideSold, hideTracked, hideCombined, hideDeconstructed, filterPlacedLocated, filterInsight, filterBarcode, filterSmartQueue, filterLotType], () => {
     currentPage.value = 1;
 });
+
+const handleTableSortUpdate = ({ column, direction }) => {
+    if (column) sortColumn.value = column;
+    if (direction === 'asc' || direction === 'desc') sortDirection.value = direction;
+};
+
+const handleQuickAssignTableLocation = async (targetCode) => {
+    const ids = selectedItems.value.length > 0 ? [...selectedItems.value] : filteredItems.value.map(i => i.$id).filter(Boolean);
+    if (ids.length === 0) return;
+    await applyBulkLocation(ids, targetCode);
+};
 
 // Smoothly scroll back to top of table on page change if scrolled down
 watch(currentPage, () => {
