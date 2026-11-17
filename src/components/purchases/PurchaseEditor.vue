@@ -434,7 +434,7 @@
                   <label class="label py-0.5"><span class="label-text text-xs font-semibold">Subtotal</span></label>
                   <label class="input input-sm input-bordered flex items-center gap-1.5 w-full">
                     <span class="opacity-50 text-xs">$</span>
-                    <input type="number" step="0.01" v-model.number="form.subtotal" class="grow w-full font-mono text-sm" />
+                    <input type="text" inputmode="decimal" v-model.number="form.subtotal" class="grow w-full font-mono text-sm" />
                   </label>
                 </div>
                 <div class="grid grid-cols-2 gap-3">
@@ -442,14 +442,14 @@
                     <label class="label py-0.5"><span class="label-text text-xs font-semibold">Shipping</span></label>
                     <label class="input input-sm input-bordered flex items-center gap-1.5 w-full">
                       <span class="opacity-50 text-xs">$</span>
-                      <input type="number" step="0.01" v-model.number="form.shippingTotal" class="grow w-full font-mono text-sm" />
+                      <input type="text" inputmode="decimal" v-model.number="form.shippingTotal" class="grow w-full font-mono text-sm" />
                     </label>
                   </div>
                   <div class="form-control w-full">
                     <label class="label py-0.5"><span class="label-text text-xs font-semibold">Handling</span></label>
                     <label class="input input-sm input-bordered flex items-center gap-1.5 w-full">
                       <span class="opacity-50 text-xs">$</span>
-                      <input type="number" step="0.01" v-model.number="form.handlingTotal" class="grow w-full font-mono text-sm" />
+                      <input type="text" inputmode="decimal" v-model.number="form.handlingTotal" class="grow w-full font-mono text-sm" />
                     </label>
                   </div>
                 </div>
@@ -458,14 +458,14 @@
                     <label class="label py-0.5"><span class="label-text text-xs font-semibold">Tax</span></label>
                     <label class="input input-sm input-bordered flex items-center gap-1.5 w-full">
                       <span class="opacity-50 text-xs">$</span>
-                      <input type="number" step="0.01" v-model.number="form.taxTotal" class="grow w-full font-mono text-sm" />
+                      <input type="text" inputmode="decimal" v-model.number="form.taxTotal" class="grow w-full font-mono text-sm" />
                     </label>
                   </div>
                   <div class="form-control w-full">
                     <label class="label py-0.5"><span class="label-text text-xs font-semibold">Fees</span></label>
                     <label class="input input-sm input-bordered flex items-center gap-1.5 w-full">
                       <span class="opacity-50 text-xs">$</span>
-                      <input type="number" step="0.01" v-model.number="form.feeTotal" class="grow w-full font-mono text-sm" />
+                      <input type="text" inputmode="decimal" v-model.number="form.feeTotal" class="grow w-full font-mono text-sm" />
                     </label>
                   </div>
                 </div>
@@ -854,8 +854,8 @@
                   <span class="opacity-60 font-bold">$</span>
                   <input 
                     v-model.number="newExpenseAmount" 
-                    type="number" 
-                    step="0.01" 
+                    type="text"
+                    inputmode="decimal"
                     placeholder="Amount" 
                     class="w-full text-xs sm:text-sm font-mono" 
                     @keydown.enter="handleAddExpense"
@@ -912,92 +912,82 @@
       @save="handleSavedItem" 
     />
 
-    <!-- Resale Tax & Deductions Playbook Modal -->
-    <dialog class="modal modal-bottom sm:modal-middle" :class="{ 'modal-open': showTaxGuide }">
-      <div class="modal-box max-w-xl space-y-4">
-        <div class="flex items-center justify-between border-b border-base-200 pb-2">
-          <div class="flex items-center gap-2">
-            <Icon icon="solar:calculator-bold-duotone" class="w-6 h-6 text-primary" />
-            <h3 class="font-black text-lg">Resale Tax & Deductions Playbook</h3>
-          </div>
-          <button class="btn btn-sm btn-circle btn-ghost" @click="showTaxGuide = false">✕</button>
+    <!-- Resale Tax & Deductions Playbook Drawer -->
+    <SlideOverDrawer
+      v-model="showTaxGuide"
+      title="Resale Tax & Deductions Playbook"
+      subtitle="IRS Schedule C & De Minimis Safe Harbor quick reference"
+      icon="solar:calculator-bold-duotone"
+      size="lg"
+    >
+      <div class="space-y-3 text-xs sm:text-sm text-base-content/80">
+        <!-- Section 1 -->
+        <div class="p-3.5 bg-base-200/70 rounded-2xl space-y-1.5 border border-base-300">
+          <h4 class="font-extrabold text-base-content flex items-center gap-1.5 text-sm">
+            <Icon icon="solar:check-circle-bold" class="w-4 h-4 text-success" />
+            Pure Expense POs (Zero Inventory)
+          </h4>
+          <p class="leading-relaxed">A Purchase Order doesn't need resale items! POs for supplies (Uline, Amazon), booth fixtures (Home Depot, IKEA), software, or "dry" sourcing trips (where you bought 0 items but paid parking & gas) are 100% tax-deductible business operating expenses.</p>
         </div>
 
-        <div class="space-y-3 text-xs sm:text-sm text-base-content/80 max-h-[65vh] overflow-y-auto pr-1">
-          <!-- Section 1 -->
-          <div class="p-3.5 bg-base-200/70 rounded-2xl space-y-1.5 border border-base-300">
-            <h4 class="font-extrabold text-base-content flex items-center gap-1.5 text-sm">
-              <Icon icon="solar:check-circle-bold" class="w-4 h-4 text-success" />
-              Pure Expense POs (Zero Inventory)
-            </h4>
-            <p class="leading-relaxed">A Purchase Order doesn't need resale items! POs for supplies (Uline, Amazon), booth fixtures (Home Depot, IKEA), software, or "dry" sourcing trips (where you bought 0 items but paid parking & gas) are 100% tax-deductible business operating expenses.</p>
-          </div>
-
-          <!-- Section 2 -->
-          <div class="p-3.5 bg-base-200/70 rounded-2xl space-y-1.5 border border-base-300">
-            <h4 class="font-extrabold text-base-content flex items-center gap-1.5 text-sm">
-              <Icon icon="solar:hand-money-bold" class="w-4 h-4 text-warning" />
-              Cash Purchases Without Receipts (IRS Cohan Rule)
-            </h4>
-            <p class="leading-relaxed">Under the IRS <em>Cohan Rule</em>, printed register receipts are not strictly required for cash buys (Craigslist, Marketplace, estate sales) as long as you log:</p>
-            <ul class="list-disc list-inside space-y-1 opacity-90 pl-1">
-              <li><strong>Date</strong> and <strong>Cash Amount Paid</strong></li>
-              <li><strong>Item Description</strong> (e.g. <em>"Vintage glass showcase and 2 chrome racks"</em>)</li>
-              <li><strong>Source/Vendor</strong> (e.g. <em>"Craigslist seller in Portland"</em>)</li>
-              <li><strong>Business Purpose</strong> (e.g. <em>"Display fixtures for Memory Den booth"</em>)</li>
-              <li><em>Pro-Tip: Snap a quick photo of the rack/case in your booth or backstock as proof!</em></li>
-            </ul>
-          </div>
-
-          <!-- Section 3 -->
-          <div class="p-3.5 bg-base-200/70 rounded-2xl space-y-1.5 border border-base-300">
-            <h4 class="font-extrabold text-base-content flex items-center gap-1.5 text-sm">
-              <Icon icon="solar:tag-bold" class="w-4 h-4 text-primary" />
-              Immediate 100% Write-Offs (De Minimis Safe Harbor)
-            </h4>
-            <p class="leading-relaxed">Under IRS Safe Harbor (§ 1.263(a)-1(f)), display racks, shelving, mannequins, and showcases under <strong>$2,500 each</strong> do not need to be depreciated over 7 years—they can be written off 100% in the current tax year!</p>
-          </div>
+        <!-- Section 2 -->
+        <div class="p-3.5 bg-base-200/70 rounded-2xl space-y-1.5 border border-base-300">
+          <h4 class="font-extrabold text-base-content flex items-center gap-1.5 text-sm">
+            <Icon icon="solar:hand-money-bold" class="w-4 h-4 text-warning" />
+            Cash Purchases Without Receipts (IRS Cohan Rule)
+          </h4>
+          <p class="leading-relaxed">Under the IRS <em>Cohan Rule</em>, printed register receipts are not strictly required for cash buys (Craigslist, Marketplace, estate sales) as long as you log:</p>
+          <ul class="list-disc list-inside space-y-1 opacity-90 pl-1">
+            <li><strong>Date</strong> and <strong>Cash Amount Paid</strong></li>
+            <li><strong>Item Description</strong> (e.g. <em>"Vintage glass showcase and 2 chrome racks"</em>)</li>
+            <li><strong>Source/Vendor</strong> (e.g. <em>"Craigslist seller in Portland"</em>)</li>
+            <li><strong>Business Purpose</strong> (e.g. <em>"Display fixtures for Memory Den booth"</em>)</li>
+            <li><em>Pro-Tip: Snap a quick photo of the rack/case in your booth or backstock as proof!</em></li>
+          </ul>
         </div>
 
-        <div class="modal-action">
-          <button class="btn btn-sm btn-primary font-bold px-6 rounded-xl" @click="showTaxGuide = false">Got It</button>
+        <!-- Section 3 -->
+        <div class="p-3.5 bg-base-200/70 rounded-2xl space-y-1.5 border border-base-300">
+          <h4 class="font-extrabold text-base-content flex items-center gap-1.5 text-sm">
+            <Icon icon="solar:tag-bold" class="w-4 h-4 text-primary" />
+            Immediate 100% Write-Offs (De Minimis Safe Harbor)
+          </h4>
+          <p class="leading-relaxed">Under IRS Safe Harbor (§ 1.263(a)-1(f)), display racks, shelving, mannequins, and showcases under <strong>$2,500 each</strong> do not need to be depreciated over 7 years—they can be written off 100% in the current tax year!</p>
         </div>
       </div>
-      <form method="dialog" class="modal-backdrop" @click="showTaxGuide = false">
-        <button>close</button>
-      </form>
-    </dialog>
 
-    <!-- Receipt Full-Size Lightbox Modal -->
-    <dialog class="modal modal-bottom sm:modal-middle" :class="{ 'modal-open': showReceiptLightbox }">
-      <div class="modal-box max-w-4xl p-3 sm:p-5 bg-base-100/95 backdrop-blur-xl border border-base-300 shadow-2xl rounded-3xl space-y-3">
-        <div class="flex items-center justify-between pb-2 border-b border-base-200">
-          <div class="font-black text-sm sm:text-base flex items-center gap-2">
-            <Icon icon="solar:bill-list-bold-duotone" class="w-5 h-5 text-primary" />
-            <span>Receipt Photo — {{ form.poNumber || 'PO' }}</span>
-          </div>
-          <button type="button" class="btn btn-sm btn-circle btn-ghost" @click="showReceiptLightbox = false">✕</button>
+      <template #footer>
+        <div class="flex justify-end w-full">
+          <button class="btn btn-sm btn-primary font-bold px-6 rounded-xl" @click="showTaxGuide = false">Got It</button>
         </div>
-        <div class="flex items-center justify-center max-h-[72vh] overflow-auto bg-base-200/40 rounded-2xl p-2">
-          <img 
-            v-if="form.receiptImageId || receiptPreviewUrl" 
-            :src="receiptPreviewUrl || getAssetUrl(form.receiptImageId)" 
-            alt="Full Receipt" 
-            class="max-w-full max-h-[68vh] object-contain rounded-xl shadow-md" 
-          />
-        </div>
-        <div class="modal-action pt-2 border-t border-base-200 flex justify-between items-center m-0">
+      </template>
+    </SlideOverDrawer>
+
+    <!-- Receipt Full-Size Lightbox Drawer -->
+    <SlideOverDrawer
+      v-model="showReceiptLightbox"
+      :title="`Receipt Photo — ${form.poNumber || 'PO'}`"
+      icon="solar:bill-list-bold-duotone"
+      size="xl"
+    >
+      <div class="flex items-center justify-center bg-base-200/40 rounded-2xl p-2">
+        <img 
+          v-if="form.receiptImageId || receiptPreviewUrl" 
+          :src="receiptPreviewUrl || getAssetUrl(form.receiptImageId)" 
+          alt="Full Receipt" 
+          class="max-w-full max-h-[72vh] object-contain rounded-xl shadow-md" 
+        />
+      </div>
+      <template #footer>
+        <div class="flex justify-between items-center w-full">
           <button type="button" class="btn btn-sm btn-warning text-warning-content font-black gap-1.5 rounded-xl shadow-xs border border-warning-content/25 active:scale-95" @click="showReceiptLightbox = false; rescanReceipt();">
             <Icon icon="solar:magic-stick-3-bold" class="w-4 h-4" />
             <span>Rescan with AI</span>
           </button>
           <button type="button" class="btn btn-sm btn-ghost rounded-xl font-bold" @click="showReceiptLightbox = false">Close</button>
         </div>
-      </div>
-      <form method="dialog" class="modal-backdrop" @click="showReceiptLightbox = false">
-        <button>close</button>
-      </form>
-    </dialog>
+      </template>
+    </SlideOverDrawer>
 
     <!-- In-App Camera Scanner Widget for live receipt photos with alignment viewfinder box -->
     <ScannerWidget ref="scannerWidget" :hide-all-triggers="true" overlay-mode="receipt" @photos-captured="handleCapturedReceiptPhotos" />
@@ -1088,6 +1078,7 @@ import { Icon } from '@iconify/vue';
 import ItemDrawer from '../common/ItemDrawer.vue';
 import ItemThumbnail from '../common/ItemThumbnail.vue';
 import ScannerWidget from '../common/ScannerWidget.vue';
+import SlideOverDrawer from '../common/SlideOverDrawer.vue';
 import { getDefaultStorageLocation } from '../../lib/warehouses';
 
 const { currentTeam } = useAuth();

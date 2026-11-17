@@ -319,7 +319,7 @@
                   <span class="font-mono font-bold">${{ partner.totalGross.toFixed(2) }}</span>
                 </div>
                 <div class="flex justify-between">
-                  <span class="opacity-60">15% Venue Fee:</span>
+                  <span class="opacity-60">{{ activeCanonicalLocationMeta.feePct }}% Venue Fee:</span>
                   <span class="font-mono text-error">-${{ partner.totalVenueFee.toFixed(2) }}</span>
                 </div>
                 <div v-if="partner.isConsignor" class="flex justify-between">
@@ -651,12 +651,11 @@
                     <!-- Editable Gross Sold Price -->
                     <td class="text-right">
                       <input
-                        type="number"
-                        min="0"
-                        step="0.01"
+                        type="text"
+                        inputmode="decimal"
                         :value="row.listedPrice"
                         class="input input-xs input-bordered font-mono font-bold text-right w-24"
-                        @input="onHandsOnGrossChange(row, Number(($event.target as HTMLInputElement).value))"
+                        @input="onHandsOnGrossChange(row, Number(($event.target as HTMLInputElement).value.replace(/[^0-9.-]/g, '')))"
                       />
                     </td>
 
@@ -1203,7 +1202,7 @@
             <div class="card bg-base-200/60 border border-base-300 shadow-sm p-4">
               <div class="text-xs font-semibold text-base-content/60 uppercase tracking-wider">Gross Sales</div>
               <div class="text-2xl font-black mt-1 text-base-content font-mono">${{ settlementSummary.totalGross.toFixed(2) }}</div>
-              <div class="text-xs text-base-content/50 mt-0.5">Venue Cut (15%): -${{ settlementSummary.totalVenueFee.toFixed(2) }}</div>
+              <div class="text-xs text-base-content/50 mt-0.5">Venue Cut ({{ activeCanonicalLocationMeta.feePct }}%): -${{ settlementSummary.totalVenueFee.toFixed(2) }}</div>
             </div>
 
             <div class="card bg-base-200/60 border border-base-300 shadow-sm p-4">
@@ -1284,7 +1283,7 @@
                   <span class="font-bold font-mono text-sm">${{ (partner.masterGross !== undefined ? partner.masterGross : partner.totalGross).toFixed(2) }}</span>
                 </div>
                 <div>
-                  <span class="opacity-60 block">15% Venue Cut:</span>
+                  <span class="opacity-60 block">{{ activeCanonicalLocationMeta.feePct }}% Venue Cut:</span>
                   <span class="font-mono text-sm text-error">-${{ (partner.masterVenueFee !== undefined ? partner.masterVenueFee : partner.totalVenueFee).toFixed(2) }}</span>
                 </div>
                 <div v-if="partner.isConsignor">
@@ -1372,11 +1371,11 @@
                     <span class="font-bold font-mono text-sm">${{ partner.bbSubClient.totalGross.toFixed(2) }}</span>
                   </div>
                   <div>
-                    <span class="opacity-60 block">Mall 15% Fee:</span>
+                    <span class="opacity-60 block">Venue {{ activeCanonicalLocationMeta.feePct }}% Fee:</span>
                     <span class="font-mono text-sm text-error">-${{ partner.bbSubClient.totalVenueFee.toFixed(2) }}</span>
                   </div>
                   <div>
-                    <span class="opacity-60 block">B&B Net Payout (85%):</span>
+                    <span class="opacity-60 block">B&B Net Payout ({{ 100 - activeCanonicalLocationMeta.feePct }}%):</span>
                     <span class="font-mono text-sm text-emerald-600 dark:text-emerald-400 font-bold">${{ partner.bbSubClient.totalPayoutCheck.toFixed(2) }}</span>
                   </div>
                   <div>
@@ -1394,8 +1393,8 @@
                         <th>UPC / Tag</th>
                         <th>Item Description</th>
                         <th class="text-right">Gross Price</th>
-                        <th class="text-right">Mall Fee (15%)</th>
-                        <th class="text-right font-bold">Consignor Net (85%)</th>
+                        <th class="text-right">Venue Fee ({{ activeCanonicalLocationMeta.feePct }}%)</th>
+                        <th class="text-right font-bold">Consignor Net ({{ 100 - activeCanonicalLocationMeta.feePct }}%)</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -1576,7 +1575,7 @@
                     <span class="font-bold text-sm text-base-content">${{ (activeDrawerRow.listedPrice || activeDrawerRow.salePrice || 0).toFixed(2) }}</span>
                   </div>
                   <div class="p-2 bg-base-100 rounded-xl border border-base-300/50">
-                    <span class="text-[10px] opacity-60 block uppercase font-sans">Mall Fee (15%)</span>
+                    <span class="text-[10px] opacity-60 block uppercase font-sans">Venue Fee ({{ activeCanonicalLocationMeta.feePct }}%)</span>
                     <span class="font-semibold text-sm text-error">-${{ Math.max(0, (activeDrawerRow.listedPrice || activeDrawerRow.salePrice || 0) - activeDrawerRow.salePrice).toFixed(2) }}</span>
                   </div>
                   <div class="p-2 bg-emerald-500/10 rounded-xl border border-emerald-500/30">
@@ -1698,9 +1697,8 @@
                     <div class="relative">
                       <span class="absolute left-3 top-2 text-xs opacity-50 font-mono">$</span>
                       <input 
-                        type="number" 
-                        step="0.01" 
-                        min="0"
+                        type="text"
+                        inputmode="decimal"
                         v-model.number="drawerForm.cost" 
                         class="input input-sm input-bordered w-full pl-6 font-mono text-xs rounded-xl" 
                         placeholder="0.00"
@@ -1714,8 +1712,8 @@
                     <div class="relative">
                       <span class="absolute left-3 top-2 text-xs opacity-50 font-mono">$</span>
                       <input 
-                        type="number" 
-                        step="0.01" 
+                        type="text"
+                        inputmode="decimal"
                         v-model.number="drawerForm.soldPrice" 
                         class="input input-sm input-bordered w-full pl-6 font-mono text-xs rounded-xl bg-base-200/50" 
                         readonly
@@ -1915,100 +1913,91 @@
       </div>
     </Teleport>
 
-    <!-- Past Reconciliations Modal -->
-    <Teleport to="body">
-      <div v-if="isHistoryModalOpen" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
-        <div class="card bg-base-100 border border-base-200 shadow-2xl w-full max-w-3xl max-h-[85vh] flex flex-col rounded-2xl overflow-hidden">
-          <div class="p-4 sm:p-5 border-b border-base-200 flex items-center justify-between bg-base-200/50 shrink-0">
-            <div class="flex items-center gap-2">
-              <Icon icon="solar:history-bold" class="w-6 h-6 text-primary" />
-              <div>
-                <h3 class="font-bold text-lg">Reconciliation History &amp; Settlement Archive</h3>
-                <p class="text-xs text-base-content/70">Committed monthly settlements with partner payout statements.</p>
+    <!-- Past Reconciliations Drawer -->
+    <SlideOverDrawer
+      v-model="isHistoryModalOpen"
+      title="Reconciliation History & Settlement Archive"
+      subtitle="Committed monthly settlements with partner payout statements."
+      icon="solar:history-bold"
+      size="xl"
+    >
+      <div v-if="reconciliationHistory.length === 0" class="text-center py-12 text-sm text-base-content/60">
+        <Icon icon="solar:document-text-linear" class="w-12 h-12 mx-auto mb-2 opacity-40" />
+        <p>No reconciliation receipts saved yet.</p>
+        <p class="text-xs mt-1">Once you commit a monthly payout, the financial breakdown and PDF statements will be stored here permanently.</p>
+      </div>
+
+      <div v-else class="space-y-3">
+        <div 
+          v-for="(hist, idx) in reconciliationHistory" 
+          :key="idx" 
+          class="card bg-base-100 border border-base-300 p-4 rounded-xl shadow-xs hover:border-primary/50 transition-colors"
+        >
+          <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div>
+              <div class="flex items-center gap-2 flex-wrap">
+                <span class="badge badge-primary font-bold font-mono">{{ hist.cycleLabel }}</span>
+                <span class="badge badge-neutral text-xs">{{ hist.itemCount }} sales committed</span>
+                <span class="text-xs text-base-content/60">{{ hist.timestamp }}</span>
               </div>
-            </div>
-            <button class="btn btn-sm btn-ghost btn-circle" @click="isHistoryModalOpen = false">✕</button>
-          </div>
-
-          <div class="p-4 sm:p-6 overflow-y-auto space-y-4 flex-1">
-            <div v-if="reconciliationHistory.length === 0" class="text-center py-12 text-sm text-base-content/60">
-              <Icon icon="solar:document-text-linear" class="w-12 h-12 mx-auto mb-2 opacity-40" />
-              <p>No reconciliation receipts saved yet.</p>
-              <p class="text-xs mt-1">Once you commit a monthly payout, the financial breakdown and PDF statements will be stored here permanently.</p>
-            </div>
-
-            <div v-else class="space-y-3">
-              <div 
-                v-for="(hist, idx) in reconciliationHistory" 
-                :key="idx" 
-                class="card bg-base-100 border border-base-300 p-4 rounded-xl shadow-xs hover:border-primary/50 transition-colors"
-              >
-                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                  <div>
-                    <div class="flex items-center gap-2 flex-wrap">
-                      <span class="badge badge-primary font-bold font-mono">{{ hist.cycleLabel }}</span>
-                      <span class="badge badge-neutral text-xs">{{ hist.itemCount }} sales committed</span>
-                      <span class="text-xs text-base-content/60">{{ hist.timestamp }}</span>
-                    </div>
-                    <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-3 text-xs">
-                      <div>
-                        <div class="text-base-content/60 font-semibold uppercase text-[10px]">Gross Sales</div>
-                        <div class="font-bold font-mono text-sm">${{ (hist.gross || 0).toFixed(2) }}</div>
-                      </div>
-                      <div>
-                        <div class="text-base-content/60 font-semibold uppercase text-[10px]">Mall Fee</div>
-                        <div class="font-bold font-mono text-sm text-error">-${{ (hist.mallFee || 0).toFixed(2) }}</div>
-                      </div>
-                      <div>
-                        <div class="text-base-content/60 font-semibold uppercase text-[10px]">Rent Paid</div>
-                        <div class="font-bold font-mono text-sm text-warning">-${{ (hist.rent || 0).toFixed(2) }}</div>
-                      </div>
-                      <div>
-                        <div class="text-base-content/60 font-semibold uppercase text-[10px]">Net Payout Check</div>
-                        <div class="font-bold font-mono text-sm text-emerald-600 dark:text-emerald-400">
-                          +${{ (hist.netCheck || 0).toFixed(2) }}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div class="flex items-center gap-2 shrink-0">
-                    <button 
-                      class="btn btn-sm btn-outline gap-1.5"
-                      @click="viewHistoricReceipt(hist)"
-                    >
-                      <Icon icon="solar:eye-bold" class="w-4 h-4" />
-                      <span>View Receipt</span>
-                    </button>
-                    <button 
-                      v-if="hist.partnerSettlements && hist.partnerSettlements.length > 0"
-                      class="btn btn-sm btn-primary gap-1.5"
-                      @click="downloadHistoricPartnerPdfs(hist)"
-                    >
-                      <Icon icon="solar:file-download-bold" class="w-4 h-4" />
-                      <span>PDFs</span>
-                    </button>
-                    <button 
-                      class="btn btn-sm btn-ghost text-error btn-square"
-                      title="Delete receipt record"
-                      @click="deleteHistoricReceipt(idx)"
-                    >
-                      <Icon icon="solar:trash-bin-trash-bold" class="w-4 h-4" />
-                    </button>
+              <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-3 text-xs">
+                <div>
+                  <div class="text-base-content/60 font-semibold uppercase text-[10px]">Gross Sales</div>
+                  <div class="font-bold font-mono text-sm">${{ (hist.gross || 0).toFixed(2) }}</div>
+                </div>
+                <div>
+                  <div class="text-base-content/60 font-semibold uppercase text-[10px]">Mall Fee</div>
+                  <div class="font-bold font-mono text-sm text-error">-${{ (hist.mallFee || 0).toFixed(2) }}</div>
+                </div>
+                <div>
+                  <div class="text-base-content/60 font-semibold uppercase text-[10px]">Rent Paid</div>
+                  <div class="font-bold font-mono text-sm text-warning">-${{ (hist.rent || 0).toFixed(2) }}</div>
+                </div>
+                <div>
+                  <div class="text-base-content/60 font-semibold uppercase text-[10px]">Net Payout Check</div>
+                  <div class="font-bold font-mono text-sm text-emerald-600 dark:text-emerald-400">
+                    +${{ (hist.netCheck || 0).toFixed(2) }}
                   </div>
                 </div>
               </div>
             </div>
-          </div>
 
-          <div class="p-4 border-t border-base-200 bg-base-200/30 flex justify-end shrink-0">
-            <button class="btn btn-sm btn-ghost border border-base-300 rounded-xl" @click="isHistoryModalOpen = false">
-              Close
-            </button>
+            <div class="flex items-center gap-2 shrink-0">
+              <button 
+                class="btn btn-sm btn-outline gap-1.5"
+                @click="viewHistoricReceipt(hist)"
+              >
+                <Icon icon="solar:eye-bold" class="w-4 h-4" />
+                <span>View Receipt</span>
+              </button>
+              <button 
+                v-if="hist.partnerSettlements && hist.partnerSettlements.length > 0"
+                class="btn btn-sm btn-primary gap-1.5"
+                @click="downloadHistoricPartnerPdfs(hist)"
+              >
+                <Icon icon="solar:file-download-bold" class="w-4 h-4" />
+                <span>PDFs</span>
+              </button>
+              <button 
+                class="btn btn-sm btn-ghost text-error btn-square"
+                title="Delete receipt record"
+                @click="deleteHistoricReceipt(idx)"
+              >
+                <Icon icon="solar:trash-bin-trash-bold" class="w-4 h-4" />
+              </button>
+            </div>
           </div>
         </div>
       </div>
-    </Teleport>
+
+      <template #footer>
+        <div class="flex justify-end w-full">
+          <button class="btn btn-sm btn-ghost border border-base-300 rounded-xl" @click="isHistoryModalOpen = false">
+            Close
+          </button>
+        </div>
+      </template>
+    </SlideOverDrawer>
   </div>
 </template>
 
@@ -2016,6 +2005,8 @@
 import { ref, computed, onMounted, watch } from 'vue';
 import { Icon } from '@iconify/vue';
 import ItemThumbnail from '../common/ItemThumbnail.vue';
+import SlideOverDrawer from '../common/SlideOverDrawer.vue';
+import { useBodyScrollLock } from '../../composables/useBodyScrollLock';
 import { useInventory } from '../../composables/useInventory';
 import { useAuth } from '../../composables/useAuth';
 import { useLoader } from '../../composables/useLoader';
@@ -2733,6 +2724,7 @@ const handleSalesSheetPhotoUpload = async (event: Event) => {
 
 // Slide-Over Item Matcher Drawer State
 const isMatcherDrawerOpen = ref(false);
+useBodyScrollLock(isMatcherDrawerOpen);
 const activeDrawerRowIndex = ref<number>(-1);
 const drawerSubTab = ref<'create' | 'search'>('search');
 const drawerSearchQuery = ref('');

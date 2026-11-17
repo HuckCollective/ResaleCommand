@@ -83,6 +83,7 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted } from 'vue';
 import { Icon } from '@iconify/vue';
+import { useBodyScrollLock } from '../../composables/useBodyScrollLock';
 import type { LocationSettingMeta } from '../../lib/warehouses';
 
 /**
@@ -94,12 +95,14 @@ import type { LocationSettingMeta } from '../../lib/warehouses';
  */
 defineOptions({ name: 'SalesImportTray', inheritAttrs: false });
 
-defineProps<{
+const props = defineProps<{
   isOpen: boolean;
   isProcessing: boolean;
   catalogFileDetected: boolean;
   locationMeta: LocationSettingMeta;
 }>();
+
+useBodyScrollLock(() => props.isOpen);
 
 const emit = defineEmits<{
   (e: 'close'): void;

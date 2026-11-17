@@ -57,6 +57,7 @@
             v-model="email"
             type="email"
             autocomplete="email"
+            autocapitalize="none"
             :readonly="emailLocked"
             class="input input-bordered input-sm rounded-xl w-full"
             :class="{ 'bg-base-200/70 cursor-not-allowed': emailLocked }"

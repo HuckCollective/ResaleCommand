@@ -678,10 +678,8 @@
               <span class="label-text text-[11px] font-bold mb-1">🛡️ Conservative (x)</span>
               <input
                 v-model.number="draftRules.roiTargets.conservative"
-                type="number"
-                step="0.1"
-                min="1.2"
-                max="6.0"
+                type="text"
+                inputmode="decimal"
                 class="input input-bordered input-sm font-mono font-bold bg-base-100"
               />
             </label>
@@ -689,10 +687,8 @@
               <span class="label-text text-[11px] font-bold mb-1">⚖️ Balanced (x)</span>
               <input
                 v-model.number="draftRules.roiTargets.balanced"
-                type="number"
-                step="0.1"
-                min="1.1"
-                max="5.0"
+                type="text"
+                inputmode="decimal"
                 class="input input-bordered input-sm font-mono font-bold bg-base-100"
               />
             </label>
@@ -700,10 +696,8 @@
               <span class="label-text text-[11px] font-bold mb-1">🔥 Aggressive (x)</span>
               <input
                 v-model.number="draftRules.roiTargets.aggressive"
-                type="number"
-                step="0.1"
-                min="1.05"
-                max="4.0"
+                type="text"
+                inputmode="decimal"
                 class="input input-bordered input-sm font-mono font-bold bg-base-100"
               />
             </label>
@@ -725,10 +719,8 @@
               <span class="label-text text-[11px] font-bold mb-1">eBay Fee %</span>
               <input
                 v-model.number="draftRules.channelFees.ebayPct"
-                type="number"
-                step="0.1"
-                min="0"
-                max="40"
+                type="text"
+                inputmode="decimal"
                 class="input input-bordered input-sm font-mono bg-base-100"
               />
             </label>
@@ -736,10 +728,8 @@
               <span class="label-text text-[11px] font-bold mb-1">eBay Fixed $</span>
               <input
                 v-model.number="draftRules.channelFees.ebayFixedUsd"
-                type="number"
-                step="0.05"
-                min="0"
-                max="5"
+                type="text"
+                inputmode="decimal"
                 class="input input-bordered input-sm font-mono bg-base-100"
               />
             </label>
@@ -747,10 +737,8 @@
               <span class="label-text text-[11px] font-bold mb-1">Poshmark %</span>
               <input
                 v-model.number="draftRules.channelFees.poshmarkPct"
-                type="number"
-                step="0.5"
-                min="0"
-                max="40"
+                type="text"
+                inputmode="decimal"
                 class="input input-bordered input-sm font-mono bg-base-100"
               />
             </label>
@@ -758,10 +746,8 @@
               <span class="label-text text-[11px] font-bold mb-1">Posh &lt;$15 Flat</span>
               <input
                 v-model.number="draftRules.channelFees.poshmarkUnder15FlatUsd"
-                type="number"
-                step="0.05"
-                min="0"
-                max="10"
+                type="text"
+                inputmode="decimal"
                 class="input input-bordered input-sm font-mono bg-base-100"
               />
             </label>
@@ -804,10 +790,8 @@
               <div class="flex items-center gap-2 shrink-0">
                 <input
                   v-model.number="draftRules.venueBias[booth.code]"
-                  type="number"
-                  step="0.02"
-                  min="0.5"
-                  max="1.5"
+                  type="text"
+                  inputmode="decimal"
                   class="input input-bordered input-sm w-24 font-mono font-black text-right bg-base-100"
                 />
                 <span class="text-xs font-mono font-bold text-base-content/65">x</span>

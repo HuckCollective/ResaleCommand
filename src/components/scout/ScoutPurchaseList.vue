@@ -231,65 +231,61 @@
       </div>
     </div>
 
-    <!-- New Purchase Modal -->
-    <dialog ref="modalRef" class="modal modal-bottom sm:modal-middle" :class="{ 'modal-open': isModalOpen }">
-      <div class="modal-box bg-base-100 border border-base-300 p-6 rounded-3xl max-w-md shadow-2xl">
-        <h3 class="font-black text-xl text-base-content flex items-center gap-2 mb-1">
-          <Icon icon="lucide:truck" class="text-primary w-6 h-6" />
-          Start a New Buy Tracker
-        </h3>
-        <p class="text-xs text-base-content/60 mb-5">
-          Choose where you are sourcing today. Items you scout will be ready to review and add directly into this Buy Tracker.
-        </p>
-
-        <!-- Preset Vendor Chips -->
-        <div class="space-y-2 mb-4">
-          <label class="text-[10px] uppercase font-bold tracking-wider opacity-60">Quick Presets</label>
-          <div class="flex flex-wrap gap-2">
-            <button 
-              v-for="preset in vendorPresets" 
-              :key="preset.name"
-              type="button"
-              @click="selectPreset(preset.name)"
-              class="btn btn-xs rounded-full font-bold transition-all"
-              :class="newVendorName === preset.name ? 'btn-primary shadow-xs' : 'btn-outline border-base-300 hover:border-primary'"
-            >
-              <span>{{ preset.icon }}</span>
-              <span>{{ preset.name }}</span>
-            </button>
-          </div>
+    <!-- New Purchase Drawer -->
+    <SlideOverDrawer
+      v-model="isModalOpen"
+      title="Start a New Buy Tracker"
+      subtitle="Choose where you are sourcing today. Items you scout will be ready to review and add directly into this Buy Tracker."
+      icon="lucide:truck"
+    >
+      <!-- Preset Vendor Chips -->
+      <div class="space-y-2 mb-4">
+        <label class="text-[10px] uppercase font-bold tracking-wider opacity-60">Quick Presets</label>
+        <div class="flex flex-wrap gap-2">
+          <button 
+            v-for="preset in vendorPresets" 
+            :key="preset.name"
+            type="button"
+            @click="selectPreset(preset.name)"
+            class="btn btn-xs rounded-full font-bold transition-all"
+            :class="newVendorName === preset.name ? 'btn-primary shadow-xs' : 'btn-outline border-base-300 hover:border-primary'"
+          >
+            <span>{{ preset.icon }}</span>
+            <span>{{ preset.name }}</span>
+          </button>
         </div>
+      </div>
 
-        <!-- Vendor Name Input -->
-        <div class="form-control space-y-1 mb-6">
-          <label class="label p-0">
-            <span class="label-text text-xs font-bold text-base-content/80">Store or Source Name</span>
-          </label>
-          <div class="relative">
-            <input 
-              v-model="newVendorName" 
-              type="text" 
-              placeholder="e.g. Goodwill Eastside, Elm St Estate Sale..." 
-              class="input input-bordered w-full font-bold text-sm pr-10"
-              @keyup.enter="confirmStartPurchase"
-              autofocus
-            />
-            <span class="absolute right-3 top-1/2 -translate-y-1/2 opacity-30">
-              <Icon icon="solar:shop-2-linear" class="w-5 h-5" />
-            </span>
-          </div>
+      <!-- Vendor Name Input -->
+      <div class="form-control space-y-1">
+        <label class="label p-0">
+          <span class="label-text text-xs font-bold text-base-content/80">Store or Source Name</span>
+        </label>
+        <div class="relative">
+          <input 
+            v-model="newVendorName" 
+            type="text" 
+            placeholder="e.g. Goodwill Eastside, Elm St Estate Sale..." 
+            class="input input-bordered w-full font-bold text-sm pr-10"
+            @keyup.enter="confirmStartPurchase"
+            autofocus
+          />
+          <span class="absolute right-3 top-1/2 -translate-y-1/2 opacity-30">
+            <Icon icon="solar:shop-2-linear" class="w-5 h-5" />
+          </span>
         </div>
+      </div>
 
-        <!-- Modal Actions -->
-        <div class="modal-action flex items-center justify-between m-0 pt-2 border-t border-base-300">
-          <button @click="closeNewPurchaseModal" type="button" class="btn btn-ghost font-bold text-xs">
+      <template #footer>
+        <div class="flex items-center justify-between w-full">
+          <button @click="closeNewPurchaseModal" type="button" class="btn btn-sm btn-ghost font-bold text-xs">
             Cancel
           </button>
           <button 
             @click="confirmStartPurchase" 
             :disabled="creatingPurchase || !newVendorName.trim()"
             type="button" 
-            class="btn btn-primary font-bold shadow-md min-w-32"
+            class="btn btn-sm btn-primary font-bold shadow-md min-w-32"
           >
             <span v-if="creatingPurchase" class="loading loading-spinner loading-xs"></span>
             <template v-else>
@@ -298,11 +294,8 @@
             </template>
           </button>
         </div>
-      </div>
-      <form method="dialog" class="modal-backdrop" @click="closeNewPurchaseModal">
-        <button>close</button>
-      </form>
-    </dialog>
+      </template>
+    </SlideOverDrawer>
 
     <!-- TACTILE FIXED BOTTOM DOCK (MOBILE-FIRST ERGONOMIC CLUSTER) -->
     <div class="rc-dock-spacer" :style="{ '--rc-dock-height': dockHeightRem }" aria-hidden="true"></div>
@@ -451,6 +444,7 @@ import { useDockClearance } from '../../composables/useDockClearance';
 const { dockEl, dockHeightRem } = useDockClearance(5.75);
 import { addToast } from '../../stores/toast';
 import { confirmDialog } from '../../stores/confirm';
+import SlideOverDrawer from '../common/SlideOverDrawer.vue';
 
 const emit = defineEmits<{
   (e: 'start-purchase', purchase: ScoutPurchase): void;

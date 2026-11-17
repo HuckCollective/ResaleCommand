@@ -1591,6 +1591,55 @@ for (const contract of transportContracts) {
     }
 }
 
+// 19. WAVE 2 (P1) LAW 1/2 DE-HARDCODING, SLIDEOVERDRAWER UNIFICATION & POSTEL'S LAW GUARD
+{
+    const fail = (msg) => { console.error(`❌ [Wave 2 P1 Guard §19] ${msg}`); hasErrors = true; };
+    const read = (p) => (fs.existsSync(p) ? fs.readFileSync(p, 'utf8') : '');
+
+    // 19A. Zero hardcoded Booth #42, Dusty Tiger Jacket, or resalecommand.com in RolloLabelTestWorkbench.vue
+    const rolloSrc = read('src/components/labels/RolloLabelTestWorkbench.vue');
+    if (/Booth #42|Dusty Tiger Jacket|resalecommand\.com/.test(rolloSrc)) {
+        fail('RolloLabelTestWorkbench.vue must not hardcode "Booth #42", "Dusty Tiger Jacket", or "resalecommand.com" (Law 1/2).');
+    }
+
+    // 19B. Zero MOCK_TENANTS / DB_TENANT_MAP static dictionaries in /subsite/* (Law 4)
+    for (const subFile of ['src/pages/subsite/index.astro', 'src/pages/subsite/item/[id].astro']) {
+        const subSrc = read(subFile)
+            .replace(/\/\*[\s\S]*?\*\//g, '')
+            .replace(/^\s*\/\/.*$/gm, '');
+        if (/\b(?:MOCK_TENANTS|DB_TENANT_MAP)\b/.test(subSrc)) {
+            fail(`${subFile} must not define static MOCK_TENANTS / DB_TENANT_MAP dictionaries (Law 4).`);
+        }
+    }
+
+    // 19C. Zero raw <dialog class="modal"> in Wave 2 P1 migrated surfaces
+    const wave2DrawerFiles = [
+        'src/components/org/OrgSettingsView.vue',
+        'src/components/purchases/PurchaseEditor.vue',
+        'src/components/purchases/SpeedEntryForm.vue',
+        'src/components/sales/CoopSettlementView.vue',
+        'src/components/scout/ScoutPurchaseList.vue',
+        'src/components/scout/ScoutPurchaseTray.vue',
+        'src/components/coop/CoopExpensesLedger.vue',
+        'src/components/coop/JoinApplicantDrawer.vue',
+        'src/components/social/SocialItemPickerModal.vue',
+        'src/components/warehouses/LocationDetailView.vue',
+        'src/components/store/StoreCatalog.vue',
+    ];
+    for (const rel of wave2DrawerFiles) {
+        const tpl = (read(rel).split('<script')[0] || '').replace(/<!--[\s\S]*?-->/g, '');
+        if (/<dialog\b/.test(tpl)) {
+            fail(`${rel} must use <SlideOverDrawer> (or askConfirm) instead of raw <dialog class="modal"> (Jakob's Law).`);
+        }
+    }
+
+    // 19D. Postel's Law email normalization in LoginView.vue
+    const loginSrc = read('src/components/auth/LoginView.vue');
+    if (!/email\.value\.trim\(\)\.toLowerCase\(\)/.test(loginSrc) || !/autocapitalize="none"/.test(loginSrc)) {
+        fail('src/components/auth/LoginView.vue must normalize email.value.trim().toLowerCase() and include autocapitalize="none" (Postel\'s Law).');
+    }
+}
+
 if (!hasErrors) {
     console.log(`✅ Clean lint! All ${vueFiles.length} Vue SFCs, ${tsFiles.length} TS files, TDZ declaration order, scripts/ allowlist, Zero Hardcoded Locations, access-control guards, and price-parsing invariants passed with ZERO errors!`);
 } else {

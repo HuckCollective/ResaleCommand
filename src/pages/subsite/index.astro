@@ -6,6 +6,7 @@ import StoreCatalog from '../../components/store/StoreCatalog.vue';
 import '../../styles/global.css';
 
 import { getDatabaseId, getItemsCollectionId } from '../../lib/appwriteEnv';
+import { siteConfig } from '../../site-config';
 
 // Rendered dynamically under rewritten path (e.g. domain.com/)
 const tenantId = Astro.locals.tenantId || "default_tenant";
@@ -13,47 +14,27 @@ const DB_ID = getDatabaseId();
 const ITEMS_COL = getItemsCollectionId();
 
 let items: any[] = [];
-let storeName = "Resale Store";
-
-// Local fallback mapping for store details when DB is unconfigured or collection is missing
-const MOCK_TENANTS: Record<string, { storeName: string }> = {
-  "tenant1": { storeName: "Retro Tabletop Vintage" },
-  "tenent1": { storeName: "Retro Tabletop Vintage" },
-  "6979614d00281d143bbe": { storeName: "Resale Command Alpha" },
-  "69a9cbcb0038df55f6b9": { storeName: "The Huckleberry Collective" },
-  "huckleberry": { storeName: "The Huckleberry Collective" },
-  "default_tenant": { storeName: "Resale Command Storefront" }
-};
-
-// Map virtual/test tenants to actual database seed tenants that contain items
-const DB_TENANT_MAP: Record<string, string> = {
-  "tenant1": "6979614d00281d143bbe",
-  "tenent1": "6979614d00281d143bbe",
-  "huckleberry": "69a9cbcb0038df55f6b9",
-  "default_tenant": "6979614d00281d143bbe"
-};
-
-const queryTenantId = DB_TENANT_MAP[tenantId] || tenantId;
+let storeName = siteConfig.companyName || siteConfig.title;
+let queryTenantId = tenantId;
 
 if (tenantId) {
-  // 1. Fetch Store Details
+  // 1. Fetch Store Details from Appwrite tenant_domains (Law 4: Zero static MOCK_TENANTS / DB_TENANT_MAP dictionaries)
   try {
     const tenantRes = await databases.listDocuments(DB_ID, "tenant_domains", [
       Query.equal("tenantId", tenantId),
       Query.limit(1)
     ]);
     if (tenantRes.total > 0) {
-      storeName = tenantRes.documents[0].storeName || MOCK_TENANTS[tenantId]?.storeName || `${tenantId.toUpperCase()} Resale`;
-    } else {
-      storeName = MOCK_TENANTS[tenantId]?.storeName || `${tenantId.toUpperCase()} Store`;
+      const tenantDoc: any = tenantRes.documents[0];
+      storeName = tenantDoc.storeName || storeName;
+      if (tenantDoc.mappedTenantId) {
+        queryTenantId = tenantDoc.mappedTenantId;
+      }
     }
   } catch (err: any) {
-    if (err.type === "collection_not_found" || err.code === 404) {
-      console.warn(`[Subsite] 'tenant_domains' collection not found in database. Using default store name for tenant '${tenantId}'.`);
-    } else {
+    if (err.type !== "collection_not_found" && err.code !== 404) {
       console.error("[Subsite] Error fetching store details:", err);
     }
-    storeName = MOCK_TENANTS[tenantId]?.storeName || `${tenantId.toUpperCase()} Store`;
   }
 
   // 2. Fetch Active Items for Sale (Only Placed & Located and Toggled to Show on Storefront)

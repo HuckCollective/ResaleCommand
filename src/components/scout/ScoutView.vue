@@ -809,7 +809,7 @@
                                 </label>
                                 <div class="join w-full shadow-xs">
                                     <span class="join-item btn btn-xs no-animation bg-base-100 border-base-300 font-bold">$</span>
-                                    <input v-model="cost" type="number" step="0.01" class="input input-xs input-bordered join-item w-full font-mono font-bold text-sm" placeholder="0.00" />
+                                    <input v-model="cost" type="text" inputmode="decimal" class="input input-xs input-bordered join-item w-full font-mono font-bold text-sm" placeholder="0.00" />
                                 </div>
                             </div>
 
@@ -823,7 +823,7 @@
                                 </label>
                                 <div class="join w-full shadow-xs">
                                     <span class="join-item btn btn-xs no-animation bg-base-100 border-base-300 font-bold">$</span>
-                                    <input v-model.number="item.selected_resale_price" type="number" class="input input-xs input-bordered join-item w-full font-mono font-bold text-sm" placeholder="0" />
+                                    <input v-model.number="item.selected_resale_price" type="text" inputmode="decimal" class="input input-xs input-bordered join-item w-full font-mono font-bold text-sm" placeholder="0" />
                                 </div>
                             </div>
                         </div>
@@ -1415,6 +1415,7 @@ import { useAuth } from '../../composables/useAuth';
 import { useMemberCapabilities } from '../../lib/memberAccess';
 import { useCart } from '../../composables/useCart';
 import { useScoutPurchase } from '../../composables/useScoutPurchase';
+import { useBodyScrollLock } from '../../composables/useBodyScrollLock';
 import { useDockClearance } from '../../composables/useDockClearance';
 import { useLoader } from '../../composables/useLoader';
 
@@ -1849,6 +1850,7 @@ const loading = ref(false);
 const analyzing = ref(false); // Added for re-scout feature
 const isResultsModalOpen = ref(false);
 const isMediaDetailsExpanded = ref(false);
+useBodyScrollLock(isResultsModalOpen);
 
 // -- AUCTION SNIPER & TIMING STATE --
 const currentTime = ref(Date.now());

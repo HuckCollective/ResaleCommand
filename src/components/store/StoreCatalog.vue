@@ -177,87 +177,78 @@
 
     </div>
 
-    <!-- Mobile Drawer Modal for Filters -->
-    <dialog class="modal" :class="{'modal-open': showMobileFilters}">
-      <div class="modal-box bg-base-100 max-w-sm">
-        <div class="flex justify-between items-center mb-6 border-b border-base-content/10 pb-3">
-          <h3 class="font-bold text-lg">⚙️ Filter Catalog</h3>
-          <button class="btn btn-sm btn-circle btn-ghost" @click="showMobileFilters = false">✕</button>
+    <!-- Mobile Drawer for Filters & Product Details -->
+    <SlideOverDrawer
+      :model-value="Boolean(showMobileFilters || (showDetailsModal && selectedItem))"
+      :title="showMobileFilters ? '⚙️ Filter Catalog' : (selectedItem?.title || 'Product Details')"
+      :subtitle="showMobileFilters ? 'Refine storefront items' : (selectedItem ? `$${typeof selectedItem.resalePrice === 'number' ? selectedItem.resalePrice.toFixed(2) : '0.00'}` : '')"
+      :size="showDetailsModal && selectedItem ? 'xl' : 'md'"
+      @update:model-value="(val) => {
+        if (!val) {
+          showMobileFilters = false;
+          closeDetails();
+        }
+      }"
+    >
+      <div v-if="showMobileFilters" class="space-y-6">
+        <!-- Favorites Toggle (Mobile) -->
+        <div class="form-control w-full">
+          <label class="label cursor-pointer justify-between bg-base-200/50 hover:bg-base-200/80 px-4 py-3 rounded-xl border border-base-content/5 transition-all shadow-sm">
+            <span class="label-text-alt font-black uppercase tracking-wider flex items-center gap-1.5 text-base-content/80">
+              <span class="text-error">❤️</span> Favorites Only
+            </span>
+            <input type="checkbox" v-model="showFavoritesOnly" class="checkbox checkbox-primary checkbox-sm" />
+          </label>
         </div>
 
-        <div class="space-y-6">
-          <!-- Favorites Toggle (Mobile) -->
-          <div class="form-control w-full">
-            <label class="label cursor-pointer justify-between bg-base-200/50 hover:bg-base-200/80 px-4 py-3 rounded-xl border border-base-content/5 transition-all shadow-sm">
-              <span class="label-text-alt font-black uppercase tracking-wider flex items-center gap-1.5 text-base-content/80">
-                <span class="text-error">❤️</span> Favorites Only
-              </span>
-              <input type="checkbox" v-model="showFavoritesOnly" class="checkbox checkbox-primary checkbox-sm" />
-            </label>
-          </div>
+        <!-- Search Filter -->
+        <div class="form-control w-full">
+          <label class="label pt-0"><span class="label-text-alt font-bold uppercase opacity-60">Search</span></label>
+          <input 
+            type="text" 
+            v-model="searchQuery" 
+            placeholder="Search items, tags..." 
+            class="input input-bordered w-full"
+          />
+        </div>
 
-          <!-- Search Filter -->
-          <div class="form-control w-full">
-            <label class="label pt-0"><span class="label-text-alt font-bold uppercase opacity-60">Search</span></label>
-            <input 
-              type="text" 
-              v-model="searchQuery" 
-              placeholder="Search items, tags..." 
-              class="input input-bordered w-full"
-            />
+        <!-- Price Range Filter -->
+        <div class="form-control w-full">
+          <div class="flex justify-between items-center mb-1">
+            <span class="label-text-alt font-bold uppercase opacity-60">Max Price</span>
+            <span class="badge badge-neutral font-mono font-bold">${{ maxPriceFilter }}</span>
           </div>
-
-          <!-- Price Range Filter -->
-          <div class="form-control w-full">
-            <div class="flex justify-between items-center mb-1">
-              <span class="label-text-alt font-bold uppercase opacity-60">Max Price</span>
-              <span class="badge badge-neutral font-mono font-bold">${{ maxPriceFilter }}</span>
-            </div>
-            <input 
-              type="range" 
-              min="0" 
-              :max="absoluteMaxPrice || 100" 
-              v-model="maxPriceFilter" 
-              class="range range-xs range-primary"
-            />
-            <div class="flex justify-between text-[10px] opacity-50 px-1 mt-1 font-mono">
-              <span>$0</span>
-              <span>${{ absoluteMaxPrice }}</span>
-            </div>
+          <input 
+            type="range" 
+            min="0" 
+            :max="absoluteMaxPrice || 100" 
+            v-model="maxPriceFilter" 
+            class="range range-xs range-primary"
+          />
+          <div class="flex justify-between text-[10px] opacity-50 px-1 mt-1 font-mono">
+            <span>$0</span>
+            <span>${{ absoluteMaxPrice }}</span>
           </div>
+        </div>
 
-          <!-- Keywords Filter -->
-          <div class="form-control w-full">
-            <label class="label"><span class="label-text-alt font-bold uppercase opacity-60">Keywords / Tags</span></label>
-            <div class="flex flex-wrap gap-2 mt-1">
-              <button 
-                v-for="tag in allKeywords" 
-                :key="tag"
-                @click="toggleKeyword(tag)"
-                class="badge badge-sm border-none cursor-pointer"
-                :class="selectedKeywords.includes(tag) ? 'badge-primary text-primary-content font-bold' : 'badge-neutral bg-base-300 text-base-content/70'"
-              >
-                #{{ tag }}
-              </button>
-            </div>
-          </div>
-
-          <!-- Actions -->
-          <div class="modal-action pt-4 border-t border-base-content/10">
-            <button class="btn btn-ghost btn-sm" @click="resetFilters">Reset</button>
-            <button class="btn btn-primary btn-sm flex-1" @click="showMobileFilters = false">Apply Filters</button>
+        <!-- Keywords Filter -->
+        <div class="form-control w-full">
+          <label class="label"><span class="label-text-alt font-bold uppercase opacity-60">Keywords / Tags</span></label>
+          <div class="flex flex-wrap gap-2 mt-1">
+            <button 
+              v-for="tag in allKeywords" 
+              :key="tag"
+              @click="toggleKeyword(tag)"
+              class="badge badge-sm border-none cursor-pointer"
+              :class="selectedKeywords.includes(tag) ? 'badge-primary text-primary-content font-bold' : 'badge-neutral bg-base-300 text-base-content/70'"
+            >
+              #{{ tag }}
+            </button>
           </div>
         </div>
       </div>
-    </dialog>
 
-    <!-- Product Details Modal/Drawer (Full screen on mobile) -->
-    <dialog class="modal" :class="{'modal-open': showDetailsModal}">
-      <div v-if="selectedItem" class="modal-box w-full h-full max-w-full max-h-full rounded-none m-0 p-6 flex flex-col md:w-11/12 md:max-w-4xl md:h-auto md:max-h-[90vh] md:rounded-3xl md:p-8 md:grid md:grid-cols-2 md:gap-8 overflow-y-auto relative">
-        
-        <!-- Close Button (Fixed top-right) -->
-        <button class="btn btn-sm btn-circle btn-neutral absolute right-4 top-4 z-50 shadow-md border-base-content/10 hover:scale-105 transition-transform" @click="closeDetails">✕</button>
-
+      <div v-else-if="selectedItem" class="grid grid-cols-1 md:grid-cols-2 gap-6">
         <!-- Left Column: Media Gallery -->
         <div class="flex flex-col gap-4 w-full">
           <div class="relative w-full aspect-square bg-base-200 rounded-2xl overflow-hidden border border-base-content/5 shadow-inner">
@@ -435,14 +426,18 @@
             </div>
           </div>
         </div>
-
       </div>
-      
-      <!-- Modal Backdrop for clicking outside to close -->
-      <form method="dialog" class="modal-backdrop">
-        <button @click="closeDetails">close</button>
-      </form>
-    </dialog>
+
+      <template #footer>
+        <div v-if="showMobileFilters" class="flex items-center justify-between w-full">
+          <button class="btn btn-ghost btn-sm" @click="resetFilters">Reset</button>
+          <button class="btn btn-primary btn-sm" @click="showMobileFilters = false">Apply Filters</button>
+        </div>
+        <div v-else class="flex justify-end w-full">
+          <button class="btn btn-ghost btn-sm" @click="closeDetails">Close</button>
+        </div>
+      </template>
+    </SlideOverDrawer>
 
     <!-- Toast Notification -->
     <div v-if="showToast" class="toast toast-end toast-bottom z-50">
@@ -458,6 +453,7 @@
 import { BUCKET_ID } from '../../lib/inventory';
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue';
 import ItemThumbnail from '../common/ItemThumbnail.vue';
+import SlideOverDrawer from '../common/SlideOverDrawer.vue';
 
 const props = defineProps({
   initialItems: {

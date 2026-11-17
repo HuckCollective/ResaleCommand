@@ -1,9 +1,10 @@
 ---
-import { databases } from '../../../lib/appwrite';
+import { databases, Query } from '../../../lib/appwrite';
 import StoreHeaderCart from '../../../components/store/StoreHeaderCart.astro';
 import '../../../styles/global.css';
 
 import { getDatabaseId, getItemsCollectionId, getBucketId } from '../../../lib/appwriteEnv';
+import { siteConfig } from '../../../site-config';
 
 const { id } = Astro.params;
 
@@ -15,41 +16,28 @@ const BUCKET_ID = getBucketId();
 const APPWRITE_ENDPOINT = import.meta.env.PUBLIC_APPWRITE_ENDPOINT;
 const APPWRITE_PROJECT_ID = import.meta.env.PUBLIC_APPWRITE_PROJECT_ID;
 
-// Fallbacks
-const MOCK_TENANTS: Record<string, { storeName: string }> = {
-  "tenant1": { storeName: "Retro Tabletop Vintage" },
-  "tenent1": { storeName: "Retro Tabletop Vintage" },
-  "6979614d00281d143bbe": { storeName: "Resale Command Alpha" },
-  "69a9cbcb0038df55f6b9": { storeName: "Resale Command Beta" },
-  "default_tenant": { storeName: "Resale Command Storefront" }
-};
-
-const DB_TENANT_MAP: Record<string, string> = {
-  "tenant1": "6979614d00281d143bbe",
-  "tenent1": "6979614d00281d143bbe",
-  "default_tenant": "6979614d00281d143bbe"
-};
-
-const queryTenantId = DB_TENANT_MAP[tenantId] || tenantId;
-
+let queryTenantId = tenantId;
 let item: any = null;
-let storeName = "Resale Store";
+let storeName = siteConfig.companyName || siteConfig.title;
 let errorMsg = "";
 
 try {
-  // 1. Fetch Store Details
+  // 1. Fetch Store Details from Appwrite tenant_domains (Law 4: Zero static MOCK_TENANTS / DB_TENANT_MAP dictionaries)
   try {
     const tenantRes = await databases.listDocuments(DB_ID, "tenant_domains", [
-      // Filter by tenantId
-      {
-        equal: (key: string, val: string) => `equal("${key}", "${val}")`,
-        limit: (val: number) => `limit(${val})`
-      } as any === undefined ? "" : "" // workaround for query builder differences
+      Query.equal("tenantId", tenantId),
+      Query.limit(1)
     ]);
+    if (tenantRes.total > 0) {
+      const tenantDoc: any = tenantRes.documents[0];
+      storeName = tenantDoc.storeName || storeName;
+      if (tenantDoc.mappedTenantId) {
+        queryTenantId = tenantDoc.mappedTenantId;
+      }
+    }
   } catch (e) {
-    // collection not found or unconfigured, ignore and use fallback
+    // collection not found or unconfigured, ignore and use siteConfig fallback
   }
-  storeName = MOCK_TENANTS[tenantId]?.storeName || `${tenantId.toUpperCase()} Store`;
 
   // 2. Fetch the Item Document
   item = await databases.getDocument(DB_ID, ITEMS_COL, id || "");

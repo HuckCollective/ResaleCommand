@@ -281,6 +281,7 @@ import TriageTrayBody from './trays/TriageTrayBody.vue';
 import RadarTrayBody from './trays/RadarTrayBody.vue';
 import ToolsTrayBody from './trays/ToolsTrayBody.vue';
 import { canSeeCollectiveFinancials, MEMBER_HAT_META } from '../../lib/memberHats';
+import { useBodyScrollLock } from '../../composables/useBodyScrollLock';
 import {
   useDashboardSource,
   useActiveHat,
@@ -310,6 +311,7 @@ const {
 
 const { categoryCounts } = useOperationsRadar();
 const isMounted = ref(false);
+useBodyScrollLock(computed(() => Boolean(activeTray.value)));
 
 const showCollectiveRadar = computed(() => canSeeCollectiveFinancials(source.member.value.hats));
 const openMessagesCount = computed(() => source.snapshot.value.coopMessages || 0);

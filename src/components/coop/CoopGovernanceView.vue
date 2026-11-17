@@ -530,13 +530,13 @@
       <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <div class="p-4 rounded-2xl bg-base-200/40 border border-base-300 space-y-1.5">
           <label class="text-xs font-extrabold uppercase tracking-wider text-base-content/60">Dial 3 • Rainy-Day Reserve Cap ($)</label>
-          <input v-model.number="policyConfig.reserveCapTarget" type="number" min="0" step="50" class="input input-bordered input-sm rounded-xl font-mono font-bold w-full" />
+          <input v-model.number="policyConfig.reserveCapTarget" type="text" inputmode="decimal" class="input input-bordered input-sm rounded-xl font-mono font-bold w-full" />
           <p class="text-[11px] text-base-content/60">Once Reserve reaches ${{ policyConfig.reserveCapTarget }}, the {{ policyConfig.reserveSharePct }}% slice overflows to Partner Dividends.</p>
         </div>
 
         <div class="p-4 rounded-2xl bg-base-200/40 border border-base-300 space-y-1.5">
           <label class="text-xs font-extrabold uppercase tracking-wider text-warning">Dial 4 • Prior Shortfall Carryover ($)</label>
-          <input v-model.number="policyConfig.carriedOverShortfall" type="number" min="0" step="10" class="input input-bordered input-sm rounded-xl font-mono font-bold w-full" />
+          <input v-model.number="policyConfig.carriedOverShortfall" type="text" inputmode="decimal" class="input input-bordered input-sm rounded-xl font-mono font-bold w-full" />
           <p class="text-[11px] text-base-content/60">Prior deficit repaid 100% first in Gate 4A before Gate 4B bonus dividends unlock.</p>
         </div>
 
@@ -593,7 +593,7 @@
               </label>
               <div class="flex items-center gap-2">
                 <input v-model.number="c.coopCommissionPct" type="range" min="0" max="60" step="1" class="range range-secondary range-xs flex-1" />
-                <input v-model.number="c.coopCommissionPct" type="number" min="0" max="60" step="1" class="input input-bordered input-xs w-14 font-mono font-bold text-right" />
+                <input v-model.number="c.coopCommissionPct" type="text" inputmode="decimal" class="input input-bordered input-xs w-14 font-mono font-bold text-right" />
               </div>
               <div class="flex items-center gap-1 flex-wrap mt-1">
                 <button
@@ -611,7 +611,7 @@
 
             <div class="form-control">
               <label class="label py-1"><span class="label-text font-bold text-xs">🏪 Fixed Shelf Rent ($/mo)</span></label>
-              <input v-model.number="c.fixedMonthlyRent" type="number" min="0" step="5" class="input input-bordered input-sm rounded-xl font-mono font-bold" />
+              <input v-model.number="c.fixedMonthlyRent" type="text" inputmode="decimal" class="input input-bordered input-sm rounded-xl font-mono font-bold" />
             </div>
           </div>
 

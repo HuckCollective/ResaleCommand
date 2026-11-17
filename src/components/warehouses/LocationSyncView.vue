@@ -265,50 +265,6 @@
       <div class="modal-backdrop" @click="handleConfirmCancel"></div>
     </div>
 
-    <!-- Quick Create Location SlideOverDrawer -->
-    <SlideOverDrawer
-      v-model="showNewLocationModal"
-      title="Add Selling Location / Booth"
-      subtitle="Register a selling venue, commission percentage, and monthly rent."
-    >
-      <div class="space-y-3">
-        <div class="form-control">
-          <label class="label py-0.5"><span class="label-text text-xs font-bold">Location Name</span></label>
-          <input type="text" v-model="newLocationForm.name" placeholder="e.g. Memory Den, Booth 42..." class="input input-bordered input-sm rounded-xl" />
-        </div>
-        <div class="form-control">
-          <label class="label py-0.5"><span class="label-text text-xs font-bold">Location Type</span></label>
-          <select v-model="newLocationForm.type" class="select select-bordered select-sm rounded-xl">
-            <option value="Consignment Booth">Consignment Booth</option>
-            <option value="Antique Mall">Antique Mall</option>
-            <option value="Warehouse">Warehouse</option>
-            <option value="Retail Store">Retail Store</option>
-            <option value="Online">Online Marketplace</option>
-          </select>
-        </div>
-        <div class="grid grid-cols-2 gap-2">
-          <div class="form-control">
-            <label class="label py-0.5"><span class="label-text text-xs font-bold">Commission %</span></label>
-            <input type="number" v-model="newLocationForm.commissionRate" placeholder="15" class="input input-bordered input-sm rounded-xl" />
-          </div>
-          <div class="form-control">
-            <label class="label py-0.5"><span class="label-text text-xs font-bold">Monthly Rent ($)</span></label>
-            <input type="number" v-model="newLocationForm.monthlyRent" placeholder="0" class="input input-bordered input-sm rounded-xl" />
-          </div>
-        </div>
-      </div>
-
-      <template #footer>
-        <div class="flex items-center justify-between gap-2">
-          <button type="button" class="btn btn-sm btn-ghost rounded-xl font-bold" @click="showNewLocationModal = false">Cancel</button>
-          <button type="button" class="btn btn-sm btn-primary text-primary-content rounded-xl font-black" :disabled="!newLocationForm.name.trim() || isCreatingLocation" @click="createNewLocation">
-            <span v-if="isCreatingLocation" class="loading loading-spinner loading-xs"></span>
-            <span>Save Location</span>
-          </button>
-        </div>
-      </template>
-    </SlideOverDrawer>
-
     <!-- Live Location Barcode Verification Scorecard Banner (when a report has arrived via API or CSV) -->
     <div
       v-if="mdVerifyReport && activeCanonicalLocationMeta.usesRicochet"
@@ -2099,6 +2055,7 @@ import SlideOverDrawer from '../common/SlideOverDrawer.vue';
 import { siteConfig, SYNC_FALLBACK_ORIGINS } from '../../site-config';
 import { toUserMessage } from '../../lib/userFacingErrors';
 import { useAuth } from '../../composables/useAuth';
+import { useBodyScrollLock } from '../../composables/useBodyScrollLock';
 import { useDockClearance } from '../../composables/useDockClearance';
 import { useInventory } from '../../composables/useInventory';
 import BookmarkletHeroBar from '../bml/BookmarkletHeroBar.vue';
@@ -2251,6 +2208,7 @@ let confirmResolve: ((val: boolean) => void) | null = null;
 // Slide-Over Inventory Match Drawer Refs
 const isMatchDrawerOpen = ref(false);
 const activeMatchRow = ref<any | null>(null);
+useBodyScrollLock(computed(() => Boolean(isMatchDrawerOpen.value || showBrowserSyncModal.value || confirmDialog.value.isOpen)));
 const matchDrawerSearch = ref('');
 const matchDrawerFilter = ref<'suggested' | 'all' | 'same_price' | 'backstock'>('suggested');
 const isSavingDrawerLink = ref<string | null>(null);
@@ -3417,7 +3375,7 @@ const logRentDeductionsToExpenses = async () => {
       await databases.createDocument(DB_ID, 'expenses', ID.unique(), {
         cartId: `RENT-${locId}-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
         tenantId: team.value?.$id || 'personal',
-        amount: Number(rent.amount) || 382.50,
+        amount: Number(rent.amount) || Number(activeCanonicalLocationMeta.value.monthlyRent || 0),
         note: `[BOOTH_RENT] ${locName} - ${rent.title} (${rent.date || 'Monthly'})`,
         date: parseFlexibleDate(rent.date),
         purchaseId: locId !== 'booth' ? locId : undefined,
@@ -4100,7 +4058,8 @@ const parseCsvData = (rawText: string, fileName: string) => {
 
         // Check for booth rent deduction rows (e.g. "(Credit) Space Rental 08/31/2026")
         if (lowerName.includes('space rental') || lowerName.includes('booth rent')) {
-          const rentAmt = Math.abs(parseFloat((cols[amountIdx] || cols[agreedPriceIdx] || '382.50').replace(/[^0-9.]/g, '')) || 382.50);
+          const fallbackRent = Number(activeCanonicalLocationMeta.value.monthlyRent || 0);
+          const rentAmt = Math.abs(parseFloat((cols[amountIdx] || cols[agreedPriceIdx] || String(fallbackRent)).replace(/[^0-9.]/g, '')) || fallbackRent);
           const dateMatch = fullItemName.match(/(\d{1,2})[-/](\d{1,2})[-/](\d{4})/);
           const rentDate = dateMatch 
             ? `${dateMatch[1]}/${dateMatch[2]}/${dateMatch[3]}` 
@@ -5214,30 +5173,7 @@ const executeSync = async () => {
   }
 };
 
-const createNewLocation = async () => {
-  if (!team.value || !newLocationForm.value.name.trim()) return;
-  isCreatingLocation.value = true;
-  try {
-    const doc = await warehousesApi.createWarehouse({
-      name: newLocationForm.value.name.trim(),
-      type: newLocationForm.value.type || 'Consignment Booth',
-      commissionRate: Number(newLocationForm.value.commissionRate || 15),
-      monthlyRent: Number(newLocationForm.value.monthlyRent || 0),
-      tenantId: team.value.$id
-    });
-    locations.value.push(doc);
-    selectedLocationId.value = doc.$id;
-    showNewLocationModal.value = false;
-    newLocationForm.value = { name: '', type: 'Consignment Booth', commissionRate: 15, monthlyRent: 0 };
-    addToast({ type: 'success', message: `Added "${doc.name}" location!` });
-  } catch (err: any) {
-    console.error('Create location error:', err);
-    addToast({ type: 'error', message: 'Failed to create location: ' + err.message });
-  } finally {
-    isCreatingLocation.value = false;
-  }
-};
-
+// Law 1: 4 Canonical Locations Only (MD, DT, HG, HH) — arbitrary location creation is disabled.
 // Law 4: the one-time 0EJ0CQ / HUCK-0790 parent-lot data heal was applied to Appwrite already; per-SKU fixes never live in code.
 const healZeroEj0CqParentLotIfNeeded = async () => {};
 

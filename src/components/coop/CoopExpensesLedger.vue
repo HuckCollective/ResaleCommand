@@ -639,328 +639,298 @@
       </template>
     </PaginationDock>
 
-    <!-- MULTI-LINE BULK ACTIONS TRAY / MODAL (MATCHES INVENTORY BOTTOM ACTION TRAY PATTERN) -->
-    <dialog :class="{ 'modal modal-bottom sm:modal-middle': true, 'modal-open': isBulkActionsOpen }">
-      <div class="modal-box max-w-lg rounded-t-3xl sm:rounded-3xl p-6 space-y-5 bg-base-100 border border-base-300 shadow-2xl">
-        <div class="flex items-center justify-between border-b border-base-200 pb-3">
-          <div class="flex items-center gap-2.5">
-            <div class="w-9 h-9 rounded-xl bg-warning/15 text-warning flex items-center justify-center">
-              <Icon icon="solar:bolt-bold" class="w-5 h-5" />
-            </div>
-            <div>
-              <h3 class="font-black text-base text-base-content">Multi-Line Bulk Actions</h3>
-              <p class="text-xs text-base-content/60 font-mono">
-                {{ selectedIds.length }} expense{{ selectedIds.length === 1 ? '' : 's' }} selected · ${{ selectedTotalAmount.toFixed(2) }} total
-              </p>
-            </div>
-          </div>
-          <button type="button" @click="isBulkActionsOpen = false" class="btn btn-ghost btn-sm btn-circle">✕</button>
-        </div>
+    <!-- MULTI-LINE BULK ACTIONS DRAWER -->
+    <SlideOverDrawer
+      v-model="isBulkActionsOpen"
+      title="Multi-Line Bulk Actions"
+      :subtitle="`${selectedIds.length} expense${selectedIds.length === 1 ? '' : 's'} selected · $${selectedTotalAmount.toFixed(2)} total`"
+      icon="solar:bolt-bold"
+    >
+      <div v-if="selectedIds.length === 0" class="py-6 text-center space-y-3">
+        <p class="text-xs text-base-content/70">No rows selected yet. Check rows in the table or select all on this page:</p>
+        <button type="button" @click="toggleSelectAllPage" class="btn btn-sm btn-primary font-bold rounded-xl">
+          Select All {{ paginatedExpenses.length }} Rows on Page
+        </button>
+      </div>
 
-        <div v-if="selectedIds.length === 0" class="py-6 text-center space-y-3">
-          <p class="text-xs text-base-content/70">No rows selected yet. Check rows in the table or select all on this page:</p>
-          <button type="button" @click="toggleSelectAllPage" class="btn btn-sm btn-primary font-bold rounded-xl">
-            Select All {{ paginatedExpenses.length }} Rows on Page
-          </button>
-        </div>
-
-        <div v-else class="space-y-4 text-xs">
-          <!-- 1. Bulk Tax / Co-op Allocation Scope -->
-          <div class="space-y-2">
-            <div class="font-black uppercase tracking-wider text-[11px] opacity-70">1. Set Tax / Pool Scope</div>
-            <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
-              <button
-                type="button"
-                :disabled="bulkBusy"
-                @click="bulkUpdateScope('coop_shared', 100)"
-                class="btn btn-sm btn-primary text-primary-content font-bold rounded-xl"
-              >
-                🤝 Co-op 100%
-              </button>
-              <button
-                type="button"
-                :disabled="bulkBusy"
-                @click="bulkUpdateScope('personal_write_off', 0)"
-                class="btn btn-sm btn-secondary text-secondary-content font-bold rounded-xl"
-              >
-                👤 Personal 100%
-              </button>
-              <button
-                type="button"
-                :disabled="bulkBusy"
-                @click="bulkUpdateScope('split', 50)"
-                class="btn btn-sm btn-accent text-accent-content font-bold rounded-xl"
-              >
-                ⚖️ Split 50/50
-              </button>
-            </div>
-          </div>
-
-          <!-- 2. Bulk Reimbursement Status -->
-          <div class="space-y-2">
-            <div class="font-black uppercase tracking-wider text-[11px] opacity-70">2. Set Reimbursement Status</div>
-            <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
-              <button
-                type="button"
-                :disabled="bulkBusy"
-                @click="bulkUpdateStatus('pending')"
-                class="btn btn-sm btn-warning text-warning-content font-bold rounded-xl"
-              >
-                🟡 Mark Pending
-              </button>
-              <button
-                type="button"
-                :disabled="bulkBusy"
-                @click="bulkUpdateStatus('approved')"
-                class="btn btn-sm btn-success text-success-content font-bold rounded-xl"
-              >
-                🟢 Approve ({{ selectedIds.length }})
-              </button>
-              <button
-                type="button"
-                :disabled="bulkBusy"
-                @click="bulkUpdateStatus('reimbursed')"
-                class="btn btn-sm btn-info text-info-content font-bold rounded-xl"
-              >
-                💎 Reimburse ({{ selectedIds.length }})
-              </button>
-            </div>
-          </div>
-
-          <!-- 3. Clear or Delete -->
-          <div class="flex items-center justify-between pt-3 border-t border-base-200">
+      <div v-else class="space-y-4 text-xs">
+        <!-- 1. Bulk Tax / Co-op Allocation Scope -->
+        <div class="space-y-2">
+          <div class="font-black uppercase tracking-wider text-[11px] opacity-70">1. Set Tax / Pool Scope</div>
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
             <button
               type="button"
               :disabled="bulkBusy"
-              @click="bulkDeleteSelected"
-              class="btn btn-sm btn-outline btn-error font-bold rounded-xl gap-1.5"
+              @click="bulkUpdateScope('coop_shared', 100)"
+              class="btn btn-sm btn-primary text-primary-content font-bold rounded-xl"
             >
-              <Icon icon="solar:trash-bin-trash-bold" class="w-4 h-4" />
-              <span>Delete ({{ selectedIds.length }})</span>
+              🤝 Co-op 100%
             </button>
-            <div class="flex items-center gap-2">
-              <button
-                type="button"
-                @click="selectedIds = []; isBulkActionsOpen = false"
-                class="btn btn-sm btn-ghost font-bold rounded-xl"
-              >
-                Clear Selection
-              </button>
-              <button
-                type="button"
-                @click="isBulkActionsOpen = false"
-                class="btn btn-sm btn-neutral font-bold rounded-xl"
-              >
-                Done
-              </button>
-            </div>
+            <button
+              type="button"
+              :disabled="bulkBusy"
+              @click="bulkUpdateScope('personal_write_off', 0)"
+              class="btn btn-sm btn-secondary text-secondary-content font-bold rounded-xl"
+            >
+              👤 Personal 100%
+            </button>
+            <button
+              type="button"
+              :disabled="bulkBusy"
+              @click="bulkUpdateScope('split', 50)"
+              class="btn btn-sm btn-accent text-accent-content font-bold rounded-xl"
+            >
+              ⚖️ Split 50/50
+            </button>
+          </div>
+        </div>
+
+        <!-- 2. Bulk Reimbursement Status -->
+        <div class="space-y-2">
+          <div class="font-black uppercase tracking-wider text-[11px] opacity-70">2. Set Reimbursement Status</div>
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
+            <button
+              type="button"
+              :disabled="bulkBusy"
+              @click="bulkUpdateStatus('pending')"
+              class="btn btn-sm btn-warning text-warning-content font-bold rounded-xl"
+            >
+              🟡 Mark Pending
+            </button>
+            <button
+              type="button"
+              :disabled="bulkBusy"
+              @click="bulkUpdateStatus('approved')"
+              class="btn btn-sm btn-success text-success-content font-bold rounded-xl"
+            >
+              🟢 Approve ({{ selectedIds.length }})
+            </button>
+            <button
+              type="button"
+              :disabled="bulkBusy"
+              @click="bulkUpdateStatus('reimbursed')"
+              class="btn btn-sm btn-info text-info-content font-bold rounded-xl"
+            >
+              💎 Reimburse ({{ selectedIds.length }})
+            </button>
           </div>
         </div>
       </div>
-      <form method="dialog" class="modal-backdrop">
-        <button @click="isBulkActionsOpen = false">close</button>
-      </form>
-    </dialog>
 
-    <!-- SUBMIT / EDIT EXPENSE MODAL -->
-    <dialog :class="{ 'modal modal-open': isSubmitModalOpen }" class="modal">
-      <div class="modal-box max-w-lg rounded-3xl p-6 sm:p-7 space-y-5">
-        <div class="flex items-center justify-between border-b border-base-200 pb-3">
-          <div class="flex items-center gap-2.5">
-            <div class="w-9 h-9 rounded-xl bg-primary/10 text-primary flex items-center justify-center">
-              <Icon :icon="editingExpenseId ? 'solar:pen-new-square-bold-duotone' : 'solar:bill-bold-duotone'" class="w-5 h-5" />
-            </div>
-            <h3 class="font-black text-lg text-base-content">
-              {{ editingExpenseId ? 'Edit Expense Details' : 'Log Commons Expense' }}
-            </h3>
+      <template #footer>
+        <div class="flex items-center justify-between w-full">
+          <button
+            v-if="selectedIds.length > 0"
+            type="button"
+            :disabled="bulkBusy"
+            @click="bulkDeleteSelected"
+            class="btn btn-sm btn-outline btn-error font-bold rounded-xl gap-1.5"
+          >
+            <Icon icon="solar:trash-bin-trash-bold" class="w-4 h-4" />
+            <span>Delete ({{ selectedIds.length }})</span>
+          </button>
+          <div v-else></div>
+          <div class="flex items-center gap-2">
+            <button
+              v-if="selectedIds.length > 0"
+              type="button"
+              @click="selectedIds = []; isBulkActionsOpen = false"
+              class="btn btn-sm btn-ghost font-bold rounded-xl"
+            >
+              Clear Selection
+            </button>
+            <button
+              type="button"
+              @click="isBulkActionsOpen = false"
+              class="btn btn-sm btn-neutral font-bold rounded-xl"
+            >
+              Done
+            </button>
           </div>
-          <button type="button" @click="isSubmitModalOpen = false" class="btn btn-ghost btn-sm btn-circle">✕</button>
         </div>
+      </template>
+    </SlideOverDrawer>
 
-        <form @submit.prevent="submitExpense" class="space-y-4 text-xs">
-          <!-- Member & Partner -->
-          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div class="form-control">
-              <label class="label py-1"><span class="label-text font-bold">Fronting Member *</span></label>
-              <input 
-                type="text" 
-                v-model="newExpense.member" 
-                placeholder="e.g. Mike or Jesse" 
-                class="input input-bordered input-sm rounded-xl font-medium" 
-                required 
-              />
-            </div>
-            <div class="form-control">
-              <label class="label py-1"><span class="label-text font-bold">Partner Prefix</span></label>
-              <select v-model="newExpense.partner" class="select select-bordered select-sm rounded-xl font-bold font-mono">
-                <option value="HUCK">HUCK (Huckleberry Collective)</option>
-                <option value="PDXGL">PDXGL (PDX Game Library)</option>
-                <option value="SHARED">SHARED (All Booth Commons)</option>
-              </select>
-            </div>
-          </div>
-
-          <!-- Category -->
+    <!-- SUBMIT / EDIT EXPENSE DRAWER -->
+    <SlideOverDrawer
+      v-model="isSubmitModalOpen"
+      :title="editingExpenseId ? 'Edit Expense Details' : 'Log Commons Expense'"
+      :icon="editingExpenseId ? 'solar:pen-new-square-bold-duotone' : 'solar:bill-bold-duotone'"
+      size="lg"
+    >
+      <form @submit.prevent="submitExpense" class="space-y-4 text-xs">
+        <!-- Member & Partner -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div class="form-control">
-            <label class="label py-1"><span class="label-text font-bold">Category *</span></label>
-            <select v-model="newExpense.category" @change="onNewCategoryChange" class="select select-bordered select-sm rounded-xl font-bold" required>
-              <option value="Thermal Tags & Merch Supplies">🏷️ Thermal Tags &amp; Merch Supplies (Labels, Tags, Bags)</option>
-              <option value="Booth Rent & Mall Fees">🏪 Booth Rent &amp; Mall Fees (Memory Den / Pop-Up Table)</option>
-              <option value="Display Hardware & Fixtures">🪵 Display Hardware &amp; Fixtures (Shelving, Racks, Lights)</option>
-              <option value="Tech Commons & AI Credits">⚡ Tech Commons &amp; AI Credits (Hosting, Gemini Credits)</option>
-              <option value="Hauling & Sourcing Transport">🚚 Hauling &amp; Sourcing Transport (Mileage, Gas, Tolls)</option>
-              <option value="Personal Schedule C Write-Off">👤 Personal Schedule C Write-Off (Home Office, Phone, Curator Tools)</option>
-              <option value="Cleaning & Facility Maintenance">🧹 Cleaning &amp; Facility Maintenance</option>
-              <option value="General Operational Commons">📦 General Operational Commons</option>
-            </select>
-          </div>
-
-          <!-- Tax & Co-op Allocation Scope -->
-          <div class="p-3.5 rounded-2xl bg-base-200/60 border border-base-300 space-y-2.5">
-            <label class="label py-0">
-              <span class="label-text font-black text-xs">Who Pays / Tax Write-Off Scope *</span>
-            </label>
-            <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
-              <button
-                type="button"
-                @click="newExpense.scope = 'coop_shared'; newExpense.coopSharePct = 100"
-                class="btn btn-xs rounded-xl font-bold h-9"
-                :class="newExpense.scope === 'coop_shared' ? 'btn-primary' : 'btn-ghost border border-base-300'"
-              >
-                🤝 Co-op Shared (100%)
-              </button>
-              <button
-                type="button"
-                @click="newExpense.scope = 'personal_write_off'; newExpense.coopSharePct = 0"
-                class="btn btn-xs rounded-xl font-bold h-9"
-                :class="newExpense.scope === 'personal_write_off' ? 'btn-secondary' : 'btn-ghost border border-base-300'"
-              >
-                👤 Personal Write-Off
-              </button>
-              <button
-                type="button"
-                @click="newExpense.scope = 'split'; newExpense.coopSharePct = 50"
-                class="btn btn-xs rounded-xl font-bold h-9"
-                :class="newExpense.scope === 'split' ? 'btn-accent' : 'btn-ghost border border-base-300'"
-              >
-                ⚖️ Split Co-op / Personal
-              </button>
-            </div>
-            <div v-if="newExpense.scope === 'split'" class="space-y-1 pt-1">
-              <div class="flex justify-between text-[11px] font-mono font-bold">
-                <span class="text-primary">Co-op Commons: {{ newExpense.coopSharePct }}%</span>
-                <span class="text-secondary">Personal Schedule C: {{ 100 - newExpense.coopSharePct }}%</span>
-              </div>
-              <input type="range" min="10" max="90" step="5" v-model.number="newExpense.coopSharePct" class="range range-xs range-accent" />
-            </div>
-            <p class="text-[11px] text-base-content/70">
-              <span v-if="newExpense.scope === 'coop_shared'">Reimbursed 100% from the 30% Co-op Commons Pool in monthly settlements.</span>
-              <span v-else-if="newExpense.scope === 'personal_write_off'">$0.00 charged to Co-op partners; tracked 100% for your Personal IRS Schedule C tax deduction.</span>
-              <span v-else>Charges {{ newExpense.coopSharePct }}% to Co-op Commons and {{ 100 - newExpense.coopSharePct }}% to your Personal Schedule C.</span>
-            </p>
-          </div>
-
-          <!-- Amount & Date -->
-          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div class="form-control">
-              <label class="label py-1"><span class="label-text font-bold">Total Amount ($) *</span></label>
-              <input 
-                type="number" 
-                v-model.number="newExpense.amount" 
-                step="0.01" 
-                min="0.01" 
-                placeholder="e.g. 45.99" 
-                class="input input-bordered input-sm rounded-xl font-mono font-bold text-sm" 
-                required 
-              />
-            </div>
-            <div class="form-control">
-              <label class="label py-1"><span class="label-text font-bold">Purchase Date *</span></label>
-              <input 
-                type="date" 
-                v-model="newExpense.date" 
-                class="input input-bordered input-sm rounded-xl font-mono text-xs" 
-                required 
-              />
-            </div>
-          </div>
-
-          <!-- Description -->
-          <div class="form-control">
-            <label class="label py-1"><span class="label-text font-bold">Item Description &amp; Itemization *</span></label>
-            <textarea 
-              v-model="newExpense.description" 
-              placeholder="e.g. Rollo 4x6 Direct Thermal Labels (500 pack) ordered from Amazon for booth tagging" 
-              class="textarea textarea-bordered rounded-xl text-xs h-20" 
-              required
-            ></textarea>
-          </div>
-
-          <!-- Status (Shown in Edit Mode) -->
-          <div v-if="editingExpenseId" class="form-control">
-            <label class="label py-1"><span class="label-text font-bold">Reimbursement Status</span></label>
-            <select v-model="newExpense.status" class="select select-bordered select-sm rounded-xl font-bold capitalize">
-              <option value="pending">🟡 Pending Reimbursement</option>
-              <option value="approved">🟢 Approved for Commons Pool</option>
-              <option value="reimbursed">💎 Reimbursed</option>
-            </select>
-          </div>
-
-          <!-- Receipt Upload -->
-          <div v-if="!editingExpenseId" class="form-control">
-            <label class="label py-1"><span class="label-text font-bold">Receipt / Invoice Photo</span></label>
+            <label class="label py-1"><span class="label-text font-bold">Fronting Member *</span></label>
             <input 
-              type="file" 
-              accept="image/*,.pdf" 
-              @change="handleReceiptFile" 
-              class="file-input file-input-bordered file-input-sm rounded-xl w-full text-xs" 
+              type="text" 
+              v-model="newExpense.member" 
+              placeholder="e.g. Mike or Jesse" 
+              class="input input-bordered input-sm rounded-xl font-medium" 
+              required 
             />
-            <span class="text-[10px] text-base-content/50 mt-1">PNG, JPG, or PDF snapshot of store receipt or online order.</span>
           </div>
+          <div class="form-control">
+            <label class="label py-1"><span class="label-text font-bold">Partner Prefix</span></label>
+            <select v-model="newExpense.partner" class="select select-bordered select-sm rounded-xl font-bold font-mono">
+              <option value="HUCK">HUCK (Huckleberry Collective)</option>
+              <option value="PDXGL">PDXGL (PDX Game Library)</option>
+              <option value="SHARED">SHARED (All Booth Commons)</option>
+            </select>
+          </div>
+        </div>
 
-          <div class="flex items-center justify-end gap-2.5 pt-3 border-t border-base-200">
-            <button type="button" @click="isSubmitModalOpen = false" class="btn btn-sm btn-ghost rounded-xl">Cancel</button>
-            <button 
-              type="submit" 
-              class="btn btn-sm btn-primary rounded-xl font-black px-5" 
-              :disabled="submitting"
+        <!-- Category -->
+        <div class="form-control">
+          <label class="label py-1"><span class="label-text font-bold">Category *</span></label>
+          <select v-model="newExpense.category" @change="onNewCategoryChange" class="select select-bordered select-sm rounded-xl font-bold" required>
+            <option value="Thermal Tags & Merch Supplies">🏷️ Thermal Tags &amp; Merch Supplies (Labels, Tags, Bags)</option>
+            <option value="Booth Rent & Mall Fees">🏪 Booth Rent &amp; Mall Fees (Memory Den / Pop-Up Table)</option>
+            <option value="Display Hardware & Fixtures">🪵 Display Hardware &amp; Fixtures (Shelving, Racks, Lights)</option>
+            <option value="Tech Commons & AI Credits">⚡ Tech Commons &amp; AI Credits (Hosting, Gemini Credits)</option>
+            <option value="Hauling & Sourcing Transport">🚚 Hauling &amp; Sourcing Transport (Mileage, Gas, Tolls)</option>
+            <option value="Personal Schedule C Write-Off">👤 Personal Schedule C Write-Off (Home Office, Phone, Curator Tools)</option>
+            <option value="Cleaning & Facility Maintenance">🧹 Cleaning &amp; Facility Maintenance</option>
+            <option value="General Operational Commons">📦 General Operational Commons</option>
+          </select>
+        </div>
+
+        <!-- Tax & Co-op Allocation Scope -->
+        <div class="p-3.5 rounded-2xl bg-base-200/60 border border-base-300 space-y-2.5">
+          <label class="label py-0">
+            <span class="label-text font-black text-xs">Who Pays / Tax Write-Off Scope *</span>
+          </label>
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
+            <button
+              type="button"
+              @click="newExpense.scope = 'coop_shared'; newExpense.coopSharePct = 100"
+              class="btn btn-xs rounded-xl font-bold h-9"
+              :class="newExpense.scope === 'coop_shared' ? 'btn-primary' : 'btn-ghost border border-base-300'"
             >
-              <span v-if="submitting" class="loading loading-spinner loading-xs"></span>
-              <span v-else>{{ editingExpenseId ? 'Save Changes' : 'Submit for Reimbursement' }}</span>
+              🤝 Co-op Shared (100%)
+            </button>
+            <button
+              type="button"
+              @click="newExpense.scope = 'personal_write_off'; newExpense.coopSharePct = 0"
+              class="btn btn-xs rounded-xl font-bold h-9"
+              :class="newExpense.scope === 'personal_write_off' ? 'btn-secondary' : 'btn-ghost border border-base-300'"
+            >
+              👤 Personal Write-Off
+            </button>
+            <button
+              type="button"
+              @click="newExpense.scope = 'split'; newExpense.coopSharePct = 50"
+              class="btn btn-xs rounded-xl font-bold h-9"
+              :class="newExpense.scope === 'split' ? 'btn-accent' : 'btn-ghost border border-base-300'"
+            >
+              ⚖️ Split Co-op / Personal
             </button>
           </div>
-        </form>
-      </div>
-      <form method="dialog" class="modal-backdrop">
-        <button @click="isSubmitModalOpen = false">close</button>
-      </form>
-    </dialog>
-
-    <!-- RECEIPT PREVIEW MODAL -->
-    <dialog :class="{ 'modal modal-open': isReceiptPreviewOpen }" class="modal">
-      <div class="modal-box max-w-3xl rounded-3xl p-5 space-y-4">
-        <div class="flex items-center justify-between border-b border-base-200 pb-2.5">
-          <div class="min-w-0 pr-2">
-            <h4 class="font-black text-sm text-base-content truncate">
-              {{ activeReceipt?.description }}
-            </h4>
-            <div class="text-xs font-mono text-base-content/60 font-medium">
-              ${{ activeReceipt?.amount.toFixed(2) }} • {{ formatDate(activeReceipt?.date || '') }}
+          <div v-if="newExpense.scope === 'split'" class="space-y-1 pt-1">
+            <div class="flex justify-between text-[11px] font-mono font-bold">
+              <span class="text-primary">Co-op Commons: {{ newExpense.coopSharePct }}%</span>
+              <span class="text-secondary">Personal Schedule C: {{ 100 - newExpense.coopSharePct }}%</span>
             </div>
+            <input type="range" min="10" max="90" step="5" v-model.number="newExpense.coopSharePct" class="range range-xs range-accent" />
           </div>
-          <button type="button" @click="isReceiptPreviewOpen = false" class="btn btn-ghost btn-sm btn-circle shrink-0">✕</button>
+          <p class="text-[11px] text-base-content/70">
+            <span v-if="newExpense.scope === 'coop_shared'">Reimbursed 100% from the 30% Co-op Commons Pool in monthly settlements.</span>
+            <span v-else-if="newExpense.scope === 'personal_write_off'">$0.00 charged to Co-op partners; tracked 100% for your Personal IRS Schedule C tax deduction.</span>
+            <span v-else>Charges {{ newExpense.coopSharePct }}% to Co-op Commons and {{ 100 - newExpense.coopSharePct }}% to your Personal Schedule C.</span>
+          </p>
         </div>
 
-        <div class="flex flex-col items-center justify-center p-2 bg-base-200/60 rounded-2xl min-h-[50vh] max-h-[75vh] overflow-hidden">
-          <iframe 
-            v-if="activeReceipt?.receiptUrl" 
-            :src="activeReceipt.receiptUrl" 
-            class="w-full h-[65vh] rounded-xl border border-base-300 bg-base-100"
-            title="Receipt Document / PDF"
-          ></iframe>
+        <!-- Amount & Date -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div class="form-control">
+            <label class="label py-1"><span class="label-text font-bold">Total Amount ($) *</span></label>
+            <input 
+              type="text"
+              inputmode="decimal"
+              v-model.number="newExpense.amount" 
+              placeholder="e.g. 45.99" 
+              class="input input-bordered input-sm rounded-xl font-mono font-bold text-sm" 
+              required 
+            />
+          </div>
+          <div class="form-control">
+            <label class="label py-1"><span class="label-text font-bold">Purchase Date *</span></label>
+            <input 
+              type="date" 
+              v-model="newExpense.date" 
+              class="input input-bordered input-sm rounded-xl font-mono text-xs" 
+              required 
+            />
+          </div>
         </div>
 
-        <div class="flex items-center justify-between gap-2 pt-2 border-t border-base-200 flex-wrap">
+        <!-- Description -->
+        <div class="form-control">
+          <label class="label py-1"><span class="label-text font-bold">Item Description &amp; Itemization *</span></label>
+          <textarea 
+            v-model="newExpense.description" 
+            placeholder="e.g. Rollo 4x6 Direct Thermal Labels (500 pack) ordered from Amazon for booth tagging" 
+            class="textarea textarea-bordered rounded-xl text-xs h-20" 
+            required
+          ></textarea>
+        </div>
+
+        <!-- Status (Shown in Edit Mode) -->
+        <div v-if="editingExpenseId" class="form-control">
+          <label class="label py-1"><span class="label-text font-bold">Reimbursement Status</span></label>
+          <select v-model="newExpense.status" class="select select-bordered select-sm rounded-xl font-bold capitalize">
+            <option value="pending">🟡 Pending Reimbursement</option>
+            <option value="approved">🟢 Approved for Commons Pool</option>
+            <option value="reimbursed">💎 Reimbursed</option>
+          </select>
+        </div>
+
+        <!-- Receipt Upload -->
+        <div v-if="!editingExpenseId" class="form-control">
+          <label class="label py-1"><span class="label-text font-bold">Receipt / Invoice Photo</span></label>
+          <input 
+            type="file" 
+            accept="image/*,.pdf" 
+            @change="handleReceiptFile" 
+            class="file-input file-input-bordered file-input-sm rounded-xl w-full text-xs" 
+          />
+          <span class="text-[10px] text-base-content/50 mt-1">PNG, JPG, or PDF snapshot of store receipt or online order.</span>
+        </div>
+
+        <div class="flex items-center justify-end gap-2.5 pt-3 border-t border-base-200">
+          <button type="button" @click="isSubmitModalOpen = false" class="btn btn-sm btn-ghost rounded-xl">Cancel</button>
+          <button 
+            type="submit" 
+            class="btn btn-sm btn-primary rounded-xl font-black px-5" 
+            :disabled="submitting"
+          >
+            <span v-if="submitting" class="loading loading-spinner loading-xs"></span>
+            <span v-else>{{ editingExpenseId ? 'Save Changes' : 'Submit for Reimbursement' }}</span>
+          </button>
+        </div>
+      </form>
+    </SlideOverDrawer>
+
+    <!-- RECEIPT PREVIEW DRAWER -->
+    <SlideOverDrawer
+      v-model="isReceiptPreviewOpen"
+      :title="activeReceipt?.description || 'Receipt Document'"
+      :subtitle="activeReceipt ? `$${activeReceipt.amount.toFixed(2)} • ${formatDate(activeReceipt.date || '')}` : ''"
+      icon="solar:document-bold-duotone"
+      size="xl"
+    >
+      <div class="flex flex-col items-center justify-center p-2 bg-base-200/60 rounded-2xl min-h-[50vh] max-h-[75vh] overflow-hidden">
+        <iframe 
+          v-if="activeReceipt?.receiptUrl" 
+          :src="activeReceipt.receiptUrl" 
+          class="w-full h-[65vh] rounded-xl border border-base-300 bg-base-100"
+          title="Receipt Document / PDF"
+        ></iframe>
+      </div>
+
+      <template #footer>
+        <div class="flex items-center justify-between gap-2 w-full flex-wrap">
           <label class="btn btn-xs btn-outline gap-1 font-bold cursor-pointer">
             <Icon icon="solar:upload-minimalistic-bold" class="w-3.5 h-3.5" />
             <span>Replace / Re-upload PDF</span>
@@ -976,11 +946,8 @@
             <span>Open in New Tab / Download</span>
           </a>
         </div>
-      </div>
-      <form method="dialog" class="modal-backdrop">
-        <button @click="isReceiptPreviewOpen = false">close</button>
-      </form>
-    </dialog>
+      </template>
+    </SlideOverDrawer>
 
     <!-- EXPENSE & INVOICE STAGING TRAY (CANONICAL INTERACTIVE BOTTOM SHEET PATTERN) -->
     <Teleport to="body">
@@ -1255,9 +1222,8 @@
                         </td>
                         <td class="text-right">
                           <input 
-                            type="number" 
-                            step="0.01" 
-                            min="0" 
+                            type="text"
+                            inputmode="decimal"
                             v-model.number="item.amount" 
                             class="input input-bordered input-2xs rounded-lg font-mono font-black text-right text-xs w-20"
                             :class="item.amount > 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-error'"
@@ -1327,6 +1293,8 @@
 import { ref, computed, onMounted, watch } from 'vue';
 import { Icon } from '@iconify/vue';
 import PaginationDock from '../common/PaginationDock.vue';
+import SlideOverDrawer from '../common/SlideOverDrawer.vue';
+import { useBodyScrollLock } from '../../composables/useBodyScrollLock';
 import { addToast } from '../../stores/toast';
 import { confirmDialog } from '../../stores/confirm';
 import { useAuth } from '../../composables/useAuth';
@@ -1416,6 +1384,7 @@ const getScopeBadgeLabel = (expense: CoopExpenseItem): string => {
 
 // Bulk Invoices & Receipts Import State
 const isImportModalOpen = ref(false);
+useBodyScrollLock(isImportModalOpen);
 const isImportingExpenses = ref(false);
 const importMode = ref<'pdf' | 'csv'>('pdf');
 const isDraggingPdf = ref(false);

@@ -233,7 +233,7 @@
               </div>
               <div class="flex items-center gap-2">
                 <input type="range" min="0" max="60" step="1" v-model.number="c.coopCommissionPct" :disabled="!canEditGlobal" class="range range-primary range-xs flex-1" />
-                <input type="number" min="0" max="60" step="1" v-model.number="c.coopCommissionPct" :disabled="!canEditGlobal" class="input input-bordered input-xs w-14 font-mono font-bold text-right" />
+                <input type="text" inputmode="decimal" v-model.number="c.coopCommissionPct" :disabled="!canEditGlobal" class="input input-bordered input-xs w-14 font-mono font-bold text-right" />
               </div>
               <div class="flex gap-1 flex-wrap">
                 <button
@@ -254,7 +254,7 @@
                 <span class="font-extrabold uppercase tracking-wider text-warning">🏪 Fixed Shelf Rent ($/mo)</span>
                 <span class="badge badge-warning badge-sm font-mono font-black">${{ Number(c.fixedMonthlyRent || 0).toFixed(2) }}</span>
               </div>
-              <input type="number" min="0" step="5" v-model.number="c.fixedMonthlyRent" :disabled="!canEditGlobal" class="input input-bordered input-sm rounded-xl font-mono font-bold w-full" />
+              <input type="text" inputmode="decimal" v-model.number="c.fixedMonthlyRent" :disabled="!canEditGlobal" class="input input-bordered input-sm rounded-xl font-mono font-bold w-full" />
               <label class="label cursor-pointer justify-start gap-2 py-0">
                 <input type="checkbox" v-model="c.capRentAtNetSales" :disabled="!canEditGlobal" class="checkbox checkbox-xs checkbox-primary" />
                 <span class="label-text text-[11px] font-bold">Never let rent push payout below $0</span>
@@ -565,12 +565,13 @@ const addConsignorContract = () => {
   const prefix = newConsignorPrefix.value;
   if (!prefix) return;
   const row = form.value.partnerPrefixes.find((p) => p.prefix.toUpperCase() === prefix);
+  const templateConsignor = DEFAULT_COOP_POLICY_CONFIG.consignors[0];
   policy.value.consignors.push({
     prefix,
     displayName: row?.name || `${prefix.replace(/-$/, '')} Consignor`,
-    mode: 'flat_commission',
-    coopCommissionPct: 20,
-    fixedMonthlyRent: 50,
+    mode: templateConsignor?.mode || 'flat_commission',
+    coopCommissionPct: Number(templateConsignor?.coopCommissionPct ?? 0),
+    fixedMonthlyRent: Number(templateConsignor?.fixedMonthlyRent ?? 0),
     capRentAtNetSales: true,
   });
   newConsignorPrefix.value = '';

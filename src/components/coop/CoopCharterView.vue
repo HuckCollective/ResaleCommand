@@ -299,6 +299,7 @@ import { computed, defineAsyncComponent, onMounted, ref } from 'vue';
 import { Icon } from '@iconify/vue';
 import { addToast } from '../../stores/toast';
 import { useAuth } from '../../composables/useAuth';
+import { resolveDefaultRicochetLocationMeta } from '../../lib/warehouses';
 import SlideOverDrawer from '../common/SlideOverDrawer.vue';
 import type { CharterRoleCard, CharterSectionId, CharterSectionView } from '../../lib/charterCms';
 
@@ -306,7 +307,6 @@ const ConnectWithUsForm = defineAsyncComponent(() => import('./ConnectWithUsForm
 const CharterPayoutSimulator = defineAsyncComponent(() => import('./CharterPayoutSimulator.vue'));
 
 const VALID_SECTION_IDS: readonly CharterSectionId[] = ['payouts', 'monthly', 'expenses', 'governance', 'legal'];
-
 const props = withDefaults(
   defineProps<{
     sections: CharterSectionView[];
@@ -320,7 +320,7 @@ const props = withDefaults(
   {
     initialSection: 'payouts',
     initialAuthenticated: false,
-    primaryBoothRentLabel: '$382.50',
+    primaryBoothRentLabel: () => `$${Number(resolveDefaultRicochetLocationMeta().monthlyRent || 0).toFixed(2)}`,
     curatorPct: 70,
     commonsPct: 30,
   }

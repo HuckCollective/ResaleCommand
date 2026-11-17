@@ -925,10 +925,11 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue';
+import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue';
 import { Icon } from '@iconify/vue';
 import BottomActionDock from '../common/BottomActionDock.vue';
 import PhotoGalleryManager from '../common/PhotoGalleryManager.vue';
+import { useBodyScrollLock } from '../../composables/useBodyScrollLock';
 import { addToast } from '../../stores/toast';
 import { COOP_MEDIA_BUCKET_ID, uploadCoopMediaFiles } from '../../lib/coopMedia';
 import {
@@ -966,6 +967,26 @@ const emit = defineEmits<{
   (e: 'copy', text: string): void;
   (e: 'upvote', id: string): void;
 }>();
+
+useBodyScrollLock(() => props.isOpen);
+
+const onVaultDrawerKeyDown = (e: KeyboardEvent) => {
+  if (e.key === 'Escape' && props.isOpen) {
+    emit('close');
+  }
+};
+
+onMounted(() => {
+  if (typeof window !== 'undefined') {
+    window.addEventListener('keydown', onVaultDrawerKeyDown);
+  }
+});
+
+onBeforeUnmount(() => {
+  if (typeof window !== 'undefined') {
+    window.removeEventListener('keydown', onVaultDrawerKeyDown);
+  }
+});
 
 const KIND_META = VAULT_KIND_META;
 const GOV_META = GOVERNANCE_META;

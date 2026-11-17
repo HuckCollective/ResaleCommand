@@ -348,7 +348,7 @@
                 />
                 <div class="text-left leading-tight">
                   <div class="font-black text-xs text-base-content">Item Web URL</div>
-                  <div class="font-mono text-[9px] text-base-content/60 truncate max-w-[130px]">resalecommand.com/i/...</div>
+                  <div class="font-mono text-[9px] text-base-content/60 truncate max-w-[130px]">{{ siteConfig.domain }}/i/...</div>
                 </div>
               </label>
             </div>
@@ -735,6 +735,8 @@ import { generateCode128Svg } from '../../lib/barcode128';
 import { generateQrCodeSvg, resolveQrPayload } from '../../lib/qrCodeHelper';
 import { printRolloLabels, generateLabelsPdf, type RolloPrintItem, type RolloPrintOptions } from '../../lib/rolloLabelPrint';
 import { extractShortTagTitle } from '../../lib/exportUtils';
+import { getAllLocationSettingMetas } from '../../lib/warehouses';
+import { siteConfig } from '../../site-config';
 import { addToast } from '../../stores/toast';
 
 // -------------------------------------------------------------
@@ -756,59 +758,42 @@ export interface LocationPreset {
   isCustomPartner?: boolean;
 }
 
+const canonicalMetas = getAllLocationSettingMetas();
 const standardLocations: LocationPreset[] = [
-  {
-    id: 'MD',
-    name: 'Memory Den Booth',
-    code: 'MD',
-    icon: '🏛️',
-    vendorHeader: 'MEMORY DEN',
-    badge: 'Ricochet POS (Dual-ID)',
-    badgeClass: 'badge-primary',
-    desc: 'Antique Mall Booth #42 — Cash register scans Ricochet 0EJ SKU',
-    hasStoreSku: true,
-    supportsBin: false,
-    defaultSkuPrefix: 'HUCK-'
-  },
-  {
-    id: 'HG',
-    name: 'Garage Backstock',
-    code: 'HG',
-    icon: '📦',
-    vendorHeader: 'GARAGE BACKSTOCK',
-    badge: 'Warehouse (UPC + Bin)',
-    badgeClass: 'badge-neutral',
-    desc: 'Intake totes & warehouse backstock — Uses canonical UPC and physical bin storage',
-    hasStoreSku: false,
-    supportsBin: true,
+  ...canonicalMetas.map((m) => ({
+    id: m.code,
+    name: m.shortName,
+    code: m.code,
+    icon: m.icon,
+    vendorHeader: m.shortName.toUpperCase(),
+    badge: m.usesRicochet
+      ? `${m.posName || 'Ricochet POS'} (Dual-ID)`
+      : m.commissionRate > 0
+        ? `Consignment (${m.feePct}% fee)`
+        : 'Backstock Storage (UPC + Bin)',
+    badgeClass: m.code === 'MD' ? 'badge-primary' : m.code === 'DT' ? 'badge-secondary' : 'badge-neutral',
+    desc: m.usesRicochet
+      ? `${m.fullName} — Register scans ${m.skuPrefix} SKU + canonical HUCK- UPC`
+      : m.commissionRate > 0
+        ? `${m.fullName} — Small collectibles, jewelry & arcana (<8", zero apparel)`
+        : `${m.fullName} — Backstock storage totes & shelf bins`,
+    hasStoreSku: Boolean(m.usesRicochet),
+    supportsBin: m.commissionRate === 0,
     defaultSkuPrefix: 'HUCK-',
-    defaultBin: 'TOTE-04'
-  },
+    defaultBin: m.commissionRate === 0 ? 'TOTE-04' : undefined,
+  })),
   {
-    id: 'PDX',
-    name: 'Portland Gaming Lib',
-    code: 'PDX',
+    id: 'PDXGL',
+    name: 'PDX Game Library',
+    code: 'PDXGL',
     icon: '🎲',
-    vendorHeader: 'PDX GAMING LIB',
-    badge: 'Co-Op Org (UPC Only)',
+    vendorHeader: 'PDX GAME LIBRARY',
+    badge: 'Co-Op Partner (PDXGL-)',
     badgeClass: 'badge-accent',
-    desc: 'Non-profit gaming co-op — Uses canonical organization asset UPC',
+    desc: 'Tabletop & RPG co-op partner — Uses canonical PDXGL-XXXX asset barcode',
     hasStoreSku: false,
     supportsBin: false,
-    defaultSkuPrefix: 'PDX-'
-  },
-  {
-    id: 'DT',
-    name: 'Dusty Tiger',
-    code: 'DT',
-    icon: '🐅',
-    vendorHeader: 'DUSTY TIGER',
-    badge: 'Vendor Tagging',
-    badgeClass: 'badge-secondary',
-    desc: 'Consignment collective — Uses direct vendor string tag code',
-    hasStoreSku: false,
-    supportsBin: false,
-    defaultSkuPrefix: 'DUSTY-'
+    defaultSkuPrefix: 'PDXGL-'
   },
   {
     id: 'MFR',
@@ -825,16 +810,16 @@ const standardLocations: LocationPreset[] = [
   },
   {
     id: 'ONLINE',
-    name: 'Online E-Commerce',
+    name: 'Online Ready Bin',
     code: 'ONLINE',
     icon: '🌐',
-    vendorHeader: 'ONLINE INVENTORY',
-    badge: 'eBay / Poshmark',
+    vendorHeader: 'ONLINE READY BIN',
+    badge: 'eBay / Depop / Whatnot',
     badgeClass: 'badge-info',
-    desc: 'Warehouse shelf bin location for online listings',
+    desc: 'Shared Online Ready Bin shelf location for multi-channel co-curation',
     hasStoreSku: false,
     supportsBin: true,
-    defaultSkuPrefix: 'EB-',
+    defaultSkuPrefix: 'HUCK-',
     defaultBin: 'SHELF-B2'
   },
   {
@@ -845,10 +830,10 @@ const standardLocations: LocationPreset[] = [
     vendorHeader: 'CUSTOM STORE',
     badge: 'Custom',
     badgeClass: 'badge-outline',
-    desc: 'Freeform custom store or event booth name',
+    desc: 'Freeform custom pop-up or event header',
     hasStoreSku: false,
     supportsBin: false,
-    defaultSkuPrefix: 'TAG-'
+    defaultSkuPrefix: 'HUCK-'
   }
 ];
 
@@ -1046,13 +1031,13 @@ const presets = [
     bin: 'TOTE-04'
   },
   {
-    shortName: 'Cthulhu RPG (Co-Op)',
-    locationId: 'PDX',
+    shortName: 'Cthulhu RPG (PDXGL)',
+    locationId: 'PDXGL',
     title: 'Chaosium Call of Cthulhu RPG 7th Edition Hardcover Keeper Rulebook',
     tagTitle: 'Call of Cthulhu RPG Keeper Rulebook',
     price: '35.00',
     locationSku: '',
-    upc: 'PDX-0441',
+    upc: 'PDXGL-0441',
     bin: ''
   },
   {
@@ -1076,13 +1061,13 @@ const presets = [
     bin: ''
   },
   {
-    shortName: 'Dusty Tiger Jacket',
+    shortName: 'Obsidian Wand (DT <8")',
     locationId: 'DT',
-    title: 'Saint Tropez West Classics Black Velvet Embroidered Beaded Bolero Shrug Jacket (M)',
-    tagTitle: 'Saint Tropez Black Velvet Bolero (M)',
-    price: '30.00',
+    title: 'Hand-Carved Black Obsidian Crystal Altar Wand w/ Silver Moon Cap 7 Inch',
+    tagTitle: 'Obsidian Crystal Altar Wand 7"',
+    price: '24.00',
     locationSku: '',
-    upc: 'DUSTY-1088',
+    upc: 'HUCK-1088',
     bin: ''
   }
 ];

@@ -92,8 +92,46 @@
 
       <template #footer>
         <div v-if="selected" class="space-y-2">
+          <!-- Inline Decision Confirmation Gate (Email Preview — Zero Stacked Modal Overlay) -->
+          <div v-if="pendingConfirm" class="rounded-2xl border-2 border-primary/40 bg-base-200/70 p-3.5 space-y-2.5 text-xs">
+            <div class="flex items-start justify-between gap-2">
+              <div>
+                <div class="text-[10px] font-bold uppercase tracking-wider text-base-content/60">Confirm Steward Decision</div>
+                <div class="font-black text-sm mt-0.5">{{ confirmModalMeta.title }}</div>
+              </div>
+              <button type="button" class="btn btn-xs btn-circle btn-ghost" @click="pendingConfirm = null">✕</button>
+            </div>
+
+            <div class="rounded-xl border px-3 py-2 space-y-1" :class="confirmModalMeta.boxClass">
+              <div class="font-bold">{{ confirmModalMeta.summary }}</div>
+              <div v-if="confirmModalMeta.emailSubject" class="text-base-content/80">
+                <span class="font-semibold">Email Subject:</span> "{{ confirmModalMeta.emailSubject }}"
+              </div>
+              <div v-if="confirmModalMeta.emailPreview" class="text-base-content/75 italic">
+                "{{ confirmModalMeta.emailPreview }}"
+              </div>
+              <div v-if="confirmModalMeta.sendsEmail" class="pt-0.5 font-mono text-[11px] text-base-content/70">
+                Link host in email: <strong>{{ targetHostLabel }}</strong>
+              </div>
+            </div>
+
+            <div class="flex items-center justify-end gap-2 pt-1">
+              <button type="button" class="btn btn-xs btn-ghost rounded-xl font-bold" :disabled="!!busyId" @click="pendingConfirm = null">Cancel</button>
+              <button
+                type="button"
+                class="btn btn-xs rounded-xl font-black"
+                :class="confirmModalMeta.btnClass"
+                :disabled="!!busyId"
+                @click="confirmAndSendDecision"
+              >
+                <span v-if="busyId" class="loading loading-spinner loading-xs"></span>
+                {{ confirmModalMeta.cta }}
+              </button>
+            </div>
+          </div>
+
           <!-- Ask 1 Question box -->
-          <div v-if="questionOpen" class="flex flex-col gap-2 bg-info/10 border border-info/30 rounded-xl p-2.5">
+          <div v-else-if="questionOpen" class="flex flex-col gap-2 bg-info/10 border border-info/30 rounded-xl p-2.5">
             <input
               v-model="questionDraft"
               type="text"
@@ -143,59 +181,6 @@
         </div>
       </template>
     </SlideOverDrawer>
-
-    <!-- Decision Confirmation Modal (Email Preview Gate) -->
-    <dialog class="modal modal-bottom sm:modal-middle z-[500]" :class="{ 'modal-open': !!pendingConfirm }">
-      <div v-if="pendingConfirm" class="modal-box rounded-t-3xl sm:rounded-3xl border border-base-300 space-y-4">
-        <div class="flex items-start justify-between gap-3">
-          <div>
-            <div class="text-[11px] font-bold uppercase tracking-wider text-base-content/60">Confirm Steward Decision</div>
-            <h4 class="font-black text-base mt-0.5">{{ confirmModalMeta.title }}</h4>
-          </div>
-          <button type="button" class="btn btn-sm btn-circle btn-ghost" @click="pendingConfirm = null">✕</button>
-        </div>
-
-        <div class="rounded-xl bg-base-200/70 border border-base-300 px-3.5 py-2.5 text-xs space-y-1">
-          <div>
-            <span class="font-bold">Applicant:</span> {{ pendingConfirm.req.name }}
-            <span class="text-base-content/70">({{ pendingConfirm.req.email }})</span>
-          </div>
-          <div v-if="pendingConfirm.req.hats.length">
-            <span class="font-bold">Hats:</span> {{ pendingConfirm.req.hats.join(', ') }}
-          </div>
-        </div>
-
-        <div class="rounded-xl border px-3.5 py-2.5 text-xs space-y-1.5" :class="confirmModalMeta.boxClass">
-          <div class="font-bold">{{ confirmModalMeta.summary }}</div>
-          <div v-if="confirmModalMeta.emailSubject" class="text-base-content/80">
-            <span class="font-semibold">Email Subject:</span> "{{ confirmModalMeta.emailSubject }}"
-          </div>
-          <div v-if="confirmModalMeta.emailPreview" class="text-base-content/75 italic">
-            "{{ confirmModalMeta.emailPreview }}"
-          </div>
-          <div v-if="confirmModalMeta.sendsEmail" class="pt-1 font-mono text-[11px] text-base-content/70">
-            Link host in email: <strong>{{ targetHostLabel }}</strong>
-          </div>
-        </div>
-
-        <div class="modal-action mt-2">
-          <button type="button" class="btn btn-sm btn-ghost rounded-xl" :disabled="!!busyId" @click="pendingConfirm = null">Cancel</button>
-          <button
-            type="button"
-            class="btn btn-sm rounded-xl font-black"
-            :class="confirmModalMeta.btnClass"
-            :disabled="!!busyId"
-            @click="confirmAndSendDecision"
-          >
-            <span v-if="busyId" class="loading loading-spinner loading-xs"></span>
-            {{ confirmModalMeta.cta }}
-          </button>
-        </div>
-      </div>
-      <form method="dialog" class="modal-backdrop" @click="pendingConfirm = null">
-        <button type="button">close</button>
-      </form>
-    </dialog>
   </div>
 </template>
 

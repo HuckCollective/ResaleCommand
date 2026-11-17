@@ -258,9 +258,8 @@
                 <label class="text-[10px] font-bold opacity-70 block">Sold Price ($)</label>
                 <input
                   v-model.number="quickPrice"
-                  type="number"
-                  min="0"
-                  step="0.01"
+                  type="text"
+                  inputmode="decimal"
                   placeholder="0.00"
                   class="input input-bordered input-sm w-full h-9 rounded-xl font-mono font-black bg-base-100"
                   @keydown.enter.prevent="addQuickLineToCart"
@@ -270,9 +269,8 @@
                 <label class="text-[10px] font-bold opacity-70 block">Cost ($ opt)</label>
                 <input
                   v-model.number="quickCost"
-                  type="number"
-                  min="0"
-                  step="0.01"
+                  type="text"
+                  inputmode="decimal"
                   :disabled="quickPartner === 'BB-'"
                   placeholder="0.00"
                   class="input input-bordered input-sm w-full h-9 rounded-xl font-mono font-bold bg-base-100 disabled:opacity-60"
@@ -359,9 +357,8 @@
                   <span class="absolute left-2 top-1/2 -translate-y-1/2 font-mono text-xs font-bold opacity-60">$</span>
                   <input
                     v-model.number="line.grossPrice"
-                    type="number"
-                    min="0"
-                    step="0.01"
+                    type="text"
+                    inputmode="decimal"
                     class="input input-bordered input-xs w-full pl-5 h-8 rounded-lg font-mono font-black text-right text-xs bg-base-200/40"
                     title="Adjust sold price for this item"
                   />
@@ -384,9 +381,8 @@
               <label class="text-[10px] font-bold text-base-content/70 block">Buyer Paid Shipping ($)</label>
               <input
                 v-model.number="shippingCharged"
-                type="number"
-                min="0"
-                step="0.01"
+                type="text"
+                inputmode="decimal"
                 placeholder="0.00"
                 class="input input-bordered input-sm w-full h-8 rounded-xl font-mono font-bold text-xs bg-base-100"
               />
@@ -395,9 +391,8 @@
               <label class="text-[10px] font-bold text-base-content/70 block">Actual Postage Cost ($)</label>
               <input
                 v-model.number="shippingCost"
-                type="number"
-                min="0"
-                step="0.01"
+                type="text"
+                inputmode="decimal"
                 placeholder="0.00"
                 class="input input-bordered input-sm w-full h-8 rounded-xl font-mono font-bold text-xs bg-base-100"
               />

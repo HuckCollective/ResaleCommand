@@ -178,7 +178,7 @@
               <span class="text-xs font-bold opacity-60">Cost:</span>
               <div class="relative">
                 <span class="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs font-bold opacity-50">$</span>
-                <input type="number" step="0.01" v-model.number="item.cost" placeholder="0.00" 
+                <input type="text" inputmode="decimal" v-model.number="item.cost" placeholder="0.00" 
                        class="input input-sm input-bordered w-24 pl-6 font-bold text-sm" />
               </div>
             </div>
@@ -277,12 +277,11 @@
                 <span class="text-[11px]">Full Edit & Lots</span>
               </button>
 
-              <!-- Destination Selector Pill -->
+              <!-- Destination Selector Pill (Law 2: Driven Dynamically by Central Location Settings) -->
               <select v-model="item.destination" class="select select-bordered select-xs font-extrabold text-xs">
-                <option value="memory_den">🏢 Memory Den (MD)</option>
-                <option value="dustytiger">🐯 DustyTiger (DT)</option>
-                <option value="backstock">📦 Backstock (HG)</option>
-                <option value="online">🌐 Online (eBay/Poshmark)</option>
+                <option v-for="loc in destinationOptions" :key="loc.value" :value="loc.value">
+                  {{ loc.label }}
+                </option>
               </select>
             </div>
           </div>
@@ -332,7 +331,7 @@
           <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1 border-t border-base-300/60 text-xs">
             <div>
               <span class="block font-bold opacity-60 text-[10px]">Price ($):</span>
-              <input type="number" step="0.50" v-model.number="item.price" placeholder="0.00" 
+              <input type="text" inputmode="decimal" v-model.number="item.price" placeholder="0.00" 
                      class="input input-xs input-bordered w-full font-black text-success" />
             </div>
 
@@ -469,6 +468,7 @@ import { addToast } from '../../stores/toast';
 import { databases, storage, ID, Query } from '../../lib/appwrite';
 import { purchasesAPI } from '../../lib/purchases';
 import { saveItemToInventory, getItemsByPurchaseId, getCollectionId, getAssetUrl } from '../../lib/inventory';
+import { getAllLocationSettingMetas, getLocationSettingMeta } from '../../lib/warehouses';
 import { useLoader } from '../../composables/useLoader';
 import BulkImport from '../inventory/BulkImport.vue';
 import ItemDrawer from '../common/ItemDrawer.vue';
@@ -555,7 +555,7 @@ interface IngestionItem {
   price?: number | null;
   quantity: number;
   type: 'resale' | 'expense';
-  destination: 'memory_den' | 'dustytiger' | 'backstock' | 'online';
+  destination: string;
   category?: string;
   brand?: string;
   sku?: string;
@@ -563,6 +563,24 @@ interface IngestionItem {
   imageBase64?: string;
   analyzing?: boolean;
 }
+
+const canonicalLocationMetas = computed(() => getAllLocationSettingMetas());
+const destinationOptions = computed(() => [
+  ...canonicalLocationMetas.value.map((m) => ({
+    value: m.code,
+    label: `${m.icon} ${m.shortName} (${m.code})`,
+  })),
+  { value: 'ONLINE_READY_BIN', label: '🌐 Online Ready Bin (HG)' },
+]);
+
+const normalizeDestinationCode = (raw?: string): string => {
+  const s = String(raw || '').trim();
+  if (s === 'memory_den' || s === 'MD') return 'MD';
+  if (s === 'dustytiger' || s === 'DT') return 'DT';
+  if (s === 'online' || s === 'ONLINE_READY_BIN') return 'ONLINE_READY_BIN';
+  if (s === 'HH') return 'HH';
+  return 'HG';
+};
 
 const selectedOrderFilter = ref('all');
 const fetchingSgw = ref(false);
@@ -637,7 +655,7 @@ const items = ref<IngestionItem[]>(props.initialItems?.map(i => ({
   price: Number(i.price) || (Number(i.cost) ? Number(i.cost) * 3.5 : 0),
   quantity: Number(i.quantity) || 1,
   type: (i.type === 'expense' ? 'expense' : 'resale') as 'resale' | 'expense',
-  destination: (i.destination || 'backstock') as 'memory_den' | 'dustytiger' | 'backstock' | 'online',
+  destination: normalizeDestinationCode(i.destination),
   category: i.category || '',
   brand: i.brand || '',
   sku: i.sku || `HUCK-${Math.floor(1000 + Math.random() * 9000)}`,
@@ -645,8 +663,8 @@ const items = ref<IngestionItem[]>(props.initialItems?.map(i => ({
 })) || []);
 
 const resaleItems = computed(() => items.value.filter(i => i.type === 'resale'));
-const memoryDenItems = computed(() => resaleItems.value.filter(i => i.destination === 'memory_den'));
-const dustyTigerItems = computed(() => resaleItems.value.filter(i => i.destination === 'dustytiger'));
+const memoryDenItems = computed(() => resaleItems.value.filter(i => normalizeDestinationCode(i.destination) === 'MD'));
+const dustyTigerItems = computed(() => resaleItems.value.filter(i => normalizeDestinationCode(i.destination) === 'DT'));
 
 const totalLandedCost = computed(() => {
   return items.value.reduce((sum, item) => sum + ((Number(item.cost) || 0) * (Number(item.quantity) || 1)), 0);
@@ -660,7 +678,7 @@ const addLineItem = () => {
     price: 0,
     quantity: 1,
     type: 'resale',
-    destination: 'backstock',
+    destination: 'HG',
     category: '',
     brand: '',
     sku: `HUCK-${Math.floor(1000 + Math.random() * 9000)}`
@@ -803,7 +821,7 @@ const handleCsvImport = async (e: Event) => {
         price: landedCost > 0 ? Math.round(landedCost * 3.5) : 0,
         quantity: 1,
         type: 'resale',
-        destination: 'backstock',
+        destination: 'HG',
         orderId: rawOrderId || undefined,
         itemId: rawItemId || undefined,
         sku: rawItemId ? `SGW-${rawItemId.slice(-6)}` : `HUCK-${Math.floor(1000 + Math.random() * 9000)}`
@@ -975,22 +993,21 @@ const completeIngestion = async () => {
     const DB_ID = import.meta.env.PUBLIC_APPWRITE_DB_ID || 'resale_db';
     const collId = getCollectionId();
 
-    // Update existing items or create new active inventory records
+    // Update existing items or create new active inventory records (Law 1 & Law 2: Canonical 4 Locations)
     const savePromises = resaleItems.value.map(async item => {
+      const dest = normalizeDestinationCode(item.destination);
       let sellingLocations: string[] = [];
       let storageLocation = 'HG';
 
-      if (item.destination === 'memory_den') {
-        sellingLocations = ['Memory Den'];
-        storageLocation = 'MD';
-      } else if (item.destination === 'dustytiger') {
-        sellingLocations = ['Dusty Tiger'];
-        storageLocation = 'DT';
-      } else if (item.destination === 'online') {
-        sellingLocations = ['eBay', 'Poshmark'];
+      if (dest === 'ONLINE_READY_BIN') {
+        sellingLocations = ['ONLINE_READY_BIN'];
         storageLocation = 'HG';
       } else {
-        storageLocation = 'HG';
+        const meta = getLocationSettingMeta(dest);
+        storageLocation = meta.code;
+        if (meta.commissionRate > 0) {
+          sellingLocations = [meta.shortName];
+        }
       }
 
       if (item.id) {

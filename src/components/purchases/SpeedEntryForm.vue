@@ -221,7 +221,7 @@
           </label>
           <label class="input input-bordered flex items-center gap-2 bg-base-100 focus-within:border-primary">
             <span class="text-sm font-bold text-primary">$</span>
-            <input type="number" step="0.01" v-model.number="poTotal" placeholder="0.00" class="grow font-mono font-bold text-sm text-base-content" />
+            <input type="text" inputmode="decimal" v-model.number="poTotal" placeholder="0.00" class="grow font-mono font-bold text-sm text-base-content" />
           </label>
         </div>
       </div>
@@ -290,8 +290,8 @@
               <span class="text-xs font-bold text-base-content/70">Cost:</span>
               <label class="input input-bordered input-sm flex items-center gap-1.5 bg-base-100 grow max-w-36 focus-within:border-primary rounded-xl">
                 <span class="text-xs font-bold text-success">$</span>
-                <input type="number" 
-                       step="0.01" 
+                <input type="text" 
+                       inputmode="decimal" 
                        v-model.number="item.cost" 
                        placeholder="0.00" 
                        class="w-full text-sm font-mono font-bold text-base-content" 
@@ -344,7 +344,7 @@
               <td>
                 <label class="input input-sm input-bordered flex items-center gap-1.5 w-full px-2.5 bg-base-100">
                   <span class="text-xs font-bold text-success">$</span>
-                  <input type="number" step="0.01" v-model.number="item.cost" placeholder="0.00" class="grow w-full font-mono font-bold text-sm text-base-content" :ref="el => setItemRef(el, index, 'cost')" @keyup.enter="focusField(index, 'qty')" @focus="$event.target.select()" />
+                  <input type="text" inputmode="decimal" v-model.number="item.cost" placeholder="0.00" class="grow w-full font-mono font-bold text-sm text-base-content" :ref="el => setItemRef(el, index, 'cost')" @keyup.enter="focusField(index, 'qty')" @focus="$event.target.select()" />
                 </label>
               </td>
               <td class="text-center">
@@ -396,24 +396,21 @@
     <!-- In-App Camera Widget for live receipt photos with alignment viewfinder box -->
     <ScannerWidget ref="scannerWidget" :hide-all-triggers="true" overlay-mode="receipt" @photos-captured="handleCapturedReceiptPhotos" />
 
-    <!-- Receipt Lightbox Modal -->
-    <dialog class="modal modal-bottom sm:modal-middle" :class="{ 'modal-open': showReceiptModal }">
-      <div class="modal-box max-w-2xl p-4 bg-base-100/95 backdrop-blur-xl border border-base-300 shadow-2xl rounded-3xl space-y-3">
-        <div class="flex items-center justify-between pb-2 border-b border-base-200">
-          <span class="font-bold text-sm">Attached Receipt Photo</span>
-          <button type="button" class="btn btn-sm btn-circle btn-ghost" @click="showReceiptModal = false">✕</button>
-        </div>
-        <div class="flex items-center justify-center max-h-[70vh] overflow-auto bg-base-200/40 rounded-xl p-2">
-          <img v-if="receiptPreviewUrl" :src="receiptPreviewUrl" alt="Receipt Full" class="max-w-full max-h-[65vh] object-contain rounded-lg shadow-sm" />
-        </div>
-        <div class="modal-action pt-2 border-t border-base-200 flex justify-end m-0">
+    <!-- Receipt Lightbox Drawer -->
+    <SlideOverDrawer
+      v-model="showReceiptModal"
+      title="Attached Receipt Photo"
+      size="lg"
+    >
+      <div class="flex items-center justify-center bg-base-200/40 rounded-xl p-2">
+        <img v-if="receiptPreviewUrl" :src="receiptPreviewUrl" alt="Receipt Full" class="max-w-full max-h-[65vh] object-contain rounded-lg shadow-sm" />
+      </div>
+      <template #footer>
+        <div class="flex justify-end w-full">
           <button type="button" class="btn btn-sm btn-ghost rounded-xl font-bold" @click="showReceiptModal = false">Close</button>
         </div>
-      </div>
-      <form method="dialog" class="modal-backdrop" @click="showReceiptModal = false">
-        <button>close</button>
-      </form>
-    </dialog>
+      </template>
+    </SlideOverDrawer>
   </div>
 </template>
 
@@ -427,6 +424,7 @@ import { useLoader } from '../../composables/useLoader';
 import { confirmDialog } from '../../stores/confirm';
 import { addToast } from '../../stores/toast';
 import ScannerWidget from '../common/ScannerWidget.vue';
+import SlideOverDrawer from '../common/SlideOverDrawer.vue';
 
 const { currentTeam } = useAuth();
 const { activeCart, cartItems } = useCart();

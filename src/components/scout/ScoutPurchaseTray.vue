@@ -386,63 +386,55 @@
       </div>
     </div>
 
-    <!-- 1. DELETE TRACKER CONFIRMATION MODAL -->
-    <dialog class="modal modal-bottom sm:modal-middle z-[80]" :class="{ 'modal-open': isDeleteTrackerModalOpen }">
-      <div v-if="isDeleteTrackerModalOpen" class="modal-box bg-base-100 border border-base-300 shadow-2xl rounded-3xl p-5 sm:p-6 max-w-sm mx-auto">
-        <div class="flex items-center gap-3 text-error mb-3">
-          <div class="w-10 h-10 rounded-2xl bg-error/15 flex items-center justify-center shrink-0">
-            <Icon icon="solar:trash-bin-trash-bold" class="w-6 h-6 text-error" />
-          </div>
-          <div>
-            <h3 class="font-black text-base sm:text-lg text-base-content">Delete Tracker?</h3>
-            <p class="text-xs opacity-60 font-mono">{{ currentTracker?.vendor || 'Buy Tracker' }}</p>
-          </div>
-        </div>
-        
-        <p class="text-xs sm:text-sm text-base-content/80 mb-5 leading-relaxed">
+    <!-- UNIFIED CONFIRMATION / RECORD AUCTION WIN DRAWER -->
+    <SlideOverDrawer
+      :model-value="Boolean(isDeleteTrackerModalOpen || itemPendingDelete || itemPendingWin || itemPendingLoss)"
+      :title="
+        isDeleteTrackerModalOpen
+          ? 'Delete Tracker?'
+          : itemPendingDelete
+            ? 'Remove Item?'
+            : itemPendingWin
+              ? 'Record Auction Win!'
+              : 'Outbid / Lost Item?'
+      "
+      :subtitle="
+        isDeleteTrackerModalOpen
+          ? (currentTracker?.vendor || 'Buy Tracker')
+          : itemPendingDelete
+            ? `From ${currentTracker?.vendor || 'Tracker'}`
+            : itemPendingWin
+              ? cleanItemTitle(itemPendingWin.title)
+              : itemPendingLoss
+                ? cleanItemTitle(itemPendingLoss.title)
+                : ''
+      "
+      :icon="
+        isDeleteTrackerModalOpen || itemPendingDelete
+          ? 'solar:trash-bin-trash-bold'
+          : itemPendingWin
+            ? 'solar:cup-star-bold'
+            : 'solar:close-circle-bold'
+      "
+      @update:model-value="(val) => {
+        if (!val) {
+          isDeleteTrackerModalOpen = false;
+          itemPendingDelete = null;
+          itemPendingWin = null;
+          itemPendingLoss = null;
+        }
+      }"
+    >
+      <!-- 1. DELETE TRACKER -->
+      <div v-if="isDeleteTrackerModalOpen" class="space-y-4">
+        <p class="text-xs sm:text-sm text-base-content/80 leading-relaxed">
           This will permanently delete this tracker, along with all <strong>{{ displayItemCount }} {{ displayItemCount === 1 ? 'item' : 'items' }}</strong> and uploaded photos. This action cannot be undone.
         </p>
-
-        <div class="modal-action flex items-center gap-2 mt-0">
-          <button 
-            type="button" 
-            @click="isDeleteTrackerModalOpen = false" 
-            class="btn btn-ghost flex-1 rounded-xl font-bold"
-            :disabled="isDeletingTracker"
-          >
-            Cancel
-          </button>
-          <button 
-            type="button" 
-            @click="handleDeleteTracker" 
-            class="btn btn-error flex-1 rounded-xl font-black text-error-content shadow-md gap-1.5"
-            :disabled="isDeletingTracker"
-          >
-            <span v-if="isDeletingTracker" class="loading loading-spinner loading-xs"></span>
-            <Icon v-else icon="solar:trash-bin-trash-bold" class="w-4 h-4" />
-            <span>Yes, Delete Tracker</span>
-          </button>
-        </div>
       </div>
-      <form method="dialog" class="modal-backdrop" @click="isDeleteTrackerModalOpen = false">
-        <button>close</button>
-      </form>
-    </dialog>
 
-    <!-- 2. REMOVE ITEM CONFIRMATION MODAL -->
-    <dialog class="modal modal-bottom sm:modal-middle z-[80]" :class="{ 'modal-open': !!itemPendingDelete }">
-      <div v-if="itemPendingDelete" class="modal-box bg-base-100 border border-base-300 shadow-2xl rounded-3xl p-5 sm:p-6 max-w-sm mx-auto">
-        <div class="flex items-center gap-3 text-error mb-3">
-          <div class="w-10 h-10 rounded-2xl bg-error/15 flex items-center justify-center shrink-0">
-            <Icon icon="solar:trash-bin-trash-bold" class="w-6 h-6 text-error" />
-          </div>
-          <div>
-            <h3 class="font-black text-base sm:text-lg text-base-content">Remove Item?</h3>
-            <p class="text-xs opacity-60 font-mono">From {{ currentTracker?.vendor || 'Tracker' }}</p>
-          </div>
-        </div>
-        
-        <div class="bg-base-200/60 p-2.5 rounded-xl flex items-center gap-2.5 mb-4 border border-base-300">
+      <!-- 2. REMOVE ITEM -->
+      <div v-else-if="itemPendingDelete" class="space-y-4">
+        <div class="bg-base-200/60 p-2.5 rounded-xl flex items-center gap-2.5 border border-base-300">
           <ItemThumbnail
             :item="itemPendingDelete"
             size="w-10 h-10"
@@ -454,55 +446,17 @@
             <div class="text-[11px] font-mono text-warning font-bold">${{ (itemPendingDelete.cost || 0).toFixed(2) }}</div>
           </div>
         </div>
-
-        <p class="text-xs text-base-content/70 mb-5 leading-relaxed">
+        <p class="text-xs text-base-content/70 leading-relaxed">
           Are you sure you want to remove this item from your scouting manifest?
         </p>
-
-        <div class="modal-action flex items-center gap-2 mt-0">
-          <button 
-            type="button" 
-            @click="itemPendingDelete = null" 
-            class="btn btn-ghost flex-1 rounded-xl font-bold"
-            :disabled="isRemovingItem"
-          >
-            Cancel
-          </button>
-          <button 
-            type="button" 
-            @click="confirmRemoveItem" 
-            class="btn btn-error flex-1 rounded-xl font-black text-error-content shadow-md gap-1.5"
-            :disabled="isRemovingItem"
-          >
-            <span v-if="isRemovingItem" class="loading loading-spinner loading-xs"></span>
-            <Icon v-else icon="solar:trash-bin-trash-bold" class="w-4 h-4" />
-            <span>Remove Item</span>
-          </button>
-        </div>
       </div>
-      <form method="dialog" class="modal-backdrop" @click="itemPendingDelete = null">
-        <button>close</button>
-      </form>
-    </dialog>
 
-    <!-- 3. RECORD AUCTION WIN MODAL -->
-    <dialog class="modal modal-bottom sm:modal-middle z-[80]" :class="{ 'modal-open': !!itemPendingWin }">
-      <div v-if="itemPendingWin" class="modal-box bg-base-100 border border-base-300 shadow-2xl rounded-3xl p-5 sm:p-6 max-w-sm mx-auto">
-        <div class="flex items-center gap-3 text-success mb-3">
-          <div class="w-10 h-10 rounded-2xl bg-success/15 flex items-center justify-center shrink-0">
-            <Icon icon="solar:cup-star-bold" class="w-6 h-6 text-success" />
-          </div>
-          <div>
-            <h3 class="font-black text-base sm:text-lg text-base-content">Record Auction Win!</h3>
-            <p class="text-xs opacity-60 font-mono">{{ cleanItemTitle(itemPendingWin.title) }}</p>
-          </div>
-        </div>
-
-        <p class="text-xs text-base-content/80 mb-4 leading-relaxed">
+      <!-- 3. RECORD AUCTION WIN -->
+      <div v-else-if="itemPendingWin" class="space-y-4">
+        <p class="text-xs text-base-content/80 leading-relaxed">
           Enter your final winning hammer price to update your cost basis and mark this item as acquired.
         </p>
-
-        <div class="form-control mb-5">
+        <div class="form-control">
           <label class="label py-1">
             <span class="label-text text-xs font-bold">Winning Bid Amount ($)</span>
           </label>
@@ -510,21 +464,71 @@
             <span class="absolute left-3 top-1/2 -translate-y-1/2 font-bold opacity-60">$</span>
             <input 
               v-model="winningBidInput"
-              type="number"
-              step="0.01"
-              min="0"
+              type="text"
+              inputmode="decimal"
               class="input input-bordered w-full pl-7 font-mono font-bold text-sm"
               placeholder="0.00"
               @keyup.enter="confirmRecordWin"
             />
           </div>
         </div>
+      </div>
 
-        <div class="modal-action flex items-center gap-2 mt-0">
+      <!-- 4. RECORD AUCTION LOSS -->
+      <div v-else-if="itemPendingLoss" class="space-y-4">
+        <p class="text-xs text-base-content/80 leading-relaxed">
+          Remove this outbid auction from your tracker so it doesn't inflate your planned cost and item count?
+        </p>
+      </div>
+
+      <template #footer>
+        <div v-if="isDeleteTrackerModalOpen" class="flex items-center gap-2 w-full">
+          <button 
+            type="button" 
+            @click="isDeleteTrackerModalOpen = false" 
+            class="btn btn-sm btn-ghost flex-1 rounded-xl font-bold"
+            :disabled="isDeletingTracker"
+          >
+            Cancel
+          </button>
+          <button 
+            type="button" 
+            @click="handleDeleteTracker" 
+            class="btn btn-sm btn-error flex-1 rounded-xl font-black text-error-content shadow-md gap-1.5"
+            :disabled="isDeletingTracker"
+          >
+            <span v-if="isDeletingTracker" class="loading loading-spinner loading-xs"></span>
+            <Icon v-else icon="solar:trash-bin-trash-bold" class="w-4 h-4" />
+            <span>Yes, Delete Tracker</span>
+          </button>
+        </div>
+
+        <div v-else-if="itemPendingDelete" class="flex items-center gap-2 w-full">
+          <button 
+            type="button" 
+            @click="itemPendingDelete = null" 
+            class="btn btn-sm btn-ghost flex-1 rounded-xl font-bold"
+            :disabled="isRemovingItem"
+          >
+            Cancel
+          </button>
+          <button 
+            type="button" 
+            @click="confirmRemoveItem" 
+            class="btn btn-sm btn-error flex-1 rounded-xl font-black text-error-content shadow-md gap-1.5"
+            :disabled="isRemovingItem"
+          >
+            <span v-if="isRemovingItem" class="loading loading-spinner loading-xs"></span>
+            <Icon v-else icon="solar:trash-bin-trash-bold" class="w-4 h-4" />
+            <span>Remove Item</span>
+          </button>
+        </div>
+
+        <div v-else-if="itemPendingWin" class="flex items-center gap-2 w-full">
           <button 
             type="button" 
             @click="itemPendingWin = null" 
-            class="btn btn-ghost flex-1 rounded-xl font-bold"
+            class="btn btn-sm btn-ghost flex-1 rounded-xl font-bold"
             :disabled="isRecordingWin"
           >
             Cancel
@@ -532,7 +536,7 @@
           <button 
             type="button" 
             @click="confirmRecordWin" 
-            class="btn btn-success flex-1 rounded-xl font-black text-success-content shadow-md gap-1.5"
+            class="btn btn-sm btn-success flex-1 rounded-xl font-black text-success-content shadow-md gap-1.5"
             :disabled="isRecordingWin || !winningBidInput"
           >
             <span v-if="isRecordingWin" class="loading loading-spinner loading-xs"></span>
@@ -540,34 +544,12 @@
             <span>Save Win</span>
           </button>
         </div>
-      </div>
-      <form method="dialog" class="modal-backdrop" @click="itemPendingWin = null">
-        <button>close</button>
-      </form>
-    </dialog>
 
-    <!-- 4. RECORD AUCTION LOSS MODAL -->
-    <dialog class="modal modal-bottom sm:modal-middle z-[80]" :class="{ 'modal-open': !!itemPendingLoss }">
-      <div v-if="itemPendingLoss" class="modal-box bg-base-100 border border-base-300 shadow-2xl rounded-3xl p-5 sm:p-6 max-w-sm mx-auto">
-        <div class="flex items-center gap-3 text-warning mb-3">
-          <div class="w-10 h-10 rounded-2xl bg-warning/15 flex items-center justify-center shrink-0">
-            <Icon icon="solar:close-circle-bold" class="w-6 h-6 text-warning" />
-          </div>
-          <div>
-            <h3 class="font-black text-base sm:text-lg text-base-content">Outbid / Lost Item?</h3>
-            <p class="text-xs opacity-60 font-mono">{{ cleanItemTitle(itemPendingLoss.title) }}</p>
-          </div>
-        </div>
-
-        <p class="text-xs text-base-content/80 mb-5 leading-relaxed">
-          Remove this outbid auction from your tracker so it doesn't inflate your planned cost and item count?
-        </p>
-
-        <div class="modal-action flex items-center gap-2 mt-0">
+        <div v-else-if="itemPendingLoss" class="flex items-center gap-2 w-full">
           <button 
             type="button" 
             @click="itemPendingLoss = null" 
-            class="btn btn-ghost flex-1 rounded-xl font-bold"
+            class="btn btn-sm btn-ghost flex-1 rounded-xl font-bold"
             :disabled="isRecordingLoss"
           >
             Cancel
@@ -575,7 +557,7 @@
           <button 
             type="button" 
             @click="confirmRecordLoss" 
-            class="btn btn-error flex-1 rounded-xl font-black text-error-content shadow-md gap-1.5"
+            class="btn btn-sm btn-error flex-1 rounded-xl font-black text-error-content shadow-md gap-1.5"
             :disabled="isRecordingLoss"
           >
             <span v-if="isRecordingLoss" class="loading loading-spinner loading-xs"></span>
@@ -583,11 +565,8 @@
             <span>Remove Outbid</span>
           </button>
         </div>
-      </div>
-      <form method="dialog" class="modal-backdrop" @click="itemPendingLoss = null">
-        <button>close</button>
-      </form>
-    </dialog>
+      </template>
+    </SlideOverDrawer>
 
     <!-- FULLSCREEN PREVIEW MODAL -->
     <ItemPreviewModal 
@@ -611,12 +590,14 @@
 import { ref, computed, watch, nextTick, onMounted, onUnmounted } from 'vue';
 import { Icon } from '@iconify/vue';
 import { useScoutPurchase, type ScoutPurchase, type ScoutPurchaseItem } from '../../composables/useScoutPurchase';
+import { useBodyScrollLock } from '../../composables/useBodyScrollLock';
 import { addToast } from '../../stores/toast';
 import { BUCKET_ID, updateInventoryItem } from '../../lib/inventory';
 import { purchasesAPI } from '../../lib/purchases';
 import ItemPreviewModal from '../inventory/ItemPreviewModal.vue';
 import ItemDrawer from '../common/ItemDrawer.vue';
 import ItemThumbnail from '../common/ItemThumbnail.vue';
+import SlideOverDrawer from '../common/SlideOverDrawer.vue';
 import { evaluateSellerClusters, formatReadableSellerLabel, type SellerCluster } from '../../lib/shipping-rules';
 import { parsePacificDateToIso, formatPacificDateDisplay, isoToDatetimeLocal, datetimeLocalToIso } from '../../lib/dateTimeUtils';
 
@@ -664,6 +645,8 @@ const showTray = computed(() => {
 const currentTracker = computed(() => {
   return activePurchase.value || props.pausedTracker || composablePausedTracker.value;
 });
+
+useBodyScrollLock(computed(() => Boolean(currentTracker.value && showTray.value)));
 
 // -- LIVE CLOCK & AUCTION COUNTDOWN --
 const currentTime = ref(Date.now());

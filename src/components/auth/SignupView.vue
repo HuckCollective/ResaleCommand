@@ -171,13 +171,15 @@
 
             <div class="form-control w-full">
               <label class="label py-1"><span class="label-text font-bold text-xs">Full Name</span></label>
-              <input type="text" v-model="name" required placeholder="Jane Doe" class="input input-bordered w-full rounded-xl" />
+              <input type="text" autocomplete="name" v-model="name" required placeholder="Jane Doe" class="input input-bordered w-full rounded-xl" />
             </div>
 
             <div class="form-control w-full">
               <label class="label py-1"><span class="label-text font-bold text-xs">Invited Email Address</span></label>
               <input
                 type="email"
+                autocomplete="email"
+                autocapitalize="none"
                 v-model="email"
                 required
                 :readonly="!!approvedInvite"
@@ -189,7 +191,7 @@
 
             <div class="form-control w-full">
               <label class="label py-1"><span class="label-text font-bold text-xs">Choose a Password (min 8 characters)</span></label>
-              <input type="password" v-model="password" required minlength="8" placeholder="••••••••" class="input input-bordered w-full rounded-xl" />
+              <input type="password" autocomplete="new-password" v-model="password" required minlength="8" placeholder="••••••••" class="input input-bordered w-full rounded-xl" />
             </div>
 
             <div class="flex items-center justify-between text-xs mt-2">

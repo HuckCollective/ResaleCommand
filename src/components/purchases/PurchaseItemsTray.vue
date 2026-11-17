@@ -172,7 +172,7 @@
                 <div class="flex gap-1.5 shrink-0">
                   <label class="input input-sm input-bordered flex items-center gap-1 w-24 text-xs">
                     <span class="opacity-60">$</span>
-                    <input type="number" step="0.01" v-model.number="newItemCost" class="w-full font-mono text-xs" placeholder="Cost" />
+                    <input type="text" inputmode="decimal" v-model.number="newItemCost" class="w-full font-mono text-xs" placeholder="Cost" />
                   </label>
                   <button
                     type="button"
@@ -484,6 +484,7 @@ import {
 import { purchasesAPI } from '../../lib/purchases';
 import { parseTrackingNumbers } from '../../lib/shipmentTracking';
 import { useAuth } from '../../composables/useAuth';
+import { useBodyScrollLock } from '../../composables/useBodyScrollLock';
 import { useLoader } from '../../composables/useLoader';
 import { getDefaultStorageLocation } from '../../lib/warehouses';
 import { addToast } from '../../stores/toast';
@@ -529,18 +530,18 @@ const onKeyDown = (e: KeyboardEvent) => {
   }
 };
 
+useBodyScrollLock(() => props.modelValue);
+
 watch(
   () => props.modelValue,
   async (open) => {
     if (typeof document === 'undefined') return;
     if (open) {
       document.addEventListener('keydown', onKeyDown);
-      document.body.style.overflow = 'hidden';
       await nextTick();
       trayPanelRef.value?.focus();
     } else {
       document.removeEventListener('keydown', onKeyDown);
-      document.body.style.overflow = '';
     }
   },
   { immediate: true }
@@ -549,7 +550,6 @@ watch(
 onBeforeUnmount(() => {
   if (typeof document === 'undefined') return;
   document.removeEventListener('keydown', onKeyDown);
-  document.body.style.overflow = '';
 });
 
 const { user, currentTeam } = useAuth();

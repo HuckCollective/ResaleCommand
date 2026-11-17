@@ -138,6 +138,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue';
 import { Icon } from '@iconify/vue';
+import { useBodyScrollLock } from '../../composables/useBodyScrollLock';
 import JoinApplicantDrawer from './JoinApplicantDrawer.vue';
 import { JOIN_REQUEST_STATUS, type JoinRequest } from '../../lib/joinRequests';
 import { joinApi } from '../../lib/joinRequestsClient';
@@ -163,6 +164,7 @@ const useProdOrigin = ref(false);
 const trayOpen = ref(false);
 const trayTab = ref<BucketId>('waiting');
 const selectedId = ref('');
+useBodyScrollLock(trayOpen);
 
 const prodHostLabel = computed(() => {
   try {

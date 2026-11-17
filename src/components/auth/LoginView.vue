@@ -18,6 +18,8 @@
             </label>
             <input 
               type="email" 
+              autocomplete="email"
+              autocapitalize="none"
               v-model="email" 
               required 
               placeholder="you@example.com" 
@@ -31,6 +33,7 @@
             </label>
             <input 
               type="password" 
+              autocomplete="current-password"
               v-model="password" 
               required 
               placeholder="••••••••" 
@@ -108,7 +111,7 @@ const submit = async () => {
     loading.value = true;
     error.value = '';
     try {
-        await auth.login(email.value, password.value);
+        await auth.login(email.value.trim().toLowerCase(), password.value);
         
         // Handle redirect
         const urlParams = new URLSearchParams(window.location.search);

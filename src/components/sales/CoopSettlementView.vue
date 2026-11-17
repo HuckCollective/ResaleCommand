@@ -1024,17 +1024,15 @@
       @clear-focus="focusedWorkerOrPartner = ''"
     />
 
-    <!-- Consignor Deal Quick-Adjust & 3-Mode Interactive Comparison Modal -->
-    <dialog :class="{ 'modal modal-open': dealModalPartner && dealDraft }" class="modal">
-      <div v-if="dealModalPartner && dealDraft" class="modal-box max-w-2xl rounded-3xl p-5 sm:p-6 space-y-4">
-        <div class="flex items-center justify-between border-b border-base-200 pb-3">
-          <div>
-            <div class="badge badge-secondary badge-xs font-mono font-bold mb-1">{{ dealDraft.prefix }} CONSIGNOR</div>
-            <h3 class="font-black text-lg">⚙️ Consignor Deal &amp; Live Mode Comparison — {{ dealDraft.displayName }}</h3>
-          </div>
-          <button type="button" class="btn btn-ghost btn-sm btn-circle" @click="closeDealModal">✕</button>
-        </div>
-
+    <!-- Consignor Deal Quick-Adjust & 3-Mode Interactive Comparison Drawer -->
+    <SlideOverDrawer
+      :model-value="Boolean(dealModalPartner && dealDraft)"
+      :title="`⚙️ Consignor Deal & Live Mode Comparison — ${dealDraft?.displayName || ''}`"
+      :subtitle="dealDraft ? `${dealDraft.prefix} CONSIGNOR` : ''"
+      size="xl"
+      @update:model-value="(val) => { if (!val) closeDealModal(); }"
+    >
+      <div v-if="dealModalPartner && dealDraft" class="space-y-4">
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 p-3.5 rounded-2xl bg-base-200/50 border border-base-300">
           <div class="space-y-2">
             <div class="flex items-center justify-between">
@@ -1055,10 +1053,8 @@
               <div class="join">
                 <input
                   v-model.number="dealDraft.coopCommissionPct"
-                  type="number"
-                  min="0"
-                  max="60"
-                  step="1"
+                  type="text"
+                  inputmode="decimal"
                   class="input input-bordered input-xs w-14 font-mono font-bold text-right join-item"
                 />
                 <span class="btn btn-xs btn-ghost border border-base-300 join-item pointer-events-none font-mono">%</span>
@@ -1090,9 +1086,8 @@
             <div class="flex items-center gap-2">
               <input
                 v-model.number="dealDraft.fixedMonthlyRent"
-                type="number"
-                min="0"
-                step="5"
+                type="text"
+                inputmode="decimal"
                 class="input input-bordered input-sm rounded-xl font-mono font-bold w-full"
               />
             </div>
@@ -1195,8 +1190,10 @@
             </button>
           </div>
         </div>
+      </div>
 
-        <div class="flex items-center justify-between gap-2 pt-3 border-t border-base-200">
+      <template #footer>
+        <div v-if="dealDraft" class="flex items-center justify-between gap-2 w-full">
           <div class="text-xs font-mono">
             Selected: <strong class="text-primary">{{ CONSIGNOR_DEAL_MODE_LABELS[dealDraft.mode] }}</strong>
           </div>
@@ -1212,9 +1209,8 @@
             </button>
           </div>
         </div>
-      </div>
-      <form method="dialog" class="modal-backdrop"><button @click="closeDealModal">close</button></form>
-    </dialog>
+      </template>
+    </SlideOverDrawer>
   </div>
 </template>
 
@@ -1226,6 +1222,7 @@ import { useAuth } from '../../composables/useAuth';
 import { useCoopFounderGate } from '../../composables/useCoopFounderGate';
 import CoopSweatEquityDrawer from '../coop/CoopSweatEquityDrawer.vue';
 import CoopMonthLockBar from '../coop/CoopMonthLockBar.vue';
+import SlideOverDrawer from '../common/SlideOverDrawer.vue';
 import {
   buildPartnerPdfFilename,
   generatePartnerSettlementPdf,
@@ -1846,14 +1843,15 @@ const isSavingDeal = ref(false);
 
 const openDealModal = (partner: any) => {
   const existing = findConsignorAgreement(policyConfig.value.consignors, partner.prefix);
+  const templateConsignor = DEFAULT_COOP_POLICY_CONFIG.consignors[0];
   dealDraft.value = existing
     ? { ...existing }
     : {
         prefix: partner.prefix,
         displayName: partner.name,
-        mode: 'flat_commission',
-        coopCommissionPct: 20,
-        fixedMonthlyRent: 50,
+        mode: templateConsignor?.mode || 'flat_commission',
+        coopCommissionPct: Number(templateConsignor?.coopCommissionPct ?? 0),
+        fixedMonthlyRent: Number(templateConsignor?.fixedMonthlyRent ?? 0),
         capRentAtNetSales: true,
       };
   dealSampleGross.value = 0;

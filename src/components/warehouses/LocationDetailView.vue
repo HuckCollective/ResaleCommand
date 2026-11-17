@@ -810,11 +810,11 @@
           <div class="grid grid-cols-2 gap-4">
             <div class="form-control w-full">
               <label class="label"><span class="label-text font-bold">Commission Rate (%)</span></label>
-              <input type="number" step="0.01" min="0" max="100" v-model.number="editForm.commissionRate" class="input input-bordered w-full bg-base-200" />
+              <input type="text" inputmode="decimal" v-model.number="editForm.commissionRate" class="input input-bordered w-full bg-base-200 font-mono" />
             </div>
             <div class="form-control w-full">
               <label class="label"><span class="label-text font-bold">Monthly Rent ($)</span></label>
-              <input type="number" step="0.01" min="0" v-model.number="editForm.monthlyRent" class="input input-bordered w-full bg-base-200" />
+              <input type="text" inputmode="decimal" v-model.number="editForm.monthlyRent" class="input input-bordered w-full bg-base-200 font-mono" />
             </div>
           </div>
 
@@ -1009,34 +1009,115 @@
       @drop-changed="loadManifests"
     />
 
-    <!-- ROLLBACK / UNDO PLACEMENT CONFIRMATION MODAL -->
-    <dialog class="modal modal-bottom sm:modal-middle z-[85]" :class="{ 'modal-open': !!dropPendingRollback }">
-      <div v-if="dropPendingRollback" class="modal-box bg-base-100 border border-base-300 shadow-2xl rounded-box p-5 max-w-sm mx-auto space-y-4">
-        <div class="flex items-center gap-3 text-warning">
-          <div class="w-10 h-10 rounded-box bg-warning/15 flex items-center justify-center shrink-0">
-            <Icon icon="solar:restart-bold" class="w-6 h-6" />
-          </div>
-          <div>
-            <h3 class="font-black text-base text-base-content">Undo Drop Placement?</h3>
-            <p class="text-xs text-base-content/60 font-mono truncate max-w-48">{{ dropPendingRollback.name }}</p>
-          </div>
-        </div>
-
+    <!-- UNIFIED LOCATION CONFIRMATION & EXPENSE DRAWER -->
+    <SlideOverDrawer
+      :model-value="Boolean(dropPendingRollback || showAddExpenseModal || expenseToDelete)"
+      :title="
+        dropPendingRollback
+          ? 'Undo Drop Placement?'
+          : showAddExpenseModal
+            ? 'Record Rent / Booth Expense'
+            : 'Delete Expense Line?'
+      "
+      :subtitle="
+        dropPendingRollback
+          ? dropPendingRollback.name
+          : showAddExpenseModal
+            ? (warehouse?.name || 'Location')
+            : expenseToDelete
+              ? `$${Number(expenseToDelete.amount).toFixed(2)}`
+              : ''
+      "
+      :icon="
+        dropPendingRollback
+          ? 'solar:restart-bold'
+          : showAddExpenseModal
+            ? 'solar:wallet-money-bold'
+            : 'solar:trash-bin-trash-bold'
+      "
+      @update:model-value="(val) => {
+        if (!val) {
+          dropPendingRollback = null;
+          showAddExpenseModal = false;
+          expenseToDelete = null;
+        }
+      }"
+    >
+      <div v-if="dropPendingRollback" class="space-y-4">
         <p class="text-xs text-base-content/80 leading-relaxed">
           This will roll back all <strong>{{ (dropPendingRollback.itemIds || []).length }} items</strong> from <em>placed</em> at {{ warehouse?.name }} back to <strong>in-stock</strong> at <strong>Backstock</strong>, and restore this manifest as an active draft.
         </p>
+      </div>
 
-        <div class="modal-action flex items-center gap-2 mt-0">
+      <form v-else-if="showAddExpenseModal" @submit.prevent="submitNewExpense" class="space-y-3.5">
+        <div class="form-control">
+          <label class="label py-0.5"><span class="label-text text-xs font-bold">Deduction Amount ($)</span></label>
+          <input 
+            type="text"
+            inputmode="decimal"
+            v-model.number="newExpenseForm.amount" 
+            required 
+            class="input input-bordered input-sm font-mono font-bold text-base" 
+          />
+        </div>
+
+        <div class="form-control">
+          <label class="label py-0.5"><span class="label-text text-xs font-bold">Charge / Payment Date</span></label>
+          <input 
+            type="date" 
+            v-model="newExpenseForm.date" 
+            required 
+            class="input input-bordered input-sm font-mono" 
+          />
+        </div>
+
+        <div class="form-control">
+          <label class="label py-0.5"><span class="label-text text-xs font-bold">Description / Note</span></label>
+          <input 
+            type="text" 
+            v-model="newExpenseForm.note" 
+            required 
+            class="input input-bordered input-sm" 
+            placeholder="e.g. Memory Den Space Rental - August 2026"
+          />
+        </div>
+
+        <div class="form-control">
+          <label class="label py-0.5"><span class="label-text text-xs font-bold">Tax Category</span></label>
+          <select v-model="newExpenseForm.category" class="select select-bordered select-sm">
+            <option value="Schedule C Line 20b (Rent on business property)">Schedule C Line 20b (Rent on business property)</option>
+            <option value="Schedule C Line 22 (Supplies &amp; materials)">Schedule C Line 22 (Supplies &amp; materials)</option>
+            <option value="Schedule C Line 27a (Other expenses)">Schedule C Line 27a (Other expenses)</option>
+          </select>
+        </div>
+
+        <div class="border-t border-base-200 pt-3 flex justify-end gap-2">
+          <button type="button" class="btn btn-sm btn-ghost" @click="showAddExpenseModal = false">Cancel</button>
+          <button type="submit" class="btn btn-sm btn-secondary font-bold" :disabled="isSubmittingExpense">
+            <span v-if="isSubmittingExpense" class="loading loading-spinner loading-xs"></span>
+            <span>Record Expense Line</span>
+          </button>
+        </div>
+      </form>
+
+      <div v-else-if="expenseToDelete" class="space-y-4">
+        <p class="text-xs text-base-content/80 leading-relaxed">
+          Are you sure you want to remove the expense line <strong>"{{ expenseToDelete.note }}"</strong>? This will remove it from the calculated rollup and tax records.
+        </p>
+      </div>
+
+      <template #footer>
+        <div v-if="dropPendingRollback" class="flex items-center gap-2 w-full">
           <button 
             type="button" 
-            class="btn btn-ghost flex-1 font-bold rounded-btn"
+            class="btn btn-sm btn-ghost flex-1 font-bold"
             @click="dropPendingRollback = null"
           >
             Cancel
           </button>
           <button 
             type="button" 
-            class="btn btn-warning flex-1 font-black text-warning-content shadow-md border border-warning-content/25 active:scale-95 rounded-btn gap-1"
+            class="btn btn-sm btn-warning flex-1 font-black text-warning-content shadow-md border border-warning-content/25 active:scale-95 gap-1"
             :disabled="isRollingBack"
             @click="confirmRollbackPlacedDrop"
           >
@@ -1047,109 +1128,14 @@
             </template>
           </button>
         </div>
-      </div>
-      <form method="dialog" class="modal-backdrop" @click="dropPendingRollback = null">
-        <button>close</button>
-      </form>
-    </dialog>
 
-    <!-- RECORD RENT / EXPENSE MODAL -->
-    <dialog class="modal modal-bottom sm:modal-middle z-[85]" :class="{ 'modal-open': showAddExpenseModal }">
-      <div v-if="showAddExpenseModal" class="modal-box bg-base-100 border border-base-300 shadow-2xl rounded-3xl p-6 max-w-md mx-auto space-y-4">
-        <div class="flex items-center justify-between border-b border-base-200 pb-3">
-          <div class="flex items-center gap-2.5">
-            <div class="p-2 bg-secondary/10 text-secondary rounded-xl">
-              <Icon icon="solar:wallet-money-bold" class="w-5 h-5" />
-            </div>
-            <div>
-              <h3 class="font-black text-base">Record Rent / Booth Expense</h3>
-              <p class="text-xs opacity-60">{{ warehouse?.name || 'Location' }}</p>
-            </div>
-          </div>
-          <button type="button" class="btn btn-xs btn-ghost btn-circle" @click="showAddExpenseModal = false">✕</button>
-        </div>
-
-        <form @submit.prevent="submitNewExpense" class="space-y-3.5">
-          <div class="form-control">
-            <label class="label py-0.5"><span class="label-text text-xs font-bold">Deduction Amount ($)</span></label>
-            <input 
-              type="number" 
-              step="0.01" 
-              min="0.01" 
-              v-model.number="newExpenseForm.amount" 
-              required 
-              class="input input-bordered input-sm font-mono font-bold text-base" 
-            />
-          </div>
-
-          <div class="form-control">
-            <label class="label py-0.5"><span class="label-text text-xs font-bold">Charge / Payment Date</span></label>
-            <input 
-              type="date" 
-              v-model="newExpenseForm.date" 
-              required 
-              class="input input-bordered input-sm font-mono" 
-            />
-          </div>
-
-          <div class="form-control">
-            <label class="label py-0.5"><span class="label-text text-xs font-bold">Description / Note</span></label>
-            <input 
-              type="text" 
-              v-model="newExpenseForm.note" 
-              required 
-              class="input input-bordered input-sm" 
-              placeholder="e.g. Memory Den Space Rental - August 2026"
-            />
-          </div>
-
-          <div class="form-control">
-            <label class="label py-0.5"><span class="label-text text-xs font-bold">Tax Category</span></label>
-            <select v-model="newExpenseForm.category" class="select select-bordered select-sm">
-              <option value="Schedule C Line 20b (Rent on business property)">Schedule C Line 20b (Rent on business property)</option>
-              <option value="Schedule C Line 22 (Supplies &amp; materials)">Schedule C Line 22 (Supplies &amp; materials)</option>
-              <option value="Schedule C Line 27a (Other expenses)">Schedule C Line 27a (Other expenses)</option>
-            </select>
-          </div>
-
-          <div class="modal-action border-t border-base-200 pt-3 flex justify-end gap-2">
-            <button type="button" class="btn btn-sm btn-ghost" @click="showAddExpenseModal = false">Cancel</button>
-            <button type="submit" class="btn btn-sm btn-secondary font-bold" :disabled="isSubmittingExpense">
-              <span v-if="isSubmittingExpense" class="loading loading-spinner loading-xs"></span>
-              <span>Record Expense Line</span>
-            </button>
-          </div>
-        </form>
-      </div>
-      <form method="dialog" class="modal-backdrop" @click="showAddExpenseModal = false">
-        <button>close</button>
-      </form>
-    </dialog>
-
-    <!-- DELETE EXPENSE CONFIRMATION MODAL -->
-    <dialog class="modal modal-bottom sm:modal-middle z-[85]" :class="{ 'modal-open': !!expenseToDelete }">
-      <div v-if="expenseToDelete" class="modal-box bg-base-100 border border-base-300 shadow-2xl rounded-3xl p-5 max-w-sm mx-auto space-y-4">
-        <div class="flex items-center gap-3 text-error">
-          <div class="w-10 h-10 rounded-2xl bg-error/15 flex items-center justify-center shrink-0">
-            <Icon icon="solar:trash-bin-trash-bold" class="w-6 h-6" />
-          </div>
-          <div>
-            <h3 class="font-black text-base text-base-content">Delete Expense Line?</h3>
-            <p class="text-xs text-base-content/60 font-mono">${{ Number(expenseToDelete.amount).toFixed(2) }}</p>
-          </div>
-        </div>
-
-        <p class="text-xs text-base-content/80 leading-relaxed">
-          Are you sure you want to remove the expense line <strong>"{{ expenseToDelete.note }}"</strong>? This will remove it from the calculated rollup and tax records.
-        </p>
-
-        <div class="modal-action flex items-center gap-2 mt-0">
-          <button type="button" class="btn btn-ghost flex-1 font-bold" @click="expenseToDelete = null">
+        <div v-else-if="expenseToDelete" class="flex items-center gap-2 w-full">
+          <button type="button" class="btn btn-sm btn-ghost flex-1 font-bold" @click="expenseToDelete = null">
             Cancel
           </button>
           <button 
             type="button" 
-            class="btn btn-error flex-1 font-bold text-white shadow-md gap-1"
+            class="btn btn-sm btn-error flex-1 font-bold text-white shadow-md gap-1"
             :disabled="isDeletingExpense"
             @click="executeDeleteExpense"
           >
@@ -1157,11 +1143,8 @@
             <span>Confirm Delete</span>
           </button>
         </div>
-      </div>
-      <form method="dialog" class="modal-backdrop" @click="expenseToDelete = null">
-        <button>close</button>
-      </form>
-    </dialog>
+      </template>
+    </SlideOverDrawer>
 
     <!-- FULL ITEM DRAWER FOR INSPECTING & EDITING SPECS -->
     <ItemDrawer 
@@ -1190,6 +1173,7 @@ import { useManifest } from '../../composables/useManifest';
 import LocationManifestTray from '../inventory/LocationManifestTray.vue';
 import BookmarkletHeroBar from '../bml/BookmarkletHeroBar.vue';
 import SearchInputWithScanner from '../common/SearchInputWithScanner.vue';
+import SlideOverDrawer from '../common/SlideOverDrawer.vue';
 import { getAssetUrl, updateInventoryItem } from '../../lib/inventory';
 import { addToast } from '../../stores/toast';
 import { askConfirm } from '../../stores/confirm';
@@ -1344,15 +1328,15 @@ const isDeletingExpense = ref<boolean>(false);
 const currentYear = new Date().getFullYear();
 
 const newExpenseForm = ref({
-  amount: 382.50,
+  amount: 0,
   date: new Date().toISOString().slice(0, 10),
   note: '',
   category: 'Schedule C Line 20b (Rent on business property)'
 });
 
 const openAddExpenseModal = () => {
-  const locName = warehouse.value?.name || 'Booth';
-  const defRent = warehouse.value?.monthlyRent || 382.50;
+  const locName = warehouse.value?.name || activeLocationMeta.value.shortName || 'Booth';
+  const defRent = Number(warehouse.value?.monthlyRent ?? activeLocationMeta.value.monthlyRent ?? 0);
   newExpenseForm.value = {
     amount: defRent,
     date: new Date().toISOString().slice(0, 10),
@@ -1819,7 +1803,7 @@ const getItemRecord = (drop: ManifestDocument, itemId: string) => {
 
 const getItemPhotoUrl = (imageId?: string) => {
   if (!imageId) return '';
-  return getAssetUrl(imageId);
+  return getAssetUrl(imageId, { preview: true, width: 160, height: 160 });
 };
 
 const handleImageError = (e: Event, imageId?: string) => {
@@ -1827,13 +1811,7 @@ const handleImageError = (e: Event, imageId?: string) => {
   if (!target || !imageId) return;
   if (target.dataset.triedFallback) return;
   target.dataset.triedFallback = 'true';
-  const ENDPOINT = import.meta.env.PUBLIC_APPWRITE_ENDPOINT || 'https://sfo.cloud.appwrite.io/v1';
-  const PROJECT = import.meta.env.PUBLIC_APPWRITE_PROJECT_ID || '69714b35003a8adab6bb';
-  if (target.src.includes('item_images_dev')) {
-    target.src = `${ENDPOINT}/storage/buckets/item_images/files/${imageId}/view?project=${PROJECT}`;
-  } else if (target.src.includes('item_images')) {
-    target.src = `${ENDPOINT}/storage/buckets/item_images_dev/files/${imageId}/view?project=${PROJECT}`;
-  }
+  target.src = getAssetUrl(imageId, { preview: false });
 };
 
 const isItemPlaced = (drop: ManifestDocument, itemId: string) => {

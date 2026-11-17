@@ -91,6 +91,8 @@
                 </label>
                 <input 
                   type="email" 
+                  autocomplete="email"
+                  autocapitalize="none"
                   v-model="editEmail" 
                   placeholder="name@example.com" 
                   class="input input-bordered w-full"
@@ -104,6 +106,7 @@
                 </label>
                 <input 
                   type="password" 
+                  autocomplete="current-password"
                   v-model="emailConfirmPassword" 
                   placeholder="Enter current password to verify" 
                   class="input input-bordered w-full"
@@ -116,7 +119,7 @@
               <button 
                 class="btn btn-primary btn-sm gap-2" 
                 @click="handleUpdateEmail" 
-                :disabled="savingEmail || !editEmail.trim() || !emailConfirmPassword || editEmail.trim() === user?.email"
+                :disabled="savingEmail || !editEmail.trim() || !emailConfirmPassword || editEmail.trim().toLowerCase() === (user?.email || '').toLowerCase()"
               >
                 <span v-if="savingEmail" class="loading loading-spinner loading-xs"></span>
                 <Icon icon="solar:check-read-linear" class="w-4 h-4" />
@@ -146,6 +149,7 @@
                   </label>
                   <input 
                     type="password" 
+                    autocomplete="current-password"
                     v-model="oldPassword" 
                     placeholder="Enter current password" 
                     class="input input-bordered w-full"
@@ -159,6 +163,7 @@
                   </label>
                   <input 
                     type="password" 
+                    autocomplete="new-password"
                     v-model="newPassword" 
                     placeholder="Enter new password" 
                     class="input input-bordered w-full"
@@ -172,6 +177,7 @@
                   </label>
                   <input 
                     type="password" 
+                    autocomplete="new-password"
                     v-model="confirmPassword" 
                     placeholder="Re-enter new password" 
                     class="input input-bordered w-full"

@@ -149,34 +149,19 @@
         </div>
     </div>
 
-    <!-- Operations Settings (Owner Only) -->
-    <div v-if="isOwner" class="card bg-base-100 shadow-xl">
-        <div class="card-body">
-            <h3 class="font-bold text-xl mb-2">Operations Settings</h3>
-            
-            <div class="form-control w-full max-w-md">
-                <label class="label">
-                    <span class="label-text font-bold">Standard Placed Locations</span>
-                    <span class="label-text-alt">e.g., Bin A, Shelf 1</span>
-                </label>
-                
-                <div class="flex gap-2">
-                    <input type="text" v-model="newLocation" placeholder="Add a new location..." class="input input-bordered w-full" @keydown.enter.prevent="addLocation" />
-                    <button class="btn btn-primary" @click="addLocation" :disabled="!newLocation || savingSettings">Add</button>
+    <!-- Canonical 4-Location Architecture Reference (Law 1: Zero Free-Text Locations) -->
+    <div v-if="isOwner" class="card bg-base-100 border border-base-200 shadow-sm rounded-2xl">
+        <div class="card-body p-5 space-y-2">
+            <div class="flex items-center justify-between gap-3 flex-wrap">
+                <div>
+                    <h3 class="font-bold text-base text-base-content">Booths &amp; Storage Locations</h3>
+                    <p class="text-xs text-base-content/70 mt-0.5">
+                        Works@TheHC enforces the 4 canonical Selling Booths &amp; Backstock Storage facilities so physical inventory never fragments across free-text bin names.
+                    </p>
                 </div>
-            </div>
-
-            <div class="flex flex-wrap gap-2 mt-4" v-if="orgSettings.placedLocations && orgSettings.placedLocations.length > 0">
-                <div v-for="(loc, idx) in orgSettings.placedLocations" :key="idx" class="badge badge-secondary badge-lg gap-2 cursor-pointer hover:badge-error transition-colors" @click="removeLocation(idx)">
-                    {{ loc }}
-                    <Icon icon="solar:close-circle-linear" class="w-4 h-4" />
-                </div>
-            </div>
-            <div v-else class="text-sm opacity-50 mt-4">
-                No custom locations added yet.
-            </div>
-            <div class="mt-4 text-xs opacity-70">
-                Click a location to remove it. Changes are saved automatically.
+                <a href="/warehouse" class="btn btn-sm h-11 md:h-9 btn-outline btn-primary rounded-xl font-bold">
+                    Open Booths &amp; Storage
+                </a>
             </div>
         </div>
     </div>
@@ -243,23 +228,39 @@
         </div>
     </div>
 
-    <!-- Invite Modal -->
-    <dialog class="modal" :class="{ 'modal-open': showInviteModal }">
-       <div class="modal-box">
-          <h3 class="font-bold text-lg">Invite New Member</h3>
-          <p class="py-2 text-sm">Send an invitation email.</p>
-          <div class="py-4">
-             <input type="email" placeholder="Email Address" class="input input-bordered w-full" v-model="inviteEmail" @keydown.enter.prevent="handleInvite" />
-          </div>
-          <div class="modal-action">
-             <button class="btn" @click="showInviteModal = false">Cancel</button>
-             <button class="btn btn-primary" @click="handleInvite" :disabled="!inviteEmail || inviting">
-                 <span v-if="inviting" class="loading loading-spinner loading-xs"></span>
-                 Send Invite
-             </button>
-          </div>
-       </div>
-    </dialog>
+    <!-- Invite Drawer -->
+    <SlideOverDrawer
+      v-model="showInviteModal"
+      title="Invite New Member"
+      subtitle="Send an invitation email to join your active Collective workspace."
+      icon="solar:user-plus-bold-duotone"
+    >
+      <div class="space-y-4">
+        <div class="form-control">
+          <label class="label py-1">
+            <span class="label-text text-xs font-bold">Member Email Address</span>
+          </label>
+          <input
+            type="email"
+            autocomplete="email"
+            autocapitalize="none"
+            placeholder="Email Address"
+            class="input input-bordered w-full"
+            v-model="inviteEmail"
+            @keydown.enter.prevent="handleInvite"
+          />
+        </div>
+      </div>
+      <template #footer>
+        <div class="flex items-center justify-end gap-2 w-full">
+          <button class="btn btn-sm btn-ghost" @click="showInviteModal = false">Cancel</button>
+          <button class="btn btn-sm btn-primary font-bold" @click="handleInvite" :disabled="!inviteEmail || inviting">
+            <span v-if="inviting" class="loading loading-spinner loading-xs"></span>
+            Send Invite
+          </button>
+        </div>
+      </template>
+    </SlideOverDrawer>
 
   </div>
 </template>
@@ -273,6 +274,7 @@ import { addToast } from '../../stores/toast';
 import { confirmDialog } from '../../stores/confirm';
 import { Icon } from '@iconify/vue';
 import { siteConfig } from '../../site-config';
+import SlideOverDrawer from '../common/SlideOverDrawer.vue';
 
 const { user, isAuthenticated, currentTeam, ownedTeam, loading } = useAuth();
 
@@ -517,14 +519,15 @@ const removeLocation = async (idx: number) => {
 };
 
 const handleInvite = async () => {
-    if (!inviteEmail.value || !currentTeam.value) return;
+    const cleanEmail = inviteEmail.value.trim().toLowerCase();
+    if (!cleanEmail || !currentTeam.value) return;
     inviting.value = true;
     try {
         const url = `${window.location.origin}/join`;
         
         try {
             // First try: Create new user/membership with explicit ID (Standard for new users)
-            await teams.createMembership(currentTeam.value.$id, ['member'], inviteEmail.value, ID.unique(), undefined, url);
+            await teams.createMembership(currentTeam.value.$id, ['member'], cleanEmail, ID.unique(), undefined, url);
         } catch (firstError: any) {
             console.log("First invite attempt failed, retrying with auto-ID...", firstError);
             // If that fails (e.g. user exists and ID mismatch, or ID doesn't exist 404),
@@ -532,7 +535,7 @@ const handleInvite = async () => {
             // We pass 'undefined' for userId explicitly (or allow the overload if possible, but passing undefined is safer for the param slot)
             // Note: createMembership signature: (teamId, roles, email, userId, phone, url, name)
             // We pass undefined for userId.
-            await teams.createMembership(currentTeam.value.$id, ['member'], inviteEmail.value, undefined, undefined, url);
+            await teams.createMembership(currentTeam.value.$id, ['member'], cleanEmail, undefined, undefined, url);
         }
 
         inviteEmail.value = '';

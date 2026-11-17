@@ -9,10 +9,10 @@
 ## 🚀 How to Resume in Any New Chat (Copy-Paste Kickoff)
 
 ```text
-/plan Read docs/UX_KRUG_AUDIT_BACKLOG.md and .agents/skills/laws-of-ux/SKILL.md, then draft an implementation plan for Wave 2 (P1).
+/plan Read docs/UX_KRUG_AUDIT_BACKLOG.md and .agents/skills/laws-of-ux/SKILL.md, then draft an implementation plan for Wave 3 (P2).
 ```
 
-*(Swap `Wave 2 (P1)` for `Wave 3 (P2)` as each wave is completed.)*
+*(Wave 1 (P0) and Wave 2 (P1) are completed — Wave 3 (P2) is next.)*
 
 ---
 
@@ -46,16 +46,16 @@
 
 ---
 
-## 🧱 Wave 2 (P1) — Law 1/2 De-Hardcoding, `<SlideOverDrawer>` Migration & Postel's Law Inputs
+## ✅ Wave 2 (P1) — Law 1/2 De-Hardcoding, `<SlideOverDrawer>` Migration & Postel's Law Inputs (`Completed Nov 17, 2026`)
 
-- [ ] **1. Purge Stale Hardcoded Locations, Fees, Rent & Tenant Maps (Laws 1, 2 & 4):**
+- [x] **1. Purge Stale Hardcoded Locations, Fees, Rent & Tenant Maps (Laws 1, 2 & 4):**
   - Rewire `src/components/labels/RolloLabelTestWorkbench.vue:759-853,1050-1086` to `warehouses.ts` + `siteConfig` (removing `"Booth #42"`, `PDX-0441`, `"Dusty Tiger Jacket"` violating DT's NO Clothes rule, and `resalecommand.com`).
   - Remove Law-1-violating `"Add Selling Location / Booth"` drawer in `src/components/warehouses/LocationSyncView.vue:269-310` and free-text `"Placed Locations"` in `src/components/org/OrgSettingsView.vue:153-182`.
   - Replace hardcoded `"15% Venue Fee"` / `$382.50` / `20%` / `$50` fallbacks in `SalesImporter.vue:322,1214,1295,1383,1405,1587`, `LocationDetailView.vue:1345,1829`, `CoopCharterView.vue:323`, `CharterPayoutSimulator.vue:221`, `CoopSettlementView.vue:1855-1856`, `SettingsManager.vue:538-539`, `HaulIngestionWizard.vue:281-286`, and static `MOCK_TENANTS` / `DB_TENANT_MAP` in `src/pages/subsite/index.astro:19-34` & `src/pages/subsite/item/[id].astro:19-31`.
-- [ ] **2. Jakob's Law `<SlideOverDrawer>` + `useBodyScrollLock()` Unification:**
-  - Migrate raw `<dialog class="modal">` and custom `<Teleport>` drawers (missing `Esc` or ref-counted scroll lock) in `CoopExpensesLedger.vue:643,766,940,986`, `CoopSettlementView.vue:1028`, `ScoutPurchaseList.vue:235`, `ScoutPurchaseTray.vue:390-588`, `LocationDetailView.vue:1013,1057,1130`, `LocationSyncView.vue:239,1418,1780`, `SalesImporter.vue:1509,1931`, `VaultNoteDrawer.vue:2`, `JoinApplicantDrawer.vue:148`, `PurchaseEditor.vue:922`, `OrgSettingsView.vue:247`, `SocialItemPickerModal.vue:2`, and `StoreCatalog.vue:185,259`.
+- [x] **2. Jakob's Law `<SlideOverDrawer>` + `useBodyScrollLock()` Unification:**
+  - Migrate raw `<dialog class="modal">` and custom `<Teleport>` drawers (missing `Esc` or ref-counted scroll lock) in `CoopExpensesLedger.vue:643,766,940,986`, `CoopSettlementView.vue:1028`, `ScoutPurchaseList.vue:235`, `ScoutPurchaseTray.vue:390-588`, `LocationDetailView.vue:1013,1057,1130`, `LocationSyncView.vue:239,1418,1780`, `SalesImporter.vue:1509,1931`, `VaultNoteDrawer.vue:2`, `JoinApplicantDrawer.vue:148`, `PurchaseEditor.vue:922`, `SpeedEntryForm.vue:400`, `OrgSettingsView.vue:247`, `SocialItemPickerModal.vue:2`, and `StoreCatalog.vue:185,259`.
   - Attach `useBodyScrollLock()` to `DashboardCommandDock.vue:8` (`useDashboardCommandTray.ts`), `PurchaseItemsTray.vue:538` (removing raw `document.body.style.overflow`), `SalesImportTray.vue`, `JoinRequestsPanel.vue:75`, and `ScoutView.vue:97` / `ScoutPurchaseTray.vue:4`.
-- [ ] **3. Postel's Law Input Lenience (`inputmode="decimal"` + Auth Email Normalization):**
+- [x] **3. Postel's Law Input Lenience (`inputmode="decimal"` + Auth Email Normalization):**
   - Normalize `email.value.trim().toLowerCase()` + `autocomplete="email" autocapitalize="none"` in `LoginView.vue:111`, `SignupView.vue:179`, `ConnectWithUsForm.vue:56`, `OrgSettingsView.vue:507`, and `ProfileView.vue:93` (keeping zero `.trim()` on passwords + `autocomplete="current-password"` / `"new-password"`).
   - Convert `type="number"` scroll-wheel currency/fee/hours inputs to `type="text" inputmode="decimal"` + `parsePriceValue()` across `PurchaseEditor`, `SpeedEntryForm`, `PurchaseItemsTray`, `HaulIngestionWizard`, `SalesImporter`, `RecordSaleDrawer`, `CoopExpensesLedger`, `CoopSettlementView`, `CoopLaborView`, `CoopGovernanceView`, `SettingsManager`, `ScoutView`, `ScoutPurchaseTray`, `AppraisalPricingLabView`, and `LocationDetailView`.
 

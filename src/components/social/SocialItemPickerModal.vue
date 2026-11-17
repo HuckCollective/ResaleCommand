@@ -1,36 +1,14 @@
 <template>
-  <div v-if="isOpen" class="modal modal-open z-50">
-    <div class="modal-box max-w-3xl max-h-[85vh] flex flex-col p-5 sm:p-6 bg-base-100 rounded-3xl border border-base-300 shadow-2xl">
-      
-      <!-- HEADER -->
-      <div class="flex items-center justify-between pb-3 border-b border-base-200 shrink-0">
-        <div class="flex items-center gap-2.5">
-          <div class="w-10 h-10 rounded-2xl bg-secondary/15 text-secondary flex items-center justify-center font-bold shrink-0">
-            <Icon icon="solar:box-minimalistic-bold" class="w-5 h-5" />
-          </div>
-          <div>
-            <h3 class="font-black text-base sm:text-lg text-base-content flex items-center gap-2">
-              <span>Add Items to Social Post</span>
-              <span class="badge badge-sm badge-secondary font-mono font-bold">{{ selectedIds.length }} selected</span>
-            </h3>
-            <p class="text-xs opacity-65">
-              Select inventory items to feature in your post, carousel, and AI marketing copy.
-            </p>
-          </div>
-        </div>
-
-        <button 
-          type="button" 
-          @click="handleClose" 
-          class="btn btn-sm btn-ghost btn-circle"
-          title="Close modal"
-        >
-          <Icon icon="solar:close-circle-bold" class="w-6 h-6 opacity-60 hover:opacity-100" />
-        </button>
-      </div>
-
+  <SlideOverDrawer
+    :model-value="isOpen"
+    size="lg"
+    title="Add Items to Social Post"
+    :subtitle="`${selectedIds.length} selected — pick inventory items to feature in your post, carousel, and AI copy.`"
+    @update:model-value="(v) => !v && handleClose()"
+  >
+    <div class="space-y-3">
       <!-- SEARCH & FILTER TOOLBAR -->
-      <div class="py-3.5 space-y-2.5 shrink-0">
+      <div class="space-y-2.5">
         <div class="flex flex-col sm:flex-row items-center gap-2">
           <!-- Real-Time Search Input -->
           <div class="relative flex-1 w-full">
@@ -152,9 +130,10 @@
         </div>
 
       </div>
+    </div>
 
-      <!-- FOOTER ACTIONS -->
-      <div class="pt-4 mt-2 border-t border-base-200 flex items-center justify-between gap-3 shrink-0">
+    <template #footer>
+      <div class="flex items-center justify-between gap-3">
         <span class="text-xs font-mono opacity-65">
           {{ selectedIds.length }} item{{ selectedIds.length === 1 ? '' : 's' }} ready to stage
         </span>
@@ -179,16 +158,15 @@
           </button>
         </div>
       </div>
-
-    </div>
-    <div class="modal-backdrop bg-black/60 backdrop-blur-xs" @click="handleClose"></div>
-  </div>
+    </template>
+  </SlideOverDrawer>
 </template>
 
 <script setup lang="ts">
 import { ref, computed, watch, onMounted } from 'vue';
 import { Icon } from '@iconify/vue';
 import ItemThumbnail from '../common/ItemThumbnail.vue';
+import SlideOverDrawer from '../common/SlideOverDrawer.vue';
 import { useInventory } from '../../composables/useInventory';
 import { getItemImageUrl } from '../../composables/useInventoryFilters';
 import { getItemImageUrls, type SocialStudioItem } from '../../lib/socialMediaStudio';

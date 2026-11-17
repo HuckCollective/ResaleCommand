@@ -272,10 +272,8 @@
             </label>
             <input
               v-model.number="form.hours"
-              type="number"
-              min="0.25"
-              max="24"
-              step="0.25"
+              type="text"
+              inputmode="decimal"
               class="input input-bordered input-sm rounded-xl font-mono font-bold text-xs w-full"
             />
           </div>

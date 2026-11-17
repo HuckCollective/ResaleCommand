@@ -218,7 +218,12 @@ const channelPresets = computed<ChannelPreset[]>(() => {
   ];
 });
 
-const initialPreset = channelPresets.value[0] || { id: 'default', label: 'Retail Booth', rate: 15, defaultShipping: 0 };
+const initialPreset = channelPresets.value[0] || {
+  id: 'default',
+  label: 'Retail Booth',
+  rate: Number(locationMetas.value[0]?.commissionRate ?? 0),
+  defaultShipping: 0,
+};
 
 const selectedPresetId = ref<string>(initialPreset.id);
 const simSalePrice = ref<number>(60);
