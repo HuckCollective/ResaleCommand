@@ -291,6 +291,42 @@ export function getAllLocationSettingMetas(liveWarehouses?: any[]): LocationSett
     return KNOWN_FACILITIES.map(f => getLocationSettingMeta(f.code, liveWarehouses));
 }
 
+/**
+ * Dynamically determines whether a location/warehouse is a Backstock Storage facility (`HG`, `HH`)
+ * rather than a physical Selling Booth (`MD`, `DT`), using live metadata (zero hardcoded codes — Law 2).
+ */
+export function isStorageFacility(locOrStr: any, liveWarehouses?: any[]): boolean {
+    const rawObj = typeof locOrStr === 'object' && locOrStr ? locOrStr : null;
+    const canonicalCode = resolveCanonicalLocationCode(locOrStr, liveWarehouses);
+    const meta = canonicalCode ? getLocationSettingMeta(canonicalCode, liveWarehouses) : null;
+
+    const typeStr = String(rawObj?.type || meta?.type || '').toLowerCase();
+    const usesPos = Boolean(rawObj?.usesRicochet ?? meta?.usesRicochet);
+    const usesSheet = Boolean(rawObj?.supportsPaperSalesSheet ?? meta?.supportsPaperSalesSheet);
+    const fee = Number(rawObj?.commissionRate ?? meta?.commissionRate ?? 0);
+    const rent = Number(rawObj?.monthlyRent ?? meta?.monthlyRent ?? 0);
+
+    if (usesPos || usesSheet || fee > 0 || rent > 0) {
+        return false;
+    }
+    if (typeStr.includes('warehouse') || typeStr.includes('backstock') || typeStr.includes('storage')) {
+        return true;
+    }
+    return false;
+}
+
+export function isRetailBoothFacility(locOrStr: any, liveWarehouses?: any[]): boolean {
+    return !isStorageFacility(locOrStr, liveWarehouses);
+}
+
+export function getSellingBoothMetas(liveWarehouses?: any[]): LocationSettingMeta[] {
+    return getAllLocationSettingMetas(liveWarehouses).filter(m => isRetailBoothFacility(m, liveWarehouses));
+}
+
+export function getBackstockStorageMetas(liveWarehouses?: any[]): LocationSettingMeta[] {
+    return getAllLocationSettingMetas(liveWarehouses).filter(m => isStorageFacility(m, liveWarehouses));
+}
+
 export function getLocationManifestDocIds(locOrStr: any, liveWarehouses?: any[]): {
     code: string;
     reportDocId: string;

@@ -17,7 +17,7 @@
       <div v-if="rejectedTargetMsg" role="alert" class="p-4 rounded-2xl bg-error/10 border border-error/40 space-y-2 text-left">
         <div class="font-black text-sm text-error">Blocked Untrusted Return Link</div>
         <p class="text-xs text-base-content/85 leading-relaxed">{{ rejectedTargetMsg }}</p>
-        <a href="/settings?tab=bookmarklets" class="btn btn-sm h-11 btn-outline w-full rounded-xl font-bold">
+        <a href="/studios/bookmarklets" class="btn btn-sm h-11 btn-outline w-full rounded-xl font-bold">
           Open Bookmarklet Hub
         </a>
       </div>

@@ -162,10 +162,10 @@
         <div class="modal-action flex items-center justify-between gap-2 flex-wrap">
           <div class="flex items-center gap-2 flex-wrap">
             <a
-              href="/settings?tab=bookmarklets"
+              href="/studios/bookmarklets"
               class="btn btn-xs sm:btn-sm btn-ghost border border-base-300 font-bold rounded-xl"
             >
-              ⚙️ Customize Label / Keyword
+              ⚙️ Customize Label / Shortcut Keyword
             </a>
             <button
               v-if="showConsoleFallback"

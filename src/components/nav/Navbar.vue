@@ -1,21 +1,21 @@
 <template>
   <nav class="navbar max-w-screen-2xl mx-auto px-2 sm:px-4 lg:px-6 border-b border-base-200/60 flex items-center justify-between gap-2 overflow-visible">
-    <!-- Brand / Left (shrink-0, never trapped in a 25% box) -->
+    <!-- Brand / Left (Krug #5 Street Sign #1) -->
     <div class="flex items-center gap-1.5 shrink-0">
       <a :href="showMemberNav ? '/dashboard' : '/'" class="btn btn-ghost px-2 sm:px-2.5 text-lg sm:text-xl font-black tracking-tight text-primary gap-1.5 whitespace-nowrap">
         <Icon icon="solar:compass-big-bold-duotone" class="w-6 h-6 shrink-0" />
         <span class="truncate">{{ siteConfig.shortTitle }}</span>
-        <span class="badge badge-primary badge-outline badge-xs sm:badge-sm font-mono font-black tracking-normal shrink-0">{{ siteConfig.badgeText }}</span>
+        <span class="badge badge-primary badge-outline badge-xs sm:badge-sm font-mono font-black tracking-normal whitespace-nowrap shrink-0">{{ siteConfig.badgeText }}</span>
       </a>
       <span
         v-if="alphaMode"
-        class="badge badge-warning badge-xs sm:badge-sm font-black uppercase whitespace-nowrap shrink-0 shadow-xs border border-warning"
+        class="badge badge-warning text-warning-content badge-xs sm:badge-sm font-black uppercase whitespace-nowrap shrink-0 shadow-xs border border-warning"
       >
         Alpha
       </span>
     </div>
 
-    <!-- Desktop Center (guests): public pages only -->
+    <!-- Desktop Center (Guests): public pages only -->
     <div v-if="!showMemberNav && !loading" class="hidden lg:flex items-center justify-center gap-1 flex-1 min-w-0">
       <a href="/coop" class="btn btn-sm btn-ghost rounded-xl px-3 gap-1.5 font-semibold whitespace-nowrap">
         <Icon icon="solar:shield-star-bold-duotone" class="w-4 h-4 text-primary shrink-0" />
@@ -27,296 +27,87 @@
       </a>
     </div>
 
-    <!-- Desktop Center: 5-Pillar Lifecycle Navigation (Zero overlap, natural flex-1) -->
-    <div v-if="showMemberNav" class="hidden lg:flex items-center justify-center gap-0.5 xl:gap-1 flex-1 min-w-0 overflow-visible">
-      <a
-        href="/dashboard"
-        :aria-current="isRouteActive('/dashboard') ? 'page' : undefined"
-        class="btn btn-sm rounded-xl px-2.5 xl:px-3 gap-1.5 font-semibold border-0 shadow-none whitespace-nowrap shrink-0"
-        :class="isRouteActive('/dashboard') ? 'bg-primary/15 text-primary font-bold' : 'btn-ghost hover:bg-base-200/80'"
-      >
-        <Icon icon="solar:widget-bold-duotone" class="w-4 h-4 text-primary shrink-0" />
-        <span>Command</span>
-      </a>
-
-      <a
-        v-if="capabilities.canViewPurchases"
-        href="/purchases"
-        :aria-current="isRouteActive('/purchases') ? 'page' : undefined"
-        class="btn btn-sm rounded-xl px-2.5 xl:px-3 gap-1.5 font-semibold border-0 shadow-none whitespace-nowrap shrink-0"
-        :class="isRouteActive('/purchases') ? 'bg-primary/15 text-primary font-bold' : 'btn-ghost hover:bg-base-200/80'"
-      >
-        <Icon icon="solar:cart-large-2-bold-duotone" class="w-4 h-4 text-primary shrink-0" />
-        <span>Purchases</span>
-      </a>
-
-      <a
-        href="/inventory"
-        :aria-current="isRouteActive('/inventory') ? 'page' : undefined"
-        class="btn btn-sm rounded-xl px-2.5 xl:px-3 gap-1.5 font-semibold border-0 shadow-none whitespace-nowrap shrink-0"
-        :class="isRouteActive('/inventory') ? 'bg-primary/15 text-primary font-bold' : 'btn-ghost hover:bg-base-200/80'"
-      >
-        <Icon icon="solar:box-bold-duotone" class="w-4 h-4 text-primary shrink-0" />
-        <span>Inventory</span>
-      </a>
-
-      <!-- Locations & Booth Sync Dropdown -->
-      <div class="dropdown dropdown-bottom shrink-0">
-        <div
-          tabindex="0"
-          role="button"
-          class="btn btn-sm rounded-xl px-2.5 xl:px-3 gap-1 font-semibold border-0 shadow-none whitespace-nowrap"
-          :class="isRouteActive('/warehouse') ? 'bg-primary/15 text-primary font-bold' : 'btn-ghost hover:bg-base-200/80'"
+    <!-- Desktop Center: Strict 5-Pillar Reseller Lifecycle Navigation (Enforced by §17: <= 5 pillars, <= 7 items/dropdown) -->
+    <div
+      v-if="showMemberNav"
+      data-rc-nav-center
+      class="hidden lg:flex items-center justify-center gap-0.5 xl:gap-1 flex-1 min-w-0 overflow-visible"
+    >
+      <template v-for="pillar in resellerPillars" :key="pillar.id">
+        <!-- Direct Link Pillar (Command, Purchases, Inventory) -->
+        <a
+          v-if="!pillar.children"
+          :href="pillar.href"
+          data-rc-nav-pillar
+          :aria-current="isPillarActive(pillar) ? 'page' : undefined"
+          class="btn btn-sm rounded-xl px-2.5 xl:px-3 gap-1.5 font-semibold border-0 shadow-none whitespace-nowrap shrink-0"
+          :class="isPillarActive(pillar) ? 'bg-primary/15 text-primary font-bold' : 'btn-ghost hover:bg-base-200/80'"
         >
-          <Icon icon="solar:shop-2-bold-duotone" class="w-4 h-4 text-primary shrink-0" />
-          <span>Locations</span>
-          <Icon icon="solar:alt-arrow-down-linear" class="w-3.5 h-3.5 opacity-60 shrink-0" />
-        </div>
-        <div
-          tabindex="0"
-          class="dropdown-content z-50 mt-2 p-2 shadow-xl bg-base-100 border border-base-200 rounded-2xl w-max min-w-[290px] max-w-md space-y-1"
-        >
-          <div class="px-3 py-1 text-[10px] uppercase tracking-wider font-extrabold opacity-60">
-            Hubs &amp; Reconciliation
-          </div>
-          <a
-            href="/warehouse"
-            class="flex items-center justify-between gap-3 rounded-xl py-2 px-3 text-xs hover:bg-base-200 transition-colors"
-            :class="currentPath === '/warehouse' ? 'bg-primary/15 text-primary font-bold' : 'font-semibold'"
-          >
-            <span class="flex items-center gap-2.5 min-w-0">
-              <Icon icon="solar:buildings-2-bold-duotone" class="w-4 h-4 text-primary shrink-0" />
-              <span class="truncate">All Locations Hub</span>
-            </span>
-            <span class="badge badge-ghost badge-xs font-mono whitespace-nowrap shrink-0">Overview</span>
-          </a>
-          <a
-            :href="'/warehouse/sync/' + defaultSyncLocationCode"
-            class="flex items-center justify-between gap-3 rounded-xl py-2 px-3 text-xs hover:bg-base-200 transition-colors"
-            :class="isRouteActive('/warehouse/sync') ? 'bg-secondary/15 text-secondary font-bold' : 'font-semibold'"
-          >
-            <span class="flex items-center gap-2.5 min-w-0">
-              <Icon icon="solar:round-transfer-horizontal-bold-duotone" class="w-4 h-4 text-secondary shrink-0" />
-              <span class="truncate">Location POS &amp; CSV Sync</span>
-            </span>
-            <span class="badge badge-secondary badge-xs text-secondary-content font-bold whitespace-nowrap shrink-0">2-Way</span>
-          </a>
+          <Icon :icon="pillar.icon" class="w-4 h-4 text-primary shrink-0" />
+          <span>{{ pillar.label }}</span>
+        </a>
 
-          <div class="divider my-1"></div>
-          <div class="px-3 py-1 text-[10px] uppercase tracking-wider font-extrabold opacity-60">
-            Booths &amp; Warehouses
-          </div>
-
+        <!-- Bounded Dropdown Pillar (Booths & Channels <= 7, Sales & Co-op <= 6) -->
+        <div v-else data-rc-nav-pillar class="dropdown dropdown-bottom shrink-0">
           <div
-            v-for="loc in locationMetas"
-            :key="loc.code"
-            class="flex items-center justify-between gap-1.5 rounded-xl p-1 hover:bg-base-200/60"
+            tabindex="0"
+            role="button"
+            :aria-current="isPillarActive(pillar) ? 'page' : undefined"
+            class="btn btn-sm rounded-xl px-2.5 xl:px-3 gap-1 font-semibold border-0 shadow-none whitespace-nowrap"
+            :class="isPillarActive(pillar) ? 'bg-primary/15 text-primary font-bold' : 'btn-ghost hover:bg-base-200/80'"
+          >
+            <Icon :icon="pillar.icon" class="w-4 h-4 text-primary shrink-0" />
+            <span>{{ pillar.label }}</span>
+            <Icon icon="solar:alt-arrow-down-linear" class="w-3.5 h-3.5 opacity-60 shrink-0" />
+          </div>
+          <div
+            tabindex="0"
+            data-rc-nav-dropdown
+            class="dropdown-content z-50 mt-2 p-2 shadow-xl bg-base-100 border border-base-200 rounded-2xl w-max min-w-[280px] max-w-[calc(100vw-2rem)] sm:max-w-md space-y-1"
           >
             <a
-              :href="'/warehouse/' + loc.code"
-              class="flex items-center gap-2.5 px-2 py-1.5 rounded-lg flex-1 min-w-0 hover:bg-base-200"
-              :class="currentPath === '/warehouse/' + loc.code ? 'bg-primary/15 text-primary font-bold' : ''"
+              v-for="item in pillar.children"
+              :key="item.id"
+              :href="item.href"
+              data-rc-nav-dropdown-link
+              class="flex items-center justify-between gap-3 rounded-xl py-2 px-3 hover:bg-base-200 transition-colors"
+              :class="isLinkActive(item.href) ? 'bg-primary/15 text-primary font-bold' : ''"
             >
-              <span class="text-base leading-none shrink-0">{{ loc.icon }}</span>
-              <span class="flex flex-col min-w-0">
-                <span class="text-xs font-bold truncate">{{ loc.displayName }}</span>
-                <span class="text-[10px] opacity-60 truncate">{{ loc.type }}</span>
+              <span class="flex items-center gap-2.5 min-w-0 flex-1">
+                <span v-if="item.emoji" class="text-base leading-none shrink-0">{{ item.emoji }}</span>
+                <Icon v-else :icon="item.icon" class="w-4 h-4 shrink-0" :class="item.iconColor || 'text-primary'" />
+                <span class="flex flex-col min-w-0 flex-1">
+                  <span class="font-bold text-xs truncate">{{ item.label }}</span>
+                  <span class="text-[10px] opacity-65 truncate">{{ item.hint }}</span>
+                </span>
+              </span>
+              <span
+                v-if="item.badge"
+                class="badge badge-xs font-bold whitespace-nowrap shrink-0"
+                :class="item.badgeClass || 'badge-ghost'"
+              >
+                {{ item.badge }}
               </span>
             </a>
-            <a
-              :href="'/warehouse/sync/' + loc.code"
-              class="btn btn-ghost btn-xs rounded-lg gap-1 font-bold text-primary hover:bg-primary/10 shrink-0"
-              :title="'Open ' + loc.shortName + ' Sync'"
-            >
-              <Icon icon="solar:refresh-circle-bold" class="w-3.5 h-3.5" />
-              <span>Sync</span>
-            </a>
           </div>
         </div>
-      </div>
-
-      <!-- Finance & Co-op Ledger Dropdown -->
-      <div class="dropdown dropdown-bottom shrink-0">
-        <div
-          tabindex="0"
-          role="button"
-          class="btn btn-sm rounded-xl px-2.5 xl:px-3 gap-1 font-semibold border-0 shadow-none whitespace-nowrap"
-          :class="isFinanceRouteActive ? 'bg-primary/15 text-primary font-bold' : 'btn-ghost hover:bg-base-200/80'"
-        >
-          <Icon icon="solar:tag-price-bold-duotone" class="w-4 h-4 text-primary shrink-0" />
-          <span>Finance</span>
-          <Icon icon="solar:alt-arrow-down-linear" class="w-3.5 h-3.5 opacity-60 shrink-0" />
-        </div>
-        <div
-          tabindex="0"
-          class="dropdown-content z-50 mt-2 p-2 shadow-xl bg-base-100 border border-base-200 rounded-2xl w-max min-w-[260px] max-w-sm space-y-1"
-        >
-          <div class="px-3 py-1 text-[10px] uppercase tracking-wider font-extrabold opacity-60">
-            Revenue, Tax &amp; Co-op
-          </div>
-          <a
-            v-if="capabilities.canViewSales"
-            href="/sales"
-            class="flex items-center gap-2.5 rounded-xl py-2 px-3 hover:bg-base-200 transition-colors"
-            :class="isRouteActive('/sales') ? 'bg-primary/15 text-primary font-bold' : ''"
-          >
-            <Icon icon="solar:dollar-minimalistic-bold-duotone" class="w-4 h-4 text-success shrink-0" />
-            <div class="flex flex-col min-w-0">
-              <span class="font-bold text-xs">Sales &amp; Payout Ledger</span>
-              <span class="text-[10px] opacity-60">Register Tickets &amp; CSV Import</span>
-            </div>
-          </a>
-          <a
-            href="/coop/settlements"
-            class="flex items-center gap-2.5 rounded-xl py-2 px-3 hover:bg-base-200 transition-colors"
-            :class="isRouteActive('/coop/settlements') ? 'bg-primary/15 text-primary font-bold' : ''"
-          >
-            <Icon icon="solar:hand-money-bold-duotone" class="w-4 h-4 text-primary shrink-0" />
-            <div class="flex flex-col min-w-0">
-              <span class="font-bold text-xs">Co-op Monthly Settlements</span>
-              <span class="text-[10px] opacity-60">4-Gate 70/30 Waterfall &amp; PDFs</span>
-            </div>
-          </a>
-          <a
-            href="/coop/governance"
-            class="flex items-center gap-2.5 rounded-xl py-2 px-3 hover:bg-base-200 transition-colors"
-            :class="isRouteActive('/coop/governance') ? 'bg-primary/15 text-primary font-bold' : ''"
-          >
-            <Icon icon="solar:users-group-two-rounded-bold-duotone" class="w-4 h-4 text-secondary shrink-0" />
-            <div class="flex flex-col min-w-0">
-              <span class="font-bold text-xs">Co-op Governance &amp; Rules</span>
-              <span class="text-[10px] opacity-60">Proposals, Loomio Votes &amp; Sliders</span>
-            </div>
-          </a>
-          <a
-            href="/coop/labor"
-            class="flex items-center gap-2.5 rounded-xl py-2 px-3 hover:bg-base-200 transition-colors"
-            :class="isRouteActive('/coop/labor') ? 'bg-primary/15 text-primary font-bold' : ''"
-          >
-            <Icon icon="solar:clock-circle-bold-duotone" class="w-4 h-4 text-accent shrink-0" />
-            <div class="flex flex-col min-w-0">
-              <span class="font-bold text-xs">Promoter &amp; Enabler Labor Pool</span>
-              <span class="text-[10px] opacity-60">Log Booth &amp; Social Work Hours</span>
-            </div>
-          </a>
-          <a
-            href="/coop/vault"
-            class="flex items-center gap-2.5 rounded-xl py-2 px-3 hover:bg-base-200 transition-colors"
-            :class="isRouteActive('/coop/vault') ? 'bg-primary/15 text-primary font-bold' : ''"
-          >
-            <Icon icon="solar:notebook-bold-duotone" class="w-4 h-4 text-primary shrink-0" />
-            <div class="flex flex-col min-w-0">
-              <span class="font-bold text-xs">AI Vault &amp; Prompt Maker</span>
-              <span class="text-[10px] opacity-60">Ideas, AI Reports &amp; Gemini Prompts</span>
-            </div>
-          </a>
-          <a
-            href="/expenses"
-            class="flex items-center gap-2.5 rounded-xl py-2 px-3 hover:bg-base-200 transition-colors"
-            :class="isRouteActive('/expenses') ? 'bg-primary/15 text-primary font-bold' : ''"
-          >
-            <Icon icon="solar:bill-list-bold-duotone" class="w-4 h-4 text-warning shrink-0" />
-            <div class="flex flex-col min-w-0">
-              <span class="font-bold text-xs">Expenses &amp; Receipts</span>
-              <span class="text-[10px] opacity-60">Schedule C / Form 1065 Write-Offs</span>
-            </div>
-          </a>
-          <a
-            href="/coop"
-            class="flex items-center gap-2.5 rounded-xl py-2 px-3 hover:bg-base-200 transition-colors"
-            :class="currentPath === '/coop' ? 'bg-primary/15 text-primary font-bold' : ''"
-          >
-            <Icon icon="solar:shield-star-bold-duotone" class="w-4 h-4 text-primary shrink-0" />
-            <div class="flex flex-col min-w-0">
-              <span class="font-bold text-xs">Living Co-op Charter</span>
-              <span class="text-[10px] opacity-60">WSDE Rules &amp; Payout Simulator</span>
-            </div>
-          </a>
-        </div>
-      </div>
-
-      <!-- Studios & Hardware Dropdown -->
-      <div class="dropdown dropdown-bottom shrink-0">
-        <div
-          tabindex="0"
-          role="button"
-          class="btn btn-sm rounded-xl px-2.5 xl:px-3 gap-1 font-semibold border-0 shadow-none whitespace-nowrap"
-          :class="isStudiosRouteActive ? 'bg-primary/15 text-primary font-bold' : 'btn-ghost hover:bg-base-200/80'"
-        >
-          <Icon icon="solar:magic-stick-3-bold-duotone" class="w-4 h-4 text-secondary shrink-0" />
-          <span>Studios</span>
-          <Icon icon="solar:alt-arrow-down-linear" class="w-3.5 h-3.5 opacity-60 shrink-0" />
-        </div>
-        <div
-          tabindex="0"
-          class="dropdown-content z-50 mt-2 p-2 shadow-xl bg-base-100 border border-base-200 rounded-2xl w-max min-w-[260px] max-w-sm space-y-1"
-        >
-          <div class="px-3 py-1 text-[10px] uppercase tracking-wider font-extrabold opacity-60">
-            Marketing &amp; Thermal Tagging
-          </div>
-          <a
-            href="/social"
-            class="flex items-center gap-2.5 rounded-xl py-2 px-3 hover:bg-base-200 transition-colors"
-            :class="isRouteActive('/social') ? 'bg-secondary/15 text-secondary font-bold' : ''"
-          >
-            <Icon icon="solar:broadcast-bold-duotone" class="w-4 h-4 text-secondary shrink-0" />
-            <div class="flex flex-col min-w-0">
-              <span class="font-bold text-xs">Social Dropcast Studio</span>
-              <span class="text-[10px] opacity-60">Booth Drops &amp; Social Reels</span>
-            </div>
-          </a>
-          <a
-            href="/labels/studio"
-            class="flex items-center gap-2.5 rounded-xl py-2 px-3 hover:bg-base-200 transition-colors"
-            :class="isRouteActive('/labels/studio') ? 'bg-primary/15 text-primary font-bold' : ''"
-          >
-            <Icon icon="solar:printer-bold-duotone" class="w-4 h-4 text-primary shrink-0" />
-            <div class="flex flex-col min-w-0">
-              <span class="font-bold text-xs">Thermal Label Studio</span>
-              <span class="text-[10px] opacity-60">Rollo Barcodes &amp; Booth Tags</span>
-            </div>
-          </a>
-          <a
-            href="/labels/test"
-            class="flex items-center gap-2.5 rounded-xl py-2 px-3 hover:bg-base-200 transition-colors"
-            :class="isRouteActive('/labels/test') ? 'bg-primary/15 text-primary font-bold' : ''"
-          >
-            <Icon icon="solar:ruler-pen-bold-duotone" class="w-4 h-4 text-accent shrink-0" />
-            <div class="flex flex-col min-w-0">
-              <span class="font-bold text-xs">Hardware Calibration</span>
-              <span class="text-[10px] opacity-60">Test Feed &amp; Label Dimensions</span>
-            </div>
-          </a>
-          <div class="divider my-1"></div>
-          <a
-            href="/studios/appraisal"
-            class="flex items-center gap-2.5 rounded-xl py-2 px-3 hover:bg-base-200 transition-colors"
-            :class="isRouteActive('/studios/appraisal') ? 'bg-primary/15 text-primary font-bold' : ''"
-          >
-            <Icon icon="solar:test-tube-minimalistic-bold-duotone" class="w-4 h-4 text-info shrink-0" />
-            <div class="flex flex-col min-w-0">
-              <span class="font-bold text-xs">Appraisal &amp; Pricing Lab</span>
-              <span class="text-[10px] opacity-60">AI Valuation, Calibration &amp; Cost Telemetry</span>
-            </div>
-          </a>
-        </div>
-      </div>
+      </template>
     </div>
 
-    <!-- Right Cluster: Unified Scout & Trackers Pill + Workspace Switcher + User Avatar + Mobile Trigger -->
-    <div class="flex items-center justify-end gap-1.5 sm:gap-2 shrink-0">
-      <!-- Unified Segmented Pill: Scout + Trackers (Zero floating .indicator-item overlap) -->
+    <!-- Right Reseller Toolbelt (3 Clean Items: 🔭 Scout | 🧰 Studios | Unified [Workspace · Avatar] ▾) -->
+    <div data-rc-toolbelt class="flex items-center justify-end gap-1.5 sm:gap-2 shrink-0">
+      <!-- Toolbelt #1: Scout + Trackers Pill -->
       <div class="inline-flex items-center rounded-xl border border-base-300 bg-base-200/60 p-0.5 gap-0.5 shrink-0">
         <a
           href="/scout?quick=true"
           @click="handleScoutClick"
-          class="btn btn-xs sm:btn-sm rounded-lg gap-1.5 font-bold px-2.5 h-7 sm:h-8 min-h-0 border-0 shadow-none whitespace-nowrap transition-all"
+          class="btn btn-xs sm:btn-sm rounded-lg gap-1.5 font-bold px-2.5 h-9 md:h-8 min-h-0 border-0 shadow-none whitespace-nowrap transition-all"
           :class="
             currentPath === '/scout'
               ? 'btn-primary text-primary-content shadow-xs'
               : 'btn-ghost hover:bg-base-100'
           "
-          title="Quick Scout & Camera OCR (/scout)"
+          title="Quick Scout & Camera Appraisal (/scout)"
           aria-label="Quick Scout"
         >
           <Icon icon="solar:scanner-bold" class="w-3.5 h-3.5 shrink-0" :class="currentPath === '/scout' ? '' : 'text-primary'" />
@@ -332,20 +123,20 @@
         <a
           v-if="capabilities.canUseBuyTracker && showMemberNav"
           href="/scout/trackers"
-          class="btn btn-xs sm:btn-sm rounded-lg gap-1 font-bold px-2.5 h-7 sm:h-8 min-h-0 border-0 shadow-none whitespace-nowrap transition-all"
+          class="btn btn-xs sm:btn-sm rounded-lg gap-1 font-bold px-2 h-9 md:h-8 min-h-0 border-0 shadow-none whitespace-nowrap transition-all"
           :class="
             currentPath.startsWith('/scout/tracker')
               ? 'btn-secondary text-secondary-content shadow-xs'
               : 'btn-ghost hover:bg-base-100'
           "
-          title="Active Scout Buy Trackers (/scout/trackers)"
+          title="Active Buy Trackers (/scout/trackers)"
           aria-label="Buy Trackers"
         >
           <span class="text-xs leading-none">📌</span>
-          <span class="text-xs">Trackers</span>
+          <span class="hidden xl:inline text-xs">Trackers</span>
           <span
             v-if="isAuthenticated && displayTrackedCount > 0"
-            class="badge badge-xs font-mono font-black px-1.5 shrink-0"
+            class="badge badge-xs font-mono font-black px-1.5 whitespace-nowrap shrink-0"
             :class="
               currentPath.startsWith('/scout/tracker')
                 ? 'badge-neutral text-neutral-content'
@@ -357,172 +148,169 @@
         </a>
       </div>
 
-      <!-- Desktop Auth / Workspace Controls -->
+      <!-- Toolbelt #2: 🧰 Studios 1-Click Launcher (Label Studio, Appraisal Lab, Bookmarklets, Scanner & AI Vault) -->
+      <a
+        v-if="showMemberNav"
+        href="/studios"
+        :aria-current="isStudiosRouteActive ? 'page' : undefined"
+        class="hidden md:inline-flex btn btn-sm h-8 rounded-xl px-2.5 gap-1.5 font-bold border border-base-300 whitespace-nowrap shrink-0"
+        :class="
+          isStudiosRouteActive
+            ? 'btn-secondary text-secondary-content border-secondary shadow-xs'
+            : 'btn-ghost bg-base-200/50 hover:bg-base-200'
+        "
+        title="Studios & Reseller Tools (/studios)"
+      >
+        <Icon icon="solar:magic-stick-3-bold-duotone" class="w-4 h-4 shrink-0" :class="isStudiosRouteActive ? '' : 'text-secondary'" />
+        <span class="text-xs">Studios</span>
+      </a>
+
+      <!-- Toolbelt #3: Unified [Workspace · Avatar] ▾ Menu (Zero Duplicate Settings Links!) -->
       <div v-if="loading" class="hidden lg:inline-flex items-center">
         <span class="loading loading-spinner loading-sm text-primary mx-2"></span>
       </div>
 
-      <div v-else class="hidden lg:inline-flex items-center gap-2">
+      <div v-else class="hidden lg:inline-flex items-center">
         <a v-if="!isAuthenticated" href="/login" class="btn btn-primary btn-sm text-primary-content font-bold rounded-xl">
-          Login
+          Sign In
         </a>
 
-        <template v-else>
-          <!-- Dedicated Workspace / Organization Switcher -->
-          <div class="dropdown dropdown-end">
-            <div
-              tabindex="0"
-              role="button"
-              class="btn btn-outline btn-sm rounded-xl gap-1.5 border-base-300 hover:border-primary px-2.5"
-              title="Switch Organization Workspace"
+        <div v-else class="dropdown dropdown-end">
+          <div
+            tabindex="0"
+            role="button"
+            class="btn btn-outline btn-sm h-9 rounded-xl gap-2 border-base-300 hover:border-primary pl-2.5 pr-1.5"
+            title="Account, Workspace & Settings"
+          >
+            <span class="max-w-28 truncate text-xs font-bold text-base-content">
+              {{ currentTeam ? currentTeam.name : 'Personal' }}
+            </span>
+            <div class="bg-neutral text-neutral-content rounded-full w-6 h-6 inline-flex items-center justify-center ring-1 ring-base-300 shrink-0">
+              <span class="text-[11px] font-black">{{ userInitial }}</span>
+            </div>
+          </div>
+
+          <div
+            tabindex="0"
+            class="dropdown-content z-50 mt-2 p-2 shadow-xl bg-base-100 border border-base-200 rounded-2xl w-max min-w-[280px] max-w-[calc(100vw-2rem)] sm:max-w-sm space-y-1"
+          >
+            <!-- Member Identity -->
+            <div class="px-3 py-2 border-b border-base-200">
+              <div class="flex items-center justify-between gap-2">
+                <p class="font-bold text-sm truncate text-base-content">{{ user?.name || 'Member' }}</p>
+                <span class="badge badge-xs badge-ghost border border-base-300 font-mono font-bold whitespace-nowrap shrink-0">
+                  {{ capabilities.roleBadge }}
+                </span>
+              </div>
+              <p class="text-xs opacity-60 truncate text-base-content">{{ user?.email }}</p>
+            </div>
+
+            <!-- Workspace Switcher -->
+            <div class="px-3 pt-1.5 pb-0.5 text-[10px] uppercase tracking-wider font-extrabold opacity-60">
+              Active Workspace
+            </div>
+            <button
+              type="button"
+              @click="handleSwitchTeam(null)"
+              class="w-full rounded-xl py-2 px-3 flex items-center justify-between gap-2 text-left hover:bg-base-200 transition-colors"
+              :class="{ 'bg-primary/15 text-primary font-bold': !currentTeam }"
             >
-              <Icon icon="solar:users-group-two-rounded-bold-duotone" class="w-4 h-4 text-primary shrink-0" />
-              <span class="max-w-32 truncate text-xs font-bold">
-                {{ currentTeam ? currentTeam.name : 'Personal' }}
+              <span class="flex items-center gap-2 min-w-0">
+                <Icon icon="solar:user-rounded-bold-duotone" class="w-4 h-4 shrink-0" />
+                <span class="truncate text-xs">Personal Inventory</span>
               </span>
-              <Icon icon="solar:alt-arrow-down-linear" class="w-3.5 h-3.5 opacity-60 shrink-0" />
-            </div>
-            <div
-              tabindex="0"
-              class="dropdown-content z-50 mt-2 p-2 shadow-xl bg-base-100 border border-base-200 rounded-2xl w-max min-w-[250px] max-w-[calc(100vw-2rem)] space-y-1"
+              <Icon v-if="!currentTeam" icon="solar:check-circle-bold" class="w-4 h-4 text-primary shrink-0" />
+            </button>
+            <button
+              v-for="team in teams"
+              :key="team.$id"
+              type="button"
+              @click="handleSwitchTeam(team)"
+              class="w-full rounded-xl py-2 px-3 flex items-center justify-between gap-2 text-left hover:bg-base-200 transition-colors"
+              :class="{ 'bg-primary/15 text-primary font-bold': currentTeam && currentTeam.$id === team.$id }"
             >
-              <div class="px-3 py-1 text-[10px] uppercase tracking-wider font-extrabold opacity-60">
-                Switch Workspace
-              </div>
-              <button
-                type="button"
-                @click="handleSwitchTeam(null)"
-                class="w-full rounded-xl py-2 px-3 flex items-center justify-between gap-2 text-left hover:bg-base-200 transition-colors"
-                :class="{ 'bg-primary/15 text-primary font-bold': !currentTeam }"
-              >
-                <span class="flex items-center gap-2 min-w-0">
-                  <Icon icon="solar:user-rounded-bold-duotone" class="w-4 h-4 shrink-0" />
-                  <span class="truncate text-xs">Personal Inventory</span>
-                </span>
-                <Icon v-if="!currentTeam" icon="solar:check-circle-bold" class="w-4 h-4 text-primary shrink-0" />
-              </button>
-              <button
-                v-for="team in teams"
-                :key="team.$id"
-                type="button"
-                @click="handleSwitchTeam(team)"
-                class="w-full rounded-xl py-2 px-3 flex items-center justify-between gap-2 text-left hover:bg-base-200 transition-colors"
-                :class="{ 'bg-primary/15 text-primary font-bold': currentTeam && currentTeam.$id === team.$id }"
-              >
-                <span class="flex items-center gap-2 min-w-0">
-                  <Icon icon="solar:users-group-two-rounded-bold-duotone" class="w-4 h-4 shrink-0" />
-                  <span class="truncate text-xs">{{ team.name }}</span>
-                </span>
-                <Icon
-                  v-if="currentTeam && currentTeam.$id === team.$id"
-                  icon="solar:check-circle-bold"
-                  class="w-4 h-4 text-primary shrink-0"
-                />
-              </button>
+              <span class="flex items-center gap-2 min-w-0">
+                <Icon icon="solar:users-group-two-rounded-bold-duotone" class="w-4 h-4 shrink-0" />
+                <span class="truncate text-xs">{{ team.name }}</span>
+              </span>
+              <Icon
+                v-if="currentTeam && currentTeam.$id === team.$id"
+                icon="solar:check-circle-bold"
+                class="w-4 h-4 text-primary shrink-0"
+              />
+            </button>
 
-              <div class="divider my-1"></div>
-              <div class="px-3 py-1 text-[10px] uppercase tracking-wider font-extrabold opacity-60">
-                Organization Admin
-              </div>
-              <a href="/settings" class="flex items-center rounded-xl py-2 px-3 gap-2 text-xs font-semibold hover:bg-base-200">
-                <Icon icon="solar:settings-bold-duotone" class="w-4 h-4 text-primary shrink-0" />
-                <span>Organization &amp; Location Settings</span>
-              </a>
-              <button
-                v-if="!ownedTeam"
-                type="button"
-                @click="showCreateModal = true"
-                class="w-full flex items-center rounded-xl py-2 px-3 gap-2 text-xs font-semibold text-primary hover:bg-base-200"
-              >
-                <Icon icon="solar:add-circle-bold" class="w-4 h-4 shrink-0" />
-                <span>Create Organization</span>
-              </button>
-              <button
-                v-if="currentTeam && ownedTeam && currentTeam.$id === ownedTeam.$id"
-                type="button"
-                @click="showInviteModal = true"
-                class="w-full flex items-center rounded-xl py-2 px-3 gap-2 text-xs font-semibold text-secondary hover:bg-base-200"
-              >
-                <Icon icon="solar:user-plus-bold" class="w-4 h-4 shrink-0" />
-                <span>Invite Co-op Member</span>
-              </button>
-            </div>
-          </div>
+            <div class="divider my-1"></div>
 
-          <!-- User Profile & Theme Dropdown -->
-          <div class="dropdown dropdown-end">
-            <div tabindex="0" role="button" class="btn btn-ghost btn-circle avatar placeholder cursor-pointer">
-              <div class="bg-neutral text-neutral-content rounded-full w-9 ring-1 ring-base-300">
-                <span class="text-xs font-bold">{{ userInitial }}</span>
-              </div>
-            </div>
-            <div
-              tabindex="0"
-              class="mt-2 z-50 p-2 shadow-xl dropdown-content bg-base-100 border border-base-200 rounded-2xl w-max min-w-[240px] max-w-[calc(100vw-2rem)] space-y-1"
+            <!-- Account, Single Settings Entry & Collective Messages -->
+            <a href="/profile" class="flex items-center rounded-xl py-2 px-3 gap-2 text-xs font-semibold hover:bg-base-200">
+              <Icon icon="solar:user-id-bold-duotone" class="w-4 h-4 text-primary shrink-0" />
+              <span>Profile &amp; Member Hats</span>
+            </a>
+            <a href="/settings" class="flex items-center rounded-xl py-2 px-3 gap-2 text-xs font-semibold hover:bg-base-200">
+              <Icon icon="solar:settings-bold-duotone" class="w-4 h-4 text-primary shrink-0" />
+              <span>Workspace &amp; Location Settings</span>
+            </a>
+            <button
+              v-if="!ownedTeam"
+              type="button"
+              @click="showCreateModal = true"
+              class="w-full flex items-center rounded-xl py-2 px-3 gap-2 text-xs font-semibold text-primary hover:bg-base-200"
             >
-              <div class="px-3 py-2 border-b border-base-200">
-                <div class="flex items-center gap-2">
-                  <p class="font-bold text-sm truncate text-base-content">{{ user?.name || 'User' }}</p>
-                  <span
-                    v-if="isPartner"
-                    class="badge badge-secondary badge-xs text-secondary-content font-bold whitespace-nowrap shrink-0"
-                  >
-                    Partner
-                  </span>
-                </div>
-                <p class="text-xs opacity-60 truncate text-base-content">{{ user?.email }}</p>
-              </div>
+              <Icon icon="solar:add-circle-bold" class="w-4 h-4 shrink-0" />
+              <span>Create Organization</span>
+            </button>
+            <button
+              v-if="currentTeam && ownedTeam && currentTeam.$id === ownedTeam.$id"
+              type="button"
+              @click="showInviteModal = true"
+              class="w-full flex items-center rounded-xl py-2 px-3 gap-2 text-xs font-semibold text-secondary hover:bg-base-200"
+            >
+              <Icon icon="solar:user-plus-bold" class="w-4 h-4 shrink-0" />
+              <span>Invite to the Collective</span>
+            </button>
+            <button
+              type="button"
+              class="w-full flex items-center rounded-xl py-2 px-3 gap-2 text-xs font-semibold text-warning hover:bg-warning/10"
+              @click="openCoopMessages('new_bug')"
+            >
+              <Icon icon="solar:bug-bold-duotone" class="w-4 h-4 text-warning shrink-0" />
+              <span>Messages &amp; Report Bug</span>
+            </button>
 
-              <a href="/profile" class="flex items-center rounded-xl py-2 px-3 gap-2 text-xs font-semibold hover:bg-base-200">
-                <Icon icon="solar:user-id-bold-duotone" class="w-4 h-4 text-primary shrink-0" />
-                <span>Profile Settings</span>
-              </a>
-              <a href="/settings" class="flex items-center rounded-xl py-2 px-3 gap-2 text-xs font-semibold hover:bg-base-200">
-                <Icon icon="solar:settings-bold-duotone" class="w-4 h-4 text-primary shrink-0" />
-                <span>Workspace Settings</span>
-              </a>
-              <button
-                type="button"
-                class="w-full flex items-center rounded-xl py-2 px-3 gap-2 text-xs font-semibold text-warning hover:bg-warning/10"
-                @click="openCoopMessages('new_bug')"
-              >
-                <Icon icon="solar:bug-bold-duotone" class="w-4 h-4 text-warning shrink-0" />
-                <span>Report Bug / Messages</span>
-              </button>
+            <div class="divider my-1"></div>
 
-              <div class="divider my-1"></div>
-
-              <div class="flex flex-row justify-between items-center px-3 py-1.5">
-                <span class="text-xs font-semibold opacity-70">Theme</span>
-                <ThemeSwitcher />
-              </div>
-
-              <div class="divider my-1"></div>
-
-              <button
-                type="button"
-                @click="logout"
-                class="w-full flex items-center rounded-xl py-2 px-3 gap-2 text-xs text-error font-semibold hover:bg-error/10"
-              >
-                <Icon icon="solar:logout-2-bold-duotone" class="w-4 h-4 text-error shrink-0" />
-                <span>Logout</span>
-              </button>
+            <div class="flex flex-row justify-between items-center px-3 py-1.5">
+              <span class="text-xs font-semibold opacity-70">Theme</span>
+              <ThemeSwitcher />
             </div>
+
+            <div class="divider my-1"></div>
+
+            <button
+              type="button"
+              @click="logout"
+              class="w-full flex items-center rounded-xl py-2 px-3 gap-2 text-xs text-error font-semibold hover:bg-error/10"
+            >
+              <Icon icon="solar:logout-2-bold-duotone" class="w-4 h-4 text-error shrink-0" />
+              <span>Sign Out</span>
+            </button>
           </div>
-        </template>
+        </div>
       </div>
 
-      <!-- Mobile Menu Button (< 1024px) -->
+      <!-- Mobile Menu Button (< 1024px — 44px touch target) -->
       <button
+        type="button"
         @click="openMobile = !openMobile"
-        class="btn btn-square btn-ghost btn-sm sm:btn-md lg:hidden rounded-xl"
+        class="btn btn-square btn-ghost h-11 w-11 lg:hidden rounded-xl"
         aria-label="Open navigation menu"
       >
         <Icon icon="solar:hamburger-menu-bold" class="w-6 h-6" />
       </button>
     </div>
 
-    <!-- Mobile Menu Backdrop & Slide-Over Drawer -->
+    <!-- Mobile Menu Backdrop & Slide-Over Drawer (Driven from the Exact Same Shared Nav Config!) -->
     <Teleport to="body" :disabled="!isMounted">
       <Transition name="fade">
         <div
@@ -535,18 +323,20 @@
       <Transition name="slide">
         <aside
           v-if="openMobile"
+          data-rc-mobile-drawer
           class="fixed top-0 right-0 h-full w-[88%] max-w-[360px] bg-base-100 border-l border-base-300 shadow-2xl z-101 flex flex-col justify-between overflow-y-auto lg:hidden pb-[env(safe-area-inset-bottom,0px)]"
           aria-label="Mobile Navigation Drawer"
         >
-          <div class="px-5 py-4 flex justify-between items-center border-b border-base-200 sticky top-0 bg-base-100/95 backdrop-blur-md z-10">
+          <div class="px-5 py-3.5 flex justify-between items-center border-b border-base-200 sticky top-0 bg-base-100/95 backdrop-blur-md z-10">
             <div class="flex items-center gap-1.5 min-w-0">
               <Icon icon="solar:compass-big-bold-duotone" class="w-6 h-6 text-primary shrink-0" />
               <span class="text-lg font-black text-primary truncate">{{ siteConfig.shortTitle }}</span>
-              <span class="badge badge-primary badge-outline badge-xs font-mono font-black shrink-0">{{ siteConfig.badgeText }}</span>
+              <span class="badge badge-primary badge-outline badge-xs font-mono font-black whitespace-nowrap shrink-0">{{ siteConfig.badgeText }}</span>
             </div>
             <button
+              type="button"
               @click="openMobile = false"
-              class="btn btn-ghost btn-circle btn-sm"
+              class="btn btn-ghost btn-circle h-11 w-11"
               aria-label="Close navigation menu"
             >
               <Icon icon="solar:close-circle-bold" class="w-6 h-6" />
@@ -568,7 +358,8 @@
                 </a>
               </div>
               <select
-                class="select select-bordered select-sm w-full font-bold rounded-xl"
+                aria-label="Switch active workspace"
+                class="select select-bordered select-sm h-11 w-full font-bold rounded-xl"
                 @change="handleMobileSwitchTeam"
               >
                 <option :selected="!currentTeam" value="personal">Personal Inventory</option>
@@ -584,15 +375,16 @@
             </div>
 
             <template v-if="isAuthenticated">
-              <!-- Core Operations -->
-              <div class="space-y-1">
-                <span class="text-[10px] uppercase font-extrabold opacity-50 tracking-wider px-2">
-                  Core Operations
+              <!-- Group 1: Core Reseller Pillars & Studios Launcher (<= 5 links) -->
+              <div data-rc-mobile-group class="space-y-1">
+                <span class="text-[10px] uppercase font-extrabold opacity-55 tracking-wider px-2">
+                  Daily Reseller Flow
                 </span>
                 <a
-                  v-for="item in mobileCoreLinks"
-                  :key="item.url"
-                  :href="item.url"
+                  v-for="item in mobilePrimaryLinks"
+                  :key="item.href"
+                  :href="item.href"
+                  data-rc-mobile-link
                   @click="openMobile = false"
                   class="flex items-center justify-between gap-3 px-3 py-2.5 min-h-11 rounded-xl text-sm transition-all"
                   :class="
@@ -602,7 +394,7 @@
                   "
                 >
                   <span class="flex items-center gap-3 min-w-0">
-                    <Icon :icon="item.icon" class="w-5 h-5 text-primary shrink-0" />
+                    <Icon :icon="item.icon" class="w-5 h-5 shrink-0" :class="item.iconColor || 'text-primary'" />
                     <span class="truncate">{{ item.label }}</span>
                   </span>
                   <span
@@ -615,91 +407,40 @@
                 </a>
               </div>
 
-              <!-- 4 Canonical Locations Quick Grid -->
-              <div class="space-y-1.5">
-                <div class="flex items-center justify-between px-2">
-                  <span class="text-[10px] uppercase font-extrabold opacity-50 tracking-wider">
-                    Locations &amp; Booth Sync
-                  </span>
-                  <a
-                    :href="'/warehouse/sync/' + defaultSyncLocationCode"
-                    @click="openMobile = false"
-                    class="text-[11px] font-bold text-secondary hover:underline flex items-center gap-1"
-                  >
-                    <Icon icon="solar:round-transfer-horizontal-bold" class="w-3.5 h-3.5" />
-                    <span>Sync Hub</span>
-                  </a>
-                </div>
-                <div class="grid grid-cols-2 gap-1.5">
-                  <div
-                    v-for="loc in locationMetas"
-                    :key="loc.code"
-                    class="flex items-center justify-between bg-base-200/50 border border-base-300/60 rounded-xl p-1.5"
-                  >
-                    <a
-                      :href="'/warehouse/' + loc.code"
-                      @click="openMobile = false"
-                      class="flex items-center gap-1.5 min-w-0 flex-1 px-1 py-1 rounded-lg hover:bg-base-200"
-                    >
-                      <span class="text-sm shrink-0">{{ loc.icon }}</span>
-                      <span class="text-xs font-bold truncate">{{ loc.shortName }}</span>
-                    </a>
-                    <a
-                      :href="'/warehouse/sync/' + loc.code"
-                      @click="openMobile = false"
-                      class="btn btn-ghost btn-xs btn-square rounded-lg text-primary shrink-0"
-                      :title="'Sync ' + loc.shortName"
-                    >
-                      <Icon icon="solar:refresh-circle-bold" class="w-4 h-4" />
-                    </a>
-                  </div>
-                </div>
-              </div>
-
-              <!-- Finance & Co-op Ledger -->
-              <div class="space-y-1">
-                <span class="text-[10px] uppercase font-extrabold opacity-50 tracking-wider px-2">
-                  Finance &amp; Co-op Ledger
+              <!-- Group 2 & 3: Shared Dropdown Pillars (Booths & Channels <= 7, Sales & Co-op <= 6) -->
+              <div
+                v-for="group in mobileDropdownPillars"
+                :key="`mob-${group.id}`"
+                data-rc-mobile-group
+                class="space-y-1"
+              >
+                <span class="text-[10px] uppercase font-extrabold opacity-55 tracking-wider px-2">
+                  {{ group.label }}
                 </span>
                 <a
-                  v-for="item in mobileFinanceLinks"
-                  :key="item.url"
-                  :href="item.url"
+                  v-for="child in group.children"
+                  :key="child.id"
+                  :href="child.href"
+                  data-rc-mobile-link
                   @click="openMobile = false"
                   class="flex items-center justify-between gap-3 px-3 py-2.5 min-h-11 rounded-xl text-sm transition-all"
                   :class="
-                    item.active
+                    isLinkActive(child.href)
                       ? 'bg-primary/15 text-primary font-bold border-l-4 border-primary'
                       : 'hover:bg-base-200 font-semibold'
                   "
                 >
                   <span class="flex items-center gap-3 min-w-0">
-                    <Icon :icon="item.icon" class="w-5 h-5 shrink-0" :class="item.iconColor || 'text-primary'" />
-                    <span class="truncate">{{ item.label }}</span>
+                    <span v-if="child.emoji" class="text-base leading-none shrink-0">{{ child.emoji }}</span>
+                    <Icon v-else :icon="child.icon" class="w-5 h-5 shrink-0" :class="child.iconColor || 'text-primary'" />
+                    <span class="truncate">{{ child.label }}</span>
                   </span>
-                </a>
-              </div>
-
-              <!-- Studios & Hardware -->
-              <div class="space-y-1">
-                <span class="text-[10px] uppercase font-extrabold opacity-50 tracking-wider px-2">
-                  Studios &amp; Tagging
-                </span>
-                <a
-                  v-for="item in mobileStudioLinks"
-                  :key="item.url"
-                  :href="item.url"
-                  @click="openMobile = false"
-                  class="flex items-center justify-between gap-3 px-3 py-2.5 min-h-11 rounded-xl text-sm transition-all"
-                  :class="
-                    item.active
-                      ? 'bg-primary/15 text-primary font-bold border-l-4 border-primary'
-                      : 'hover:bg-base-200 font-semibold'
-                  "
-                >
-                  <span class="flex items-center gap-3 min-w-0">
-                    <Icon :icon="item.icon" class="w-5 h-5 shrink-0" :class="item.iconColor || 'text-primary'" />
-                    <span class="truncate">{{ item.label }}</span>
+                  <span
+                    v-if="child.badge"
+                    class="badge badge-xs font-bold whitespace-nowrap shrink-0"
+                    :class="child.badgeClass || 'badge-ghost'"
+                  >
+                    {{ child.badge }}
                   </span>
                 </a>
               </div>
@@ -707,7 +448,7 @@
 
             <!-- Guest menu: public pages only -->
             <div v-else class="space-y-1">
-              <span class="text-[10px] uppercase font-extrabold opacity-50 tracking-wider px-2">Explore</span>
+              <span class="text-[10px] uppercase font-extrabold opacity-55 tracking-wider px-2">Explore</span>
               <a
                 href="/coop"
                 @click="openMobile = false"
@@ -733,7 +474,7 @@
                   <Icon icon="solar:scanner-bold" class="w-5 h-5 text-primary shrink-0" />
                   <span>AI Scout Preview</span>
                 </span>
-                <span class="badge badge-secondary badge-xs font-bold whitespace-nowrap">Preview</span>
+                <span class="badge badge-secondary text-secondary-content badge-xs font-bold whitespace-nowrap shrink-0">Preview</span>
               </a>
             </div>
           </div>
@@ -746,14 +487,11 @@
                 </div>
               </div>
               <div class="flex-1 min-w-0">
-                <p class="text-sm font-bold truncate text-base-content">{{ user?.name || 'User' }}</p>
+                <p class="text-sm font-bold truncate text-base-content">{{ user?.name || 'Member' }}</p>
                 <p class="text-xs opacity-60 truncate text-base-content">{{ user?.email }}</p>
               </div>
-              <span
-                v-if="isPartner"
-                class="badge badge-secondary badge-sm text-secondary-content font-bold whitespace-nowrap shrink-0"
-              >
-                Partner
+              <span class="badge badge-xs badge-ghost border border-base-300 font-mono font-bold whitespace-nowrap shrink-0">
+                {{ capabilities.roleBadge }}
               </span>
             </div>
 
@@ -765,7 +503,7 @@
             <button
               v-if="isAuthenticated"
               type="button"
-              class="btn btn-outline btn-warning btn-sm w-full rounded-xl font-bold gap-1.5"
+              class="btn btn-outline btn-warning h-11 w-full rounded-xl font-bold gap-1.5"
               @click="openCoopMessages('list')"
             >
               <Icon icon="solar:bug-bold-duotone" class="w-4 h-4" />
@@ -776,24 +514,25 @@
               <a
                 v-if="!isAuthenticated"
                 href="/login"
-                class="btn btn-primary btn-sm col-span-2 text-primary-content font-bold rounded-xl"
+                class="btn btn-primary h-11 col-span-2 text-primary-content font-bold rounded-xl"
                 @click="openMobile = false"
               >
-                Login
+                Sign In
               </a>
               <template v-else>
                 <a
                   href="/profile"
-                  class="btn btn-outline btn-sm rounded-xl font-semibold"
+                  class="btn btn-outline h-11 rounded-xl font-semibold"
                   @click="openMobile = false"
                 >
                   Profile
                 </a>
                 <button
+                  type="button"
                   @click="logout(); openMobile = false"
-                  class="btn btn-error btn-sm rounded-xl text-error-content font-bold"
+                  class="btn btn-error h-11 rounded-xl text-error-content font-bold"
                 >
-                  Logout
+                  Sign Out
                 </button>
               </template>
             </div>
@@ -806,28 +545,30 @@
       </Transition>
     </Teleport>
 
-    <!-- Modals -->
+    <!-- Workspace Create / Invite Modals -->
     <dialog class="modal" :class="{ 'modal-open': showCreateModal }">
       <div class="modal-box rounded-2xl">
         <h3 class="font-bold text-lg">Create New Organization</h3>
         <p class="py-2 text-sm opacity-75">Create a shared co-op workspace.</p>
         <div class="py-4">
           <input
+            v-model="newTeamName"
             type="text"
             placeholder="Organization Name"
-            class="input input-bordered w-full"
-            v-model="newTeamName"
+            aria-label="Organization Name"
+            class="input input-bordered h-11 w-full rounded-xl"
             @keydown.enter.prevent="handleCreateTeam"
           />
         </div>
         <div class="modal-action">
-          <button class="btn" @click="showCreateModal = false">Cancel</button>
+          <button type="button" class="btn h-11 md:h-9 rounded-xl" @click="showCreateModal = false">Cancel</button>
           <button
-            class="btn btn-primary text-primary-content font-bold"
+            type="button"
+            class="btn h-11 md:h-9 btn-primary text-primary-content font-bold rounded-xl"
+            :disabled="!newTeamName.trim()"
             @click="handleCreateTeam"
-            :disabled="!newTeamName"
           >
-            Create
+            Create Workspace
           </button>
         </div>
       </div>
@@ -835,23 +576,28 @@
 
     <dialog class="modal" :class="{ 'modal-open': showInviteModal }">
       <div class="modal-box rounded-2xl">
-        <h3 class="font-bold text-lg">Invite New Member</h3>
-        <p class="py-2 text-sm opacity-75">Send an invitation email to join your organization.</p>
+        <h3 class="font-bold text-lg">Invite to the Collective</h3>
+        <p class="py-2 text-sm opacity-75">Send an invitation email to join your workspace.</p>
         <div class="py-4">
           <input
-            type="email"
-            placeholder="Email Address"
-            class="input input-bordered w-full"
             v-model="inviteEmail"
+            type="email"
+            autocomplete="email"
+            autocapitalize="none"
+            spellcheck="false"
+            placeholder="member@thehc.llc"
+            aria-label="Member email address"
+            class="input input-bordered h-11 w-full rounded-xl"
             @keydown.enter.prevent="handleInvite"
           />
         </div>
         <div class="modal-action">
-          <button class="btn" @click="showInviteModal = false">Cancel</button>
+          <button type="button" class="btn h-11 md:h-9 rounded-xl" @click="showInviteModal = false">Cancel</button>
           <button
-            class="btn btn-primary text-primary-content font-bold"
+            type="button"
+            class="btn h-11 md:h-9 btn-primary text-primary-content font-bold rounded-xl"
+            :disabled="!inviteEmail.trim()"
             @click="handleInvite"
-            :disabled="!inviteEmail"
           >
             Send Invite
           </button>
@@ -864,16 +610,22 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue';
 import { useStore } from '@nanostores/vue';
+import { Icon } from '@iconify/vue';
+import ThemeSwitcher from '../ui/ThemeSwitcher.vue';
 import { isAlphaMode } from '../../stores/env';
 import { useAuth } from '../../composables/useAuth';
-import { useMemberCapabilities } from '../../lib/memberAccess';
-import { addToast } from '../../stores/toast';
-import ThemeSwitcher from '../ui/ThemeSwitcher.vue';
+import { useBodyScrollLock } from '../../composables/useBodyScrollLock';
 import { useCart } from '../../composables/useCart';
 import { useScoutPurchase } from '../../composables/useScoutPurchase';
-import { getAllLocationSettingMetas, resolveDefaultRicochetLocationMeta } from '../../lib/warehouses';
+import { useMemberCapabilities } from '../../lib/memberAccess';
+import {
+  buildResellerNavConfig,
+  MAX_DROPDOWN_ITEMS,
+  type NavPillarConfig,
+} from '../../lib/studiosCatalog';
+import { toUserMessage } from '../../lib/userFacingErrors';
+import { addToast } from '../../stores/toast';
 import { siteConfig } from '../../site-config';
-import { Icon } from '@iconify/vue';
 
 const props = defineProps({
   initialAuthenticated: {
@@ -892,7 +644,6 @@ const {
   currentTeam,
   teams,
   ownedTeam,
-  isPartner,
   loading,
   switchTeam,
   createTeam,
@@ -909,159 +660,35 @@ const { purchaseItems, activePurchase, pausedTracker, draftPurchases, loadDraftP
 
 const currentPath = ref(props.initialPath || '/');
 const isMounted = ref(false);
+const openMobile = ref(false);
 
-const locationMetas = computed(() => getAllLocationSettingMetas());
-const defaultSyncLocationCode = computed(() => resolveDefaultRicochetLocationMeta().code);
+useBodyScrollLock(openMobile);
+
+const resellerPillars = computed(() => buildResellerNavConfig(capabilities.value));
+
+const mobileDropdownPillars = computed(() =>
+  resellerPillars.value.filter((p) => Array.isArray(p.children) && p.children.length > 0)
+);
 
 const isRouteActive = (prefix: string): boolean => {
   if (!currentPath.value) return false;
-  if (prefix === '/warehouse' && currentPath.value.startsWith('/warehouse')) return true;
+  if (prefix === '/coop') return currentPath.value === '/coop';
   return currentPath.value === prefix || currentPath.value.startsWith(prefix + '/');
 };
 
-const isFinanceRouteActive = computed(() =>
-  ['/sales', '/expenses', '/coop'].some((p) => isRouteActive(p))
-);
+const isLinkActive = (href: string): boolean => {
+  const cleanHref = href.split('?')[0] || '/';
+  return isRouteActive(cleanHref);
+};
+
+const isPillarActive = (pillar: NavPillarConfig): boolean => {
+  if (pillar.id === 'sales_coop' && currentPath.value === '/coop') return true;
+  return pillar.activePrefixes.some((p) => isRouteActive(p));
+};
 
 const isStudiosRouteActive = computed(() =>
-  ['/social', '/labels', '/studios'].some((p) => isRouteActive(p))
+  ['/studios', '/labels', '/scan', '/coop/vault'].some((p) => isRouteActive(p))
 );
-
-const mobileCoreLinks = computed(() =>
-  [
-    {
-      label: 'Command Center',
-      url: '/dashboard',
-      icon: 'solar:widget-bold-duotone',
-      active: isRouteActive('/dashboard'),
-      show: true,
-    },
-    {
-      label: 'Purchases & Hauls',
-      url: '/purchases',
-      icon: 'solar:cart-large-2-bold-duotone',
-      active: isRouteActive('/purchases'),
-      show: capabilities.value.canViewPurchases,
-    },
-    {
-      label: 'Scout Buy Trackers',
-      url: '/scout/trackers',
-      icon: 'solar:scanner-bold-duotone',
-      active: currentPath.value.startsWith('/scout/tracker'),
-      badge: displayTrackedCount.value > 0 ? `${displayTrackedCount.value} items` : undefined,
-      badgeClass: 'badge-secondary text-secondary-content',
-      show: capabilities.value.canUseBuyTracker,
-    },
-    {
-      label: 'Master Inventory',
-      url: '/inventory',
-      icon: 'solar:box-bold-duotone',
-      active: isRouteActive('/inventory'),
-      show: true,
-    },
-    {
-      label: 'Locations Hub',
-      url: '/warehouse',
-      icon: 'solar:shop-2-bold-duotone',
-      active: currentPath.value === '/warehouse',
-      badge: `${locationMetas.value.length} Locations`,
-      badgeClass: 'badge-ghost',
-      show: true,
-    },
-  ].filter((item) => item.show)
-);
-
-const mobileFinanceLinks = computed(() =>
-  [
-    {
-      label: 'Sales & Payout Ledger',
-      url: '/sales',
-      icon: 'solar:dollar-minimalistic-bold-duotone',
-      iconColor: 'text-success',
-      active: isRouteActive('/sales'),
-      show: capabilities.value.canViewSales,
-    },
-    {
-      label: 'Co-op Monthly Settlements',
-      url: '/coop/settlements',
-      icon: 'solar:hand-money-bold-duotone',
-      iconColor: 'text-primary',
-      active: isRouteActive('/coop/settlements'),
-      show: true,
-    },
-    {
-      label: 'Co-op Governance & Rules',
-      url: '/coop/governance',
-      icon: 'solar:users-group-two-rounded-bold-duotone',
-      iconColor: 'text-secondary',
-      active: isRouteActive('/coop/governance'),
-      show: true,
-    },
-    {
-      label: 'Promoter & Enabler Labor Pool',
-      url: '/coop/labor',
-      icon: 'solar:clock-circle-bold-duotone',
-      iconColor: 'text-accent',
-      active: isRouteActive('/coop/labor'),
-      show: true,
-    },
-    {
-      label: 'AI Vault & Prompt Maker',
-      url: '/coop/vault',
-      icon: 'solar:notebook-bold-duotone',
-      iconColor: 'text-primary',
-      active: isRouteActive('/coop/vault'),
-      show: true,
-    },
-    {
-      label: 'Expenses & Receipts',
-      url: '/expenses',
-      icon: 'solar:bill-list-bold-duotone',
-      iconColor: 'text-warning',
-      active: isRouteActive('/expenses'),
-      show: true,
-    },
-    {
-      label: 'Living Co-op Charter',
-      url: '/coop',
-      icon: 'solar:shield-star-bold-duotone',
-      iconColor: 'text-primary',
-      active: currentPath.value === '/coop',
-      show: true,
-    },
-  ].filter((item) => item.show)
-);
-
-const mobileStudioLinks = computed(() => [
-  {
-    label: 'Social Dropcast Studio',
-    url: '/social',
-    icon: 'solar:broadcast-bold-duotone',
-    iconColor: 'text-secondary',
-    active: isRouteActive('/social'),
-  },
-  {
-    label: 'Thermal Label Studio',
-    url: '/labels/studio',
-    icon: 'solar:printer-bold-duotone',
-    iconColor: 'text-primary',
-    active: isRouteActive('/labels/studio'),
-  },
-  {
-    label: 'Rollo Calibration Test',
-    url: '/labels/test',
-    icon: 'solar:ruler-pen-bold-duotone',
-    iconColor: 'text-accent',
-    active: isRouteActive('/labels/test'),
-  },
-  {
-    label: 'Appraisal & Pricing Lab',
-    url: '/studios/appraisal',
-    icon: 'solar:test-tube-minimalistic-bold-duotone',
-    iconColor: 'text-info',
-    active: isRouteActive('/studios/appraisal'),
-  },
-]);
 
 const displayTrackedCount = computed(() => {
   return (
@@ -1071,6 +698,44 @@ const displayTrackedCount = computed(() => {
     draftPurchases.value[0]?.itemCount ||
     cartItems.value.length
   );
+});
+
+const mobilePrimaryLinks = computed(() => {
+  const direct = resellerPillars.value
+    .filter((p) => !p.children && p.href)
+    .map((p) => ({
+      label: p.label,
+      href: p.href!,
+      icon: p.icon,
+      iconColor: 'text-primary',
+      active: isPillarActive(p),
+      badge: undefined as string | undefined,
+      badgeClass: undefined as string | undefined,
+    }));
+
+  if (capabilities.value.canUseBuyTracker) {
+    direct.push({
+      label: 'Active Buy Trackers',
+      href: '/scout/trackers',
+      icon: 'solar:bookmark-square-minimalistic-bold-duotone',
+      iconColor: 'text-secondary',
+      active: currentPath.value.startsWith('/scout/tracker'),
+      badge: displayTrackedCount.value > 0 ? `${displayTrackedCount.value}` : undefined,
+      badgeClass: 'badge-secondary text-secondary-content',
+    });
+  }
+
+  direct.push({
+    label: 'Studios & Reseller Tools',
+    href: '/studios',
+    icon: 'solar:magic-stick-3-bold-duotone',
+    iconColor: 'text-secondary',
+    active: isStudiosRouteActive.value,
+    badge: 'All Tools',
+    badgeClass: 'badge-ghost',
+  });
+
+  return direct.slice(0, MAX_DROPDOWN_ITEMS);
 });
 
 onMounted(() => {
@@ -1100,7 +765,11 @@ watch(currentTeam, () => {
 });
 
 const handleScoutClick = (e: MouseEvent) => {
-  if (typeof window !== 'undefined' && window.location.pathname === '/scout' && (activePurchase.value || pausedTracker.value)) {
+  if (
+    typeof window !== 'undefined' &&
+    window.location.pathname === '/scout' &&
+    (activePurchase.value || pausedTracker.value)
+  ) {
     e.preventDefault();
     toggleTray();
   }
@@ -1108,7 +777,6 @@ const handleScoutClick = (e: MouseEvent) => {
 
 const alphaMode = useStore(isAlphaMode);
 
-const openMobile = ref(false);
 const showCreateModal = ref(false);
 const showInviteModal = ref(false);
 const newTeamName = ref('');
@@ -1139,28 +807,30 @@ const handleMobileSwitchTeam = async (event: Event) => {
 };
 
 const handleCreateTeam = async () => {
-  if (!newTeamName.value) return;
+  const name = newTeamName.value.trim();
+  if (!name) return;
   try {
-    await createTeam(newTeamName.value);
+    await createTeam(name);
     showCreateModal.value = false;
     newTeamName.value = '';
   } catch (e: any) {
-    addToast({ type: 'error', message: e.message });
+    addToast({ type: 'error', message: toUserMessage(e, "Couldn't create workspace — please try again.") });
   }
 };
 
 const handleInvite = async () => {
-  if (!inviteEmail.value || !currentTeam.value) return;
+  const cleanEmail = inviteEmail.value.trim().toLowerCase();
+  if (!cleanEmail || !currentTeam.value) return;
   try {
-    await inviteMember(currentTeam.value.$id, inviteEmail.value);
+    await inviteMember(currentTeam.value.$id, cleanEmail);
     showInviteModal.value = false;
     inviteEmail.value = '';
-    addToast({ type: 'success', message: 'Invitation sent!' });
+    addToast({ type: 'success', message: '✅ Invitation sent!' });
   } catch (e: any) {
-    if (e.message.includes('unique') || e.code === 409) {
-      addToast({ type: 'warning', message: 'This user is already a member or has a pending invitation.' });
+    if (String(e?.message || '').includes('unique') || e?.code === 409) {
+      addToast({ type: 'warning', message: 'This member already has an active or pending invitation.' });
     } else {
-      addToast({ type: 'error', message: e.message });
+      addToast({ type: 'error', message: toUserMessage(e, "Couldn't send invitation — please try again.") });
     }
   }
 };

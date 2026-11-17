@@ -9,27 +9,34 @@ export interface MemberCapabilities {
   role: MemberRole;
   roleBadge: string;
   prefix: string;
+  isConsignor: boolean;
   canUseBml: boolean;
+  canUseBookmarklets: boolean;
   canViewPurchases: boolean;
   canViewSales: boolean;
   canScoutByUrl: boolean;
   canUseBuyTracker: boolean;
+  canViewCollectiveTools: boolean;
 }
 
 export function capabilitiesForRole(role: MemberRole, prefix = 'HUCK-'): MemberCapabilities {
   const cleanPrefix = String(prefix || 'HUCK-').trim().toUpperCase();
   const normalizedPrefix = cleanPrefix.endsWith('-') ? cleanPrefix : `${cleanPrefix}-`;
+  const isConsignor = normalizedPrefix.startsWith('BB');
 
-  if (role === 'restricted' || normalizedPrefix.startsWith('BB')) {
+  if (role === 'restricted' || isConsignor) {
     return {
       role: 'restricted',
-      roleBadge: normalizedPrefix.startsWith('BB') ? '🤝 Consignor' : '🌱 Sweat Partner',
+      roleBadge: isConsignor ? '🤝 Consignor' : '🌱 Sweat Partner',
       prefix: normalizedPrefix,
+      isConsignor,
       canUseBml: false,
+      canUseBookmarklets: false,
       canViewPurchases: false,
       canViewSales: false,
       canScoutByUrl: false,
       canUseBuyTracker: false,
+      canViewCollectiveTools: !isConsignor,
     };
   }
 
@@ -37,11 +44,14 @@ export function capabilitiesForRole(role: MemberRole, prefix = 'HUCK-'): MemberC
     role,
     roleBadge: role === 'founder' ? '👑 Founder' : '💎 Curator',
     prefix: normalizedPrefix,
+    isConsignor: false,
     canUseBml: true,
+    canUseBookmarklets: true,
     canViewPurchases: true,
     canViewSales: true,
     canScoutByUrl: true,
     canUseBuyTracker: true,
+    canViewCollectiveTools: true,
   };
 }
 

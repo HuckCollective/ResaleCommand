@@ -1202,7 +1202,7 @@ for (const contract of transportContracts) {
     }
 
     const publicRoutes = read('src/lib/publicRoutes.ts');
-    for (const mustBeMemberOnly of ['/dashboard', '/inventory', '/sales', '/expenses', '/warehouse', '/purchases', '/settings', '/coop/vault', '/coop/settlements', '/coop/cms', '/item']) {
+    for (const mustBeMemberOnly of ['/dashboard', '/inventory', '/sales', '/expenses', '/warehouse', '/purchases', '/settings', '/studios', '/studios/bookmarklets', '/coop/vault', '/coop/settlements', '/coop/cms', '/item']) {
         if (new RegExp(`['"]${mustBeMemberOnly}['"]`).test(publicRoutes.split('PUBLIC_PREFIXES')[0])) {
             fail(`src/lib/publicRoutes.ts must NOT list ${mustBeMemberOnly} as a public path.`);
         }
@@ -1424,6 +1424,68 @@ for (const contract of transportContracts) {
                 }
                 drawerDepth += 1;
             }
+        }
+    }
+}
+
+// 17. GLOBAL HEADER & MOBILE DRAWER NAVIGATION BUDGET GUARD (Miller's Law <= 5 pillars, Choice Overload <= 7 items/dropdown)
+{
+    const fail = (msg) => { console.error(`❌ [Nav Budget §17] ${msg}`); hasErrors = true; };
+
+    const navSrc = fs.existsSync('src/components/nav/Navbar.vue')
+        ? fs.readFileSync('src/components/nav/Navbar.vue', 'utf8')
+        : '';
+    const catalogSrc = fs.existsSync('src/lib/studiosCatalog.ts')
+        ? fs.readFileSync('src/lib/studiosCatalog.ts', 'utf8')
+        : '';
+
+    if (!catalogSrc) {
+        fail('src/lib/studiosCatalog.ts is missing — desktop nav, mobile drawer, and /studios must share one canonical catalog.');
+    } else {
+        const pillarCapMatch = catalogSrc.match(/export\s+const\s+MAX_NAV_PILLARS\s*=\s*(\d+)/);
+        const dropdownCapMatch = catalogSrc.match(/export\s+const\s+MAX_DROPDOWN_ITEMS\s*=\s*(\d+)/);
+        if (!pillarCapMatch || Number(pillarCapMatch[1]) > 5) {
+            fail('src/lib/studiosCatalog.ts must export MAX_NAV_PILLARS <= 5.');
+        }
+        if (!dropdownCapMatch || Number(dropdownCapMatch[1]) > 7) {
+            fail('src/lib/studiosCatalog.ts must export MAX_DROPDOWN_ITEMS <= 7.');
+        }
+        const catalogCodeOnly = catalogSrc
+            .replace(/\/\*[\s\S]*?\*\//g, '')
+            .replace(/^\s*\/\/.*$/gm, '');
+        if (/\/warehouse\/sync\/MD\b/.test(catalogCodeOnly)) {
+            fail('src/lib/studiosCatalog.ts must NOT hardcode /warehouse/sync/MD (Law 2) — build booth POS sync links dynamically from getSellingBoothMetas().');
+        }
+        const pillarsReturnBlock = catalogCodeOnly.split('const pillars: NavPillarConfig[] = [')[1] || '';
+        const definedPillars = (pillarsReturnBlock.match(/\bid:\s*['"][a-z_]+['"]/g) || []).length;
+        if (definedPillars === 0 || definedPillars > 5) {
+            fail(`src/lib/studiosCatalog.ts defines ${definedPillars} top-level nav pillars (must be 1..5).`);
+        }
+        if (!/pillars\.slice\(\s*0\s*,\s*MAX_NAV_PILLARS\s*\)/.test(catalogCodeOnly) || !/\.slice\(\s*0\s*,\s*MAX_DROPDOWN_ITEMS\s*\)/.test(catalogCodeOnly)) {
+            fail('src/lib/studiosCatalog.ts must enforce .slice(0, MAX_NAV_PILLARS) and .slice(0, MAX_DROPDOWN_ITEMS).');
+        }
+    }
+
+    if (navSrc) {
+        const navTpl = (navSrc.split('<script')[0] || '').replace(/<!--[\s\S]*?-->/g, '');
+        if (!/\bbuildResellerNavConfig\b/.test(navSrc)) {
+            fail('Navbar.vue must consume buildResellerNavConfig() from src/lib/studiosCatalog.ts for desktop & mobile parity.');
+        }
+        if (!/\bdata-rc-nav-center\b/.test(navTpl) || !/\bdata-rc-toolbelt\b/.test(navTpl) || !/\bdata-rc-mobile-drawer\b/.test(navTpl)) {
+            fail('Navbar.vue must mark desktop center nav (data-rc-nav-center), right toolbelt (data-rc-toolbelt), and mobile drawer (data-rc-mobile-drawer).');
+        }
+        const centerSlice = ((navTpl.split('data-rc-nav-center')[1] || '').split('data-rc-toolbelt')[0] || '');
+        const hardcodedAnchorCount = (centerSlice.match(/<a\b[^>]*?(?<!:)\bhref="/g) || []).length;
+        if (hardcodedAnchorCount > 0) {
+            fail(`Navbar.vue desktop center contains ${hardcodedAnchorCount} hardcoded <a href="..."> element(s) — drive all center pillars from resellerPillars loop.`);
+        }
+        const desktopOnlySlice = navTpl.split('data-rc-mobile-drawer')[0] || '';
+        const settingsLinksInDesktop = (desktopOnlySlice.match(/href="\/settings"/g) || []).length;
+        if (settingsLinksInDesktop > 1) {
+            fail(`Navbar.vue renders ${settingsLinksInDesktop} duplicate /settings links on desktop — keep a single unified Workspace & Settings menu.`);
+        }
+        if (!/direct\.slice\(\s*0\s*,\s*MAX_DROPDOWN_ITEMS\s*\)/.test(navSrc)) {
+            fail('Navbar.vue mobilePrimaryLinks must enforce .slice(0, MAX_DROPDOWN_ITEMS) so mobile groups stay bounded.');
         }
     }
 }
