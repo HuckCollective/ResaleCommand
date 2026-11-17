@@ -1,8 +1,12 @@
 # Resale Command — Completed Sprint & Session Archive (`docs/SESSION_ARCHIVE.md`)
 
-> **Historical Reference Only:** Completed milestones rolled out of [`ACTIVE_SESSION.md`](file:///c:/Users/15034/Projects/ResaleCommand/ACTIVE_SESSION.md) on Nov 16, 2026 so root AI context stays lean and untruncated. Live in-flight work lives in [`ACTIVE_SESSION.md`](file:///c:/Users/15034/Projects/ResaleCommand/ACTIVE_SESSION.md).
+> **Historical Reference Only:** Completed milestones rolled out of [`ACTIVE_SESSION.md`](file:///c:/Users/15034/Projects/ResaleCommand/ACTIVE_SESSION.md) on Nov 17, 2026 so root AI context stays lean and untruncated. Live in-flight work lives in [`ACTIVE_SESSION.md`](file:///c:/Users/15034/Projects/ResaleCommand/ACTIVE_SESSION.md).
 
 ---
+
+## ✅ HEADLESS FLAGSHIP & EVENTS CMS (`/coop/cms` ➔ `thehc.llc`) + MULTI-CHANNEL SALES CHECKOUT (`main` & `alpha-1` — Nov 16, 2026)
+- **Headless Flagship Content Manager & Multi-Channel Checkout (`5cae49c` — Merged & Deployed to Live `main`)**:
+  - Shipped `/coop/cms`, zero-PII `GET /api/public/flagship-content`, and `RecordSaleDrawer.vue` Step 1 (`🌐 Online & Live`, `🎪 Pop-Ups & Events` 1-tap Event Chips, and dynamic Retail Booths).
 
 ## ✅ UNIVERSAL CURATOR, 1-CLICK ROLE ONBOARDING (`JOIN REQUESTS` ➔ `APPWRITE TEAM` + `ROSTER`), `🛠️ BUILDER` ROLE, TIER-1 DASHBOARD SIGNALS & MODULAR `laws-of-ux` SKILL (`main` & `alpha-1` — Nov 16, 2026)
 - **1-Click Server Auto-Provisioning, `🛠️ Builder` Role & Tier-1 Dashboard Signals (`src/lib/memberHats.ts`, `src/lib/joinRequestsServer.ts`, `src/pages/api/join-request.ts`, `src/components/auth/SignupView.vue`, `src/components/coop/CoopRolesPanel.vue`, `src/lib/dashboardAlerts.ts`, `src/components/dashboard/DashboardShell.vue`)**:
