@@ -203,5 +203,5 @@ Run the matching 1-liner in PowerShell to copy ONLY that chat's skills to your c
 
 - **Next Up**:
   1. Run live DOM QA on `https://alpha.resalecmd.com` across `/studios/bookmarklets`, `/studios`, `/warehouse`, `/inventory`, and `/social`, then merge `alpha-1` to `main` when ready.
-  2. Kick off **Wave 1 (P0)** from the Full-App UX & Krug Usability Audit Report (Role Visibility Isolation across Co-op/Social/Settings + unblocking Sweat-only members on `/coop/settlements`, fixing `AppraisalPricingLabView` refresh click, redirecting `/scan` ➔ `/scout`, removing remaining `window.confirm()`, and standardizing `<ItemThumbnail>`).
+  2. Kick off **Wave 1 (P0)** (then Wave 2 ➔ Wave 3) from [`docs/UX_KRUG_AUDIT_BACKLOG.md`](file:///c:/Users/15034/Projects/ResaleCommand/docs/UX_KRUG_AUDIT_BACKLOG.md) (Role Visibility Isolation across Co-op/Social/Settings + unblocking Sweat-only members on `/coop/settlements`, fixing `AppraisalPricingLabView` refresh click, redirecting `/scan` ➔ `/scout`, removing remaining `window.confirm()`, and standardizing `<ItemThumbnail>`).
   3. Lock `coopGovernance.ts` (`manifests/coop_governance_proposals_v1`) behind a dedicated server-verified `/api/coop/*` route and wire `https://thehc.llc/#works` to `GET /api/public/flagship-content`.
