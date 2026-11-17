@@ -290,13 +290,16 @@
           <!-- Photo Attachment Area -->
           <div class="flex items-center gap-3">
             <div class="w-20 h-20 rounded-xl bg-base-300 border-2 border-dashed border-base-content/20 flex flex-col items-center justify-center overflow-hidden shrink-0 relative group">
-              <img v-if="item.imagePreview" :src="item.imagePreview" class="w-full h-full object-cover" />
-              <div v-else class="text-center p-1">
-                <Icon icon="solar:camera-bold" class="w-6 h-6 opacity-40 mx-auto" />
-                <span class="text-[9px] font-bold opacity-50 block leading-tight">No Photo</span>
-              </div>
+              <ItemThumbnail
+                :src="item.imagePreview || ''"
+                :item="item"
+                size="w-20 h-20"
+                rounded="xl"
+                placeholder-icon="solar:camera-bold"
+                show-no-image-text
+              />
               <input type="file" accept="image/*" @change="handleItemPhotoUpload($event, item)" 
-                     class="absolute inset-0 opacity-0 cursor-pointer" />
+                     class="absolute inset-0 opacity-0 cursor-pointer z-10" />
             </div>
 
             <div class="flex-1 space-y-1.5">
@@ -465,10 +468,11 @@ import { Icon } from '@iconify/vue';
 import { addToast } from '../../stores/toast';
 import { databases, storage, ID, Query } from '../../lib/appwrite';
 import { purchasesAPI } from '../../lib/purchases';
-import { saveItemToInventory, getItemsByPurchaseId, getCollectionId } from '../../lib/inventory';
+import { saveItemToInventory, getItemsByPurchaseId, getCollectionId, getAssetUrl } from '../../lib/inventory';
 import { useLoader } from '../../composables/useLoader';
 import BulkImport from '../inventory/BulkImport.vue';
 import ItemDrawer from '../common/ItemDrawer.vue';
+import ItemThumbnail from '../common/ItemThumbnail.vue';
 import { printRolloLabels } from '../../lib/rolloLabelPrint';
 
 const activeDrawerDoc = ref<any>(null);
@@ -516,13 +520,7 @@ const handleDrawerSaved = async (savedDoc: any) => {
 
 const getItemImageUrl = (imageId: string) => {
   if (!imageId) return null;
-  if (imageId.startsWith('http')) return imageId;
-  const BUCKET_ID = import.meta.env.PUBLIC_APPWRITE_BUCKET_ID || 'item-photos';
-  try {
-    return storage.getFilePreview(BUCKET_ID, imageId, 400, 400).toString();
-  } catch (e) {
-    return null;
-  }
+  return getAssetUrl(imageId, { preview: true, width: 400, height: 400 }) || null;
 };
 
 const props = defineProps<{

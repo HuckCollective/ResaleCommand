@@ -21,12 +21,18 @@ export const GET: APIRoute = async ({ request }) => {
   const auth = await requireBookmarkletMember(request);
   if (!auth.ok) {
     if (auth.response.status === 403) {
+      const resolvedPrefix = auth.prefix || (auth.isConsignor ? 'BB-' : 'SWEAT-');
+      const isConsignor = Boolean(auth.isConsignor);
       return new Response(
         JSON.stringify({
           ok: false,
           allowed: false,
           role: 'restricted',
-          capabilities: capabilitiesForRole('restricted', 'BB-'),
+          prefix: resolvedPrefix,
+          isConsignor,
+          capabilities: capabilitiesForRole('restricted', resolvedPrefix, {
+            forceConsignor: isConsignor,
+          }),
           message:
             '🔒 Founder or Curator Hat Required: Bookmarklets, Purchases, and Sales Ledger are restricted to Collective Founders (👑) and Curators (💎).',
         }),
@@ -62,12 +68,22 @@ export const POST: APIRoute = async ({ request }) => {
 
   const verified = await verifyAppwriteJwtToMember(jwt);
   if (!verified.ok) {
+    const resolvedPrefix =
+      verified.prefix || (verified.isConsignor ? 'BB-' : 'SWEAT-');
+    const isConsignor = Boolean(verified.isConsignor);
     return new Response(
       JSON.stringify({
         ok: false,
         allowed: false,
         role: verified.status === 403 ? 'restricted' : undefined,
-        capabilities: verified.status === 403 ? capabilitiesForRole('restricted', 'BB-') : undefined,
+        prefix: verified.status === 403 ? resolvedPrefix : undefined,
+        isConsignor: verified.status === 403 ? isConsignor : undefined,
+        capabilities:
+          verified.status === 403
+            ? capabilitiesForRole('restricted', resolvedPrefix, {
+                forceConsignor: isConsignor,
+              })
+            : undefined,
         error: verified.error,
         message: verified.message,
       }),

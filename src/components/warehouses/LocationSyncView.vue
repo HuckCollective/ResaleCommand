@@ -996,16 +996,12 @@
                   <!-- Matched Display Card -->
                   <div v-if="row.mappedItem" class="flex items-start sm:items-center gap-2.5 p-2.5 bg-base-100 dark:bg-base-200 rounded-xl border border-base-300 shadow-2xs">
                     <!-- Thumbnail -->
-                    <div class="w-10 h-10 rounded-lg bg-base-300 border border-base-content/10 overflow-hidden shrink-0 flex items-center justify-center">
-                      <img
-                        v-if="getItemThumbUrl(row.mappedItem)"
-                        :src="getItemThumbUrl(row.mappedItem)"
-                        :alt="row.mappedItem.title"
-                        class="w-full h-full object-cover"
-                        loading="lazy"
-                      />
-                      <Icon v-else icon="solar:gallery-minimalistic-linear" class="w-5 h-5 opacity-35" />
-                    </div>
+                    <ItemThumbnail
+                      :item="row.mappedItem"
+                      size="w-10 h-10"
+                      rounded="lg"
+                      placeholder-icon="solar:gallery-minimalistic-linear"
+                    />
 
                     <!-- Full Untruncated Title + Badges -->
                     <div class="flex-1 min-w-0 space-y-1">
@@ -1123,16 +1119,12 @@
                         />
 
                         <!-- Candidate Photo Thumbnail -->
-                        <div class="w-10 h-10 rounded-lg bg-base-300 border border-base-content/10 overflow-hidden shrink-0 flex items-center justify-center">
-                          <img
-                            v-if="getItemThumbUrl(getTopStagedCandidateForRow(row)!.item)"
-                            :src="getItemThumbUrl(getTopStagedCandidateForRow(row)!.item)"
-                            :alt="getTopStagedCandidateForRow(row)!.item.title"
-                            class="w-full h-full object-cover"
-                            loading="lazy"
-                          />
-                          <Icon v-else icon="solar:gallery-minimalistic-linear" class="w-5 h-5 opacity-35" />
-                        </div>
+                        <ItemThumbnail
+                          :item="getTopStagedCandidateForRow(row)!.item"
+                          size="w-10 h-10"
+                          rounded="lg"
+                          placeholder-icon="solar:gallery-minimalistic-linear"
+                        />
 
                         <!-- Candidate Info + Confidence Badge + Reason -->
                         <div class="flex-1 min-w-0 space-y-1">
@@ -1618,16 +1610,12 @@
               <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
                 <!-- Left: Photo Thumbnail + Full Untruncated Details -->
                 <div class="flex items-start gap-3 flex-1 min-w-0">
-                  <div class="w-14 h-14 rounded-xl bg-base-200 border border-base-300 overflow-hidden shrink-0 flex items-center justify-center">
-                    <img
-                      v-if="getItemThumbUrl(cand.item)"
-                      :src="getItemThumbUrl(cand.item)"
-                      :alt="cand.item.title"
-                      class="w-full h-full object-cover"
-                      loading="lazy"
-                    />
-                    <Icon v-else icon="solar:gallery-minimalistic-linear" class="w-6 h-6 opacity-35" />
-                  </div>
+                  <ItemThumbnail
+                    :item="cand.item"
+                    size="w-14 h-14"
+                    rounded="xl"
+                    placeholder-icon="solar:gallery-minimalistic-linear"
+                  />
 
                   <div class="flex-1 min-w-0 space-y-1">
                     <!-- Badges Row: Confidence, UPC, Status @ Location, Lot Info, Price Comparison -->
@@ -2118,6 +2106,7 @@ import BookmarkletHeroBar from '../bml/BookmarkletHeroBar.vue';
 const { dockEl, dockHeightRem } = useDockClearance(6.5);
 import { useLoader } from '../../composables/useLoader';
 import { addToast } from '../../stores/toast';
+import ItemThumbnail from '../common/ItemThumbnail.vue';
 import {
   warehousesApi,
   resolveCanonicalLocationCode,

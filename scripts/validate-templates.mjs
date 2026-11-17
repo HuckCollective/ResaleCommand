@@ -1507,6 +1507,90 @@ for (const contract of transportContracts) {
     }
 }
 
+// 18. WAVE 1 (P0) ROLE ISOLATION, NATIVE BROWSER DIALOG BAN & ITEMTHUMBNAIL FALLBACK GUARD
+{
+    const fail = (msg) => { console.error(`❌ [Wave 1 P0 Guard §18] ${msg}`); hasErrors = true; };
+    const read = (p) => (fs.existsSync(p) ? fs.readFileSync(p, 'utf8') : '');
+
+    // 18A. CollectiveAccessGate mounted across Collective-only surfaces
+    for (const gatedView of [
+        'src/components/coop/CoopLaborView.vue',
+        'src/components/coop/CoopGovernanceView.vue',
+        'src/components/coop/FounderVaultView.vue',
+        'src/components/settings/SettingsManager.vue',
+        'src/components/social/SocialCrossPostView.vue',
+        'src/components/sales/SalesList.vue',
+    ]) {
+        const src = read(gatedView);
+        if (!/<CollectiveAccessGate\b/.test(src)) {
+            fail(`${gatedView} must wrap its view inside <CollectiveAccessGate> so Straight Consignors (BB-) never see Collective rosters, labor, or settings.`);
+        }
+    }
+
+    // 18B. Steward-only Voting As selector in CoopGovernanceView.vue & Sweat-only unblock in SalesList.vue + session.ts
+    const govSrc = read('src/components/coop/CoopGovernanceView.vue');
+    if (!/<select[\s\S]{0,120}v-if="isStewardOrFounder"[\s\S]{0,120}v-model="activeVotingMember"/.test(govSrc)) {
+        fail('CoopGovernanceView.vue must lock the <select v-model="activeVotingMember"> selector behind v-if="isStewardOrFounder".');
+    }
+    const salesSrc = read('src/components/sales/SalesList.vue');
+    if (!/Monthly Settlements/.test(salesSrc) || !/canAccessSalesSurface/.test(salesSrc)) {
+        fail('SalesList.vue must unblock $0-inventory Voting Collective members on /coop/settlements (canAccessSalesSurface) and render an honest "Monthly Settlements" <h1>.');
+    }
+    const bmlSessionSrc = read('src/pages/api/bml/session.ts');
+    if (/capabilitiesForRole\(\s*['"]restricted['"]\s*,\s*['"]BB-['"]\s*\)/.test(bmlSessionSrc)) {
+        fail("src/pages/api/bml/session.ts must NOT hardcode capabilitiesForRole('restricted', 'BB-') on 403 (overwrites Sweat-only Collective partners with Consignor capabilities).");
+    }
+
+    // 18C. Zero native browser confirm() / alert() / prompt() in Wave 1 P0 audited surfaces
+    const NATIVE_DIALOG_RE = /(?<![\w.$])(?:window\.)?(?:confirm|alert|prompt)\s*\(/;
+    const wave1DialogCheckedFiles = [
+        'src/components/warehouses/LocationDetailView.vue',
+        'src/components/coop/FounderVaultView.vue',
+        'src/components/coop/CoopLaborView.vue',
+        'src/components/coop/CoopGovernanceView.vue',
+        'src/components/settings/SettingsManager.vue',
+        'src/components/org/OrgSettingsView.vue',
+        'src/components/cart/CartView.vue',
+        'src/components/social/SocialCrossPostView.vue',
+        'src/components/sales/SalesList.vue',
+        'src/components/studios/AppraisalPricingLabView.vue',
+    ];
+    for (const rel of wave1DialogCheckedFiles) {
+        const fullPath = path.resolve(rel);
+        if (!fs.existsSync(fullPath)) continue;
+        const raw = fs.readFileSync(fullPath, 'utf8');
+        const scriptPart = raw.split(/<script\b[^>]*>/i)[1] || '';
+        const codeLines = scriptPart.split('\n');
+        codeLines.forEach((line, idx) => {
+            const trimmed = line.trim();
+            if (!trimmed || trimmed.startsWith('//') || trimmed.startsWith('*') || trimmed.startsWith('/*')) return;
+            // Strip string literals before matching so help text mentioning "alert()" doesn't false-positive
+            const withoutStrings = line
+                .replace(/'(?:\\.|[^'\\])*'/g, "''")
+                .replace(/"(?:\\.|[^"\\])*"/g, '""')
+                .replace(/`(?:\\.|[^`\\])*`/g, '``');
+            const m = NATIVE_DIALOG_RE.exec(withoutStrings);
+            if (m) {
+                fail(`${rel} (script line ~${idx + 1}): uses native browser dialog "${m[0].trim()}" — use askConfirm() / confirmDialog() or <SlideOverDrawer> instead.`);
+            }
+        });
+    }
+
+    // 18D. ItemThumbnail 2-stage /preview -> /view + galleryImageIds fallback & /scan 302 redirect
+    const thumbSrc = read('src/components/common/ItemThumbnail.vue');
+    if (!/preview:\s*false/.test(thumbSrc) || !/galleryImageIds/.test(thumbSrc) || !/useRawView/.test(thumbSrc)) {
+        fail('src/components/common/ItemThumbnail.vue must implement 2-stage /preview -> /view (preview: false) + galleryImageIds @error fallback (System Invariant #3).');
+    }
+    const scanSrc = read('src/pages/scan.astro');
+    if (!/Astro\.redirect\(\s*['"]\/scout['"]/.test(scanSrc)) {
+        fail("src/pages/scan.astro must 302-redirect to '/scout'.");
+    }
+    const storeCartSrc = read('src/components/store/StoreHeaderCart.astro');
+    if (/href=["']\/cart["']/.test(storeCartSrc) || /Tenant:\s*\{tenantId\}/.test(storeCartSrc)) {
+        fail('src/components/store/StoreHeaderCart.astro must not leak public shoppers to internal /cart or expose raw Tenant: {tenantId}.');
+    }
+}
+
 if (!hasErrors) {
     console.log(`✅ Clean lint! All ${vueFiles.length} Vue SFCs, ${tsFiles.length} TS files, TDZ declaration order, scripts/ allowlist, Zero Hardcoded Locations, access-control guards, and price-parsing invariants passed with ZERO errors!`);
 } else {

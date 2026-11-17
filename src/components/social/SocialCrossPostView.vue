@@ -1,4 +1,5 @@
 <template>
+  <CollectiveAccessGate>
   <div class="space-y-5 sm:space-y-6 pb-6 sm:pb-8">
     <!-- HEADER -->
     <header class="card bg-base-100 border border-base-300 rounded-2xl shadow-sm p-4 sm:p-6">
@@ -576,15 +577,18 @@
       </template>
     </BottomActionDock>
   </div>
+  </CollectiveAccessGate>
 </template>
 
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue';
 import { Icon } from '@iconify/vue';
+import CollectiveAccessGate from '../common/CollectiveAccessGate.vue';
 import BottomActionDock from '../common/BottomActionDock.vue';
 import KpiStatGrid, { type KpiStatItem } from '../common/KpiStatGrid.vue';
 import SlideOverDrawer from '../common/SlideOverDrawer.vue';
 import { useAuth } from '../../composables/useAuth';
+import { useMemberCapabilities } from '../../lib/memberAccess';
 import { logSweatEquityLaborEntry, pacificTodayYmd } from '../../lib/coopGovernance';
 import { getCoopJwtHeaders } from '../../lib/coopLedgerClient';
 import { normalizePublicEvent, sanitizeHttpsUrl, type CoopPublicEvent } from '../../lib/flagshipContent';
@@ -606,6 +610,7 @@ import { confirmDialog } from '../../stores/confirm';
 import { addToast } from '../../stores/toast';
 
 const { user } = useAuth();
+const { capabilities } = useMemberCapabilities();
 
 const loading = ref(true);
 const saving = ref(false);
@@ -1056,6 +1061,7 @@ const handleDeleteCampaign = async (camp: SocialPromoCampaign) => {
 };
 
 onMounted(() => {
+  if (!capabilities.value.canSeeCollectiveFinancials) return;
   const params = new URLSearchParams(window.location.search);
   const seedTitle = params.get('seedTitle');
   const seedSku = params.get('seedSku');

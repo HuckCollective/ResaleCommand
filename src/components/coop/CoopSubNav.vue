@@ -1,5 +1,6 @@
 <template>
   <nav
+    v-if="capabilities.canSeeCollectiveFinancials"
     class="bg-base-100 border border-base-300 rounded-2xl p-2.5 sm:p-3 shadow-sm flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-2.5"
     aria-label="Co-op Workspace Sub-Navigation"
   >
@@ -49,6 +50,7 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
 import { Icon } from '@iconify/vue';
+import { useMemberCapabilities } from '../../lib/memberAccess';
 import {
   loadCoopGovernanceState,
   DEFAULT_COOP_POLICY_CONFIG,
@@ -59,6 +61,7 @@ const props = defineProps<{
   activeTab?: 'settlements' | 'governance' | 'labor' | 'expenses' | 'vault' | 'cms' | 'charter';
 }>();
 
+const { capabilities } = useMemberCapabilities();
 const currentPath = ref('');
 const policy = ref<CoopPolicyConfig>({ ...DEFAULT_COOP_POLICY_CONFIG });
 
@@ -122,6 +125,7 @@ onMounted(async () => {
   if (typeof window !== 'undefined') {
     currentPath.value = window.location.pathname;
   }
+  if (!capabilities.value.canSeeCollectiveFinancials) return;
   const { state } = await loadCoopGovernanceState([]);
   if (state.policyConfig) {
     policy.value = state.policyConfig;

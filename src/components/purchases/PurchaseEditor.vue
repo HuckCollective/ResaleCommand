@@ -600,23 +600,20 @@
               >
                 <!-- Top Row: Photo, Title, Badges -->
                 <div class="flex items-start gap-3">
-                  <div 
-                    class="w-16 h-16 rounded-xl overflow-hidden bg-base-200/80 border border-base-300 flex flex-col items-center justify-center shrink-0 relative cursor-pointer group" 
+                  <button
+                    type="button"
+                    class="rounded-xl overflow-hidden shrink-0 cursor-pointer group focus:outline-none focus:ring-2 focus:ring-primary"
                     @click="openEditItem(item)"
                     title="Tap to open ItemDrawer"
                   >
-                    <img 
-                      v-if="getItemImage(item) && !failedImages[item.$id]" 
-                      :src="getItemImage(item)" 
-                      class="w-full h-full object-cover group-hover:scale-105 transition-transform" 
-                      alt="Item Thumbnail"
-                      @error="failedImages[item.$id] = true" 
+                    <ItemThumbnail
+                      :item="item"
+                      size="lg"
+                      rounded="xl"
+                      placeholder-icon="solar:camera-broken"
+                      show-no-image-text
                     />
-                    <div v-else class="flex flex-col items-center justify-center text-center p-1 text-base-content/40">
-                      <Icon icon="solar:camera-broken" class="w-6 h-6" />
-                      <span class="text-[9px] font-bold mt-0.5 leading-none">No Photo</span>
-                    </div>
-                  </div>
+                  </button>
 
                   <div class="flex-1 min-w-0 space-y-1">
                     <h4 
@@ -711,22 +708,19 @@
                 <tbody>
                   <tr v-for="item in items" :key="item.$id" class="hover:bg-base-200/50">
                     <td>
-                      <div 
-                        class="w-12 h-12 rounded-lg overflow-hidden bg-base-200/80 border border-base-300 flex flex-col items-center justify-center shrink-0 cursor-pointer relative group"
+                      <button
+                        type="button"
+                        class="rounded-lg overflow-hidden shrink-0 cursor-pointer group focus:outline-none focus:ring-2 focus:ring-primary"
                         @click="openEditItem(item)"
                         title="Tap to open ItemDrawer"
                       >
-                        <img 
-                          v-if="getItemImage(item) && !failedImages[item.$id]" 
-                          :src="getItemImage(item)" 
-                          class="w-full h-full object-cover group-hover:scale-105 transition-transform" 
-                          alt="Item Thumbnail"
-                          @error="failedImages[item.$id] = true" 
+                        <ItemThumbnail
+                          :item="item"
+                          size="md"
+                          rounded="lg"
+                          placeholder-icon="solar:camera-broken"
                         />
-                        <div v-else class="flex flex-col items-center justify-center text-center text-base-content/40">
-                          <Icon icon="solar:camera-broken" class="w-5 h-5" />
-                        </div>
-                      </div>
+                      </button>
                     </td>
                     <td>
                       <div class="flex flex-col gap-0.5">
@@ -1092,6 +1086,7 @@ import { confirmDialog } from '../../stores/confirm';
 import { addToast } from '../../stores/toast';
 import { Icon } from '@iconify/vue';
 import ItemDrawer from '../common/ItemDrawer.vue';
+import ItemThumbnail from '../common/ItemThumbnail.vue';
 import ScannerWidget from '../common/ScannerWidget.vue';
 import { getDefaultStorageLocation } from '../../lib/warehouses';
 

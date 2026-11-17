@@ -1,5 +1,6 @@
 import { ref, computed, watch, type Ref } from 'vue';
 import { useAuth } from './useAuth';
+import { useMemberCapabilities } from '../lib/memberAccess';
 import { fetchCoopMe } from '../lib/coopLedgerClient';
 import type { CoopMemberProfile } from '../lib/coopGovernance';
 import type { CoopMeIdentity } from '../types/coop';
@@ -55,10 +56,11 @@ export function matchRosterMemberStrict(
 
 export function useCoopFounderGate(rosterMembers?: Ref<CoopMemberProfile[]>) {
   const { user, isAuthenticated } = useAuth();
+  const { capabilities } = useMemberCapabilities();
 
   async function refreshCoopIdentity(force = false): Promise<CoopMeIdentity | null> {
     if (typeof window === 'undefined') return null;
-    if (!isAuthenticated.value || !user.value?.$id) {
+    if (!isAuthenticated.value || !user.value?.$id || capabilities.value.isConsignor) {
       sharedIdentity.value = null;
       loadedForUserId = '';
       return null;

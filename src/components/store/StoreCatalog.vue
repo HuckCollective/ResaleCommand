@@ -130,16 +130,12 @@
         >
           <!-- Product Image -->
           <figure @click="openDetails(item)" class="relative aspect-square bg-base-300 overflow-hidden cursor-pointer">
-            <img 
-              v-if="item.imageId"
-              :src="`${appwriteEndpoint}/storage/buckets/${appwriteBucketId}/files/${item.imageId}/view?project=${appwriteProjectId}`" 
-              :alt="item.title" 
-              class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-              loading="lazy"
+            <ItemThumbnail
+              :item="item"
+              size="full"
+              rounded="none"
+              placeholder-icon="solar:box-minimalistic-linear"
             />
-            <div v-else class="w-full h-full flex items-center justify-center text-4xl bg-base-200">
-              📚
-            </div>
             
             <!-- Badges -->
             <span class="absolute top-3 left-3 badge badge-neutral shadow font-semibold text-[10px] z-10">
@@ -265,15 +261,13 @@
         <!-- Left Column: Media Gallery -->
         <div class="flex flex-col gap-4 w-full">
           <div class="relative w-full aspect-square bg-base-200 rounded-2xl overflow-hidden border border-base-content/5 shadow-inner">
-            <img 
-              v-if="activeImages.length > 0"
-              :src="`${appwriteEndpoint}/storage/buckets/${appwriteBucketId}/files/${activeImages[currentImageIndex]}/view?project=${appwriteProjectId}`" 
-              :alt="selectedItem.title" 
-              class="w-full h-full object-cover transition-all duration-300"
+            <ItemThumbnail
+              :src="activeImages[currentImageIndex] || ''"
+              :item="selectedItem"
+              size="full"
+              rounded="none"
+              placeholder-icon="solar:box-minimalistic-linear"
             />
-            <div v-else class="w-full h-full flex items-center justify-center text-6xl">
-              📚
-            </div>
             
             <!-- Gallery Navigation Arrows -->
             <button 
@@ -301,9 +295,11 @@
               class="w-14 h-14 rounded-lg overflow-hidden border-2 transition-all hover:opacity-100"
               :class="currentImageIndex === idx ? 'border-primary opacity-100 scale-105' : 'border-transparent opacity-60'"
             >
-              <img 
-                :src="`${appwriteEndpoint}/storage/buckets/${appwriteBucketId}/files/${imgId}/view?project=${appwriteProjectId}`" 
-                class="w-full h-full object-cover" 
+              <ItemThumbnail
+                :src="imgId"
+                size="w-14 h-14"
+                rounded="none"
+                placeholder-icon="solar:gallery-minimalistic-linear"
               />
             </button>
           </div>
@@ -460,7 +456,8 @@
 
 <script setup>
 import { BUCKET_ID } from '../../lib/inventory';
-import { ref, computed, watch, onMounted } from 'vue';
+import { ref, computed, watch, onMounted, onUnmounted } from 'vue';
+import ItemThumbnail from '../common/ItemThumbnail.vue';
 
 const props = defineProps({
   initialItems: {
@@ -578,6 +575,10 @@ const isFavorite = (itemId) => {
   return favorites.value.includes(itemId);
 };
 
+const handleHeaderFavoritesToggle = () => {
+  showFavoritesOnly.value = !showFavoritesOnly.value;
+};
+
 // Local storage persistence
 onMounted(() => {
   maxPriceFilter.value = absoluteMaxPrice.value;
@@ -586,8 +587,21 @@ onMounted(() => {
     if (saved) {
       favorites.value = JSON.parse(saved);
     }
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get('favorites') === '1') {
+        showFavoritesOnly.value = true;
+      }
+      window.addEventListener('rc-toggle-store-favorites', handleHeaderFavoritesToggle);
+    }
   } catch (e) {
     console.warn('[Favorites] Failed to load favorites from localStorage:', e);
+  }
+});
+
+onUnmounted(() => {
+  if (typeof window !== 'undefined') {
+    window.removeEventListener('rc-toggle-store-favorites', handleHeaderFavoritesToggle);
   }
 });
 

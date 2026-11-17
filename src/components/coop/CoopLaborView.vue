@@ -1,4 +1,5 @@
 <template>
+  <CollectiveAccessGate>
   <div class="space-y-6">
     <!-- Canonical Ledger Header -->
     <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
@@ -691,15 +692,19 @@
       </form>
     </SlideOverDrawer>
   </div>
+  </CollectiveAccessGate>
 </template>
 
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue';
 import { Icon } from '@iconify/vue';
+import CollectiveAccessGate from '../common/CollectiveAccessGate.vue';
 import SlideOverDrawer from '../common/SlideOverDrawer.vue';
 import { addToast } from '../../stores/toast';
+import { askConfirm } from '../../stores/confirm';
 import { toUserMessage } from '../../lib/userFacingErrors';
 import { useAuth } from '../../composables/useAuth';
+import { useMemberCapabilities } from '../../lib/memberAccess';
 import { useCoopFounderGate } from '../../composables/useCoopFounderGate';
 import { fetchCoopLaborLedger, mutateCoopLabor } from '../../lib/coopLedgerClient';
 import { monthKeyToLabel } from '../../lib/salesBucketing';
@@ -720,6 +725,7 @@ import {
 } from '../../lib/coopGovernance';
 
 const { currentTeam } = useAuth();
+const { capabilities } = useMemberCapabilities();
 
 const laborEntries = ref<CoopLaborEntry[]>([]);
 const policyConfig = ref<CoopPolicyConfig>({ ...DEFAULT_COOP_POLICY_CONFIG });
@@ -1165,6 +1171,14 @@ const submitEditDrawer = async () => {
 const handleDeleteLabor = async (entry: CoopLaborEntry) => {
   const mk = laborEntryMonthKey(entry.date);
   if (!mk) return;
+  const ok = await askConfirm(
+    `Remove ${Number(entry.hours).toFixed(2)}h labor log for ${entry.member} (${entry.date})?`,
+    'Remove Labor Log',
+    'Remove Entry',
+    'Cancel',
+    'btn-error'
+  );
+  if (!ok) return;
   isSaving.value = true;
   try {
     await mutateCoopLabor({
@@ -1176,7 +1190,7 @@ const handleDeleteLabor = async (entry: CoopLaborEntry) => {
     await refreshServerLaborLedger();
     addToast({ type: 'info', message: 'Removed labor log entry.' });
   } catch (err: any) {
-    addToast({ type: 'error', message: err?.message || 'Delete rejected by server.' });
+    addToast({ type: 'error', message: toUserMessage(err, 'Could not remove labor log entry.') });
   } finally {
     isSaving.value = false;
   }
@@ -1241,6 +1255,7 @@ const exportCsv = () => {
 };
 
 onMounted(async () => {
+  if (!capabilities.value.canSeeCollectiveFinancials) return;
   await refreshCoopIdentity();
   const { state } = await loadCoopGovernanceState(
     [],

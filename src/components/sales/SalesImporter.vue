@@ -760,16 +760,12 @@
                 class="p-2.5 rounded-xl bg-base-200/50 hover:bg-base-200 border border-base-300 flex items-center justify-between gap-2.5 transition-all"
               >
                 <div class="flex items-center gap-2.5 min-w-0">
-                  <div class="w-9 h-9 rounded-lg bg-base-300 overflow-hidden shrink-0 flex items-center justify-center">
-                    <img
-                      v-if="getItemThumbUrl(bItem)"
-                      :src="getItemThumbUrl(bItem)"
-                      :alt="bItem.title"
-                      class="w-full h-full object-cover"
-                      loading="lazy"
-                    />
-                    <Icon v-else icon="solar:tag-bold" class="w-4 h-4 opacity-40" />
-                  </div>
+                  <ItemThumbnail
+                    :item="bItem"
+                    size="sm"
+                    rounded="lg"
+                    placeholder-icon="solar:tag-bold"
+                  />
                   <div class="min-w-0 text-xs">
                     <div class="font-bold truncate text-base-content" :title="bItem.title">{{ bItem.title }}</div>
                     <div class="font-mono text-[10px] opacity-75 flex items-center gap-1.5">
@@ -1044,16 +1040,12 @@
                   <td class="font-mono text-success font-bold">${{ row.salePrice.toFixed(2) }}</td>
                   <td @click.stop="openMatcherDrawer(row)" class="py-2.5">
                     <div v-if="row.mappedItem" class="flex items-start sm:items-center gap-2.5 p-2 rounded-xl bg-base-100 border border-base-300">
-                      <div class="w-9 h-9 rounded-lg bg-base-200 border border-base-300 overflow-hidden shrink-0 flex items-center justify-center">
-                        <img
-                          v-if="getItemThumbUrl(row.mappedItem)"
-                          :src="getItemThumbUrl(row.mappedItem)"
-                          :alt="row.mappedItem.title"
-                          class="w-full h-full object-cover"
-                          loading="lazy"
-                        />
-                        <Icon v-else icon="solar:gallery-minimalistic-linear" class="w-4 h-4 opacity-35" />
-                      </div>
+                      <ItemThumbnail
+                        :item="row.mappedItem"
+                        size="sm"
+                        rounded="lg"
+                        placeholder-icon="solar:gallery-minimalistic-linear"
+                      />
                       <div class="flex-1 min-w-0 space-y-0.5">
                         <div class="flex items-center gap-1.5 flex-wrap">
                           <span class="badge badge-xs badge-primary text-primary-content font-mono font-black">{{ row.mappedItem.upc || 'NO UPC' }}</span>
@@ -1843,16 +1835,12 @@
                   >
                     <div class="flex items-start gap-2.5 min-w-0 flex-1">
                       <!-- Photo Thumbnail -->
-                      <div class="w-12 h-12 rounded-xl bg-base-200 border border-base-300 overflow-hidden shrink-0 flex items-center justify-center">
-                        <img
-                          v-if="getItemThumbUrl(cand.item)"
-                          :src="getItemThumbUrl(cand.item)"
-                          :alt="cand.item.title"
-                          class="w-full h-full object-cover"
-                          loading="lazy"
-                        />
-                        <Icon v-else icon="solar:gallery-minimalistic-linear" class="w-5 h-5 opacity-35" />
-                      </div>
+                      <ItemThumbnail
+                        :item="cand.item"
+                        size="md"
+                        rounded="xl"
+                        placeholder-icon="solar:gallery-minimalistic-linear"
+                      />
 
                       <div class="min-w-0 flex-1 space-y-1">
                         <div class="flex items-center gap-1.5 flex-wrap">
@@ -2027,6 +2015,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue';
 import { Icon } from '@iconify/vue';
+import ItemThumbnail from '../common/ItemThumbnail.vue';
 import { useInventory } from '../../composables/useInventory';
 import { useAuth } from '../../composables/useAuth';
 import { useLoader } from '../../composables/useLoader';

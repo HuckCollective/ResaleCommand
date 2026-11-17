@@ -1192,6 +1192,8 @@ import BookmarkletHeroBar from '../bml/BookmarkletHeroBar.vue';
 import SearchInputWithScanner from '../common/SearchInputWithScanner.vue';
 import { getAssetUrl, updateInventoryItem } from '../../lib/inventory';
 import { addToast } from '../../stores/toast';
+import { askConfirm } from '../../stores/confirm';
+import { toUserMessage } from '../../lib/userFacingErrors';
 import { databases, ID, Query } from '../../lib/appwrite';
 
 const ItemDrawer = defineAsyncComponent(() => import('../common/ItemDrawer.vue'));
@@ -1984,14 +1986,21 @@ const saveLocationSettings = async () => {
 
 const confirmDeleteLocation = async () => {
   if (!warehouse.value) return;
-  if (!confirm(`Are you sure you want to delete ${warehouse.value.name}? This cannot be undone.`)) return;
+  const ok = await askConfirm(
+    `Delete "${warehouse.value.name}"? This cannot be undone.`,
+    'Delete Location',
+    'Delete Location',
+    'Cancel',
+    'btn-error'
+  );
+  if (!ok) return;
 
   try {
     await warehousesApi.deleteWarehouse(warehouse.value.$id);
     addToast({ type: 'info', message: 'Location deleted.' });
     window.location.href = '/warehouse';
   } catch (err: any) {
-    addToast({ type: 'error', message: `Delete failed: ${err.message}` });
+    addToast({ type: 'error', message: toUserMessage(err, 'Could not delete location.') });
   }
 };
 

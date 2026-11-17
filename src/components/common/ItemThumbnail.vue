@@ -3,7 +3,7 @@
         class="relative overflow-hidden bg-base-200/60 flex items-center justify-center shrink-0 select-none border border-base-200/50"
         :class="[roundedClass, containerClass]"
     >
-        <!-- Actual Image -->
+        <!-- Actual Image (with 2-Stage /preview -> /view + galleryImageIds @error Fallback — Invariant #3) -->
         <img 
             v-if="resolvedUrl && !hasError"
             :src="resolvedUrl" 
@@ -14,7 +14,7 @@
             @load="onLoad"
         />
 
-        <!-- Placeholder Icon (shown when no image provided or on image load error) -->
+        <!-- Placeholder Icon (shown when no image provided or after all fallback stages fail) -->
         <div 
             v-else
             class="w-full h-full flex flex-col items-center justify-center p-1 text-base-content/30 bg-base-300/40"
@@ -29,7 +29,7 @@
 <script setup>
 import { ref, computed, watch } from 'vue';
 import { Icon } from '@iconify/vue';
-import { getItemImageUrl } from '../../composables/useInventoryFilters';
+import { getAssetUrl } from '../../lib/inventory';
 
 const props = defineProps({
     item: {
@@ -46,7 +46,7 @@ const props = defineProps({
     },
     size: {
         type: String,
-        default: 'sm' // 'xs' (24px), 'sm' (36px), 'md' (48px), 'lg' (64px), 'xl' (96px), 'full'
+        default: 'sm' // 'xs' (24px), 'sm' (36px), 'md' (48px), 'lg' (64px), 'xl' (96px), 'full', or custom 'w-* h-*'
     },
     rounded: {
         type: String,
@@ -65,19 +65,120 @@ const props = defineProps({
 const emit = defineEmits(['error', 'load']);
 
 const hasError = ref(false);
+const candidateIdx = ref(0);
+const useRawView = ref(false);
 
-const resolvedUrl = computed(() => {
-    if (props.src) return props.src;
-    if (props.item) return getItemImageUrl(props.item, 120);
-    return null;
+const pixelSize = computed(() => {
+    switch (props.size) {
+        case 'xs': return 64;
+        case 'sm': return 96;
+        case 'md': return 120;
+        case 'lg': return 160;
+        case 'xl': return 240;
+        case 'full': return 400;
+        default: return 120;
+    }
 });
 
-// Reset error state when image URL changes
-watch(resolvedUrl, () => {
+function extractAppwriteFileIdFromUrl(raw) {
+    if (!raw || typeof raw !== 'string') return null;
+    const match = raw.match(/\/storage\/buckets\/[^/]+\/files\/([^/?#]+)\/(?:preview|view)/i);
+    return match && match[1] ? match[1] : null;
+}
+
+const candidates = computed(() => {
+    const out = [];
+    const pushUnique = (val) => {
+        if (!val || typeof val !== 'string') return;
+        const trimmed = val.trim();
+        if (!trimmed) return;
+        const extractedId = extractAppwriteFileIdFromUrl(trimmed);
+        const normalized = extractedId || trimmed;
+        if (!out.includes(normalized)) {
+            out.push(normalized);
+        }
+    };
+
+    if (props.src) {
+        pushUnique(props.src);
+    }
+
+    const itm = props.item;
+    if (itm && typeof itm === 'object') {
+        pushUnique(itm.imageId);
+        if (Array.isArray(itm.galleryImageIds)) {
+            for (const gid of itm.galleryImageIds) pushUnique(gid);
+        }
+        pushUnique(itm.image);
+        pushUnique(itm.imageUrl);
+        pushUnique(itm.thumbnailUrl);
+        if (Array.isArray(itm.images)) {
+            for (const img of itm.images) pushUnique(img);
+        }
+        pushUnique(itm.fetched_image);
+        if (Array.isArray(itm.fetched_images)) {
+            for (const fImg of itm.fetched_images) pushUnique(fImg);
+        }
+        if (itm.rawAnalysis) {
+            try {
+                const raw = typeof itm.rawAnalysis === 'string' ? JSON.parse(itm.rawAnalysis) : itm.rawAnalysis;
+                const target = Array.isArray(raw) ? raw[0] : (raw?.items ? raw.items[0] : raw);
+                pushUnique(target?.fetched_image || target?.fetched_images?.[0] || target?.image);
+            } catch {}
+        }
+        if (typeof itm.conditionNotes === 'string') {
+            const match = itm.conditionNotes.match(/\[MAIN IMAGE ID:\s*([^\]]+)\]/);
+            if (match && match[1]) {
+                for (const id of match[1].split(',')) pushUnique(id);
+            }
+        }
+    }
+
+    return out;
+});
+
+// Reset fallback state ONLY when the underlying candidate signature changes (never on stage transitions)
+const candidatesSignature = computed(() => candidates.value.join('|'));
+watch(candidatesSignature, () => {
     hasError.value = false;
+    candidateIdx.value = 0;
+    useRawView.value = false;
+});
+
+const activeCandidate = computed(() => candidates.value[candidateIdx.value] || '');
+
+const previewUrl = computed(() => {
+    if (!activeCandidate.value) return '';
+    return getAssetUrl(activeCandidate.value, {
+        preview: true,
+        width: pixelSize.value,
+        height: pixelSize.value
+    });
+});
+
+const rawViewUrl = computed(() => {
+    if (!activeCandidate.value) return '';
+    return getAssetUrl(activeCandidate.value, { preview: false });
+});
+
+const resolvedUrl = computed(() => {
+    if (!activeCandidate.value) return null;
+    return useRawView.value ? rawViewUrl.value : previewUrl.value;
 });
 
 const onError = (e) => {
+    // Stage 1 -> Stage 2: Retry raw /view if it differs from /preview (Appwrite transform fallback)
+    if (!useRawView.value && rawViewUrl.value && rawViewUrl.value !== previewUrl.value) {
+        useRawView.value = true;
+        return;
+    }
+    // Stage 2 -> Stage 3: Advance to next valid ID in galleryImageIds / candidates
+    if (candidateIdx.value + 1 < candidates.value.length) {
+        candidateIdx.value += 1;
+        useRawView.value = false;
+        return;
+    }
+    // Stage 4: Terminal fallback to semantic icon placeholder
     hasError.value = true;
     emit('error', e);
 };

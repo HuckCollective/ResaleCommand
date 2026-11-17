@@ -1512,7 +1512,7 @@
           type="button"
           class="h-11 my-auto px-2.5 sm:px-3 rounded-2xl flex flex-col items-center justify-center gap-0.5 transition-all duration-200 bg-base-200/80 hover:bg-base-300 text-base-content font-bold border border-base-content/15 shadow-xs active:scale-95 cursor-pointer"
           :disabled="loadingLab"
-          @click="loadLabSnapshot"
+          @click="loadAllLabData(true)"
           title="Refresh Estimate-vs-Sold audit"
         >
           <Icon icon="solar:refresh-bold" class="w-4 h-4" />

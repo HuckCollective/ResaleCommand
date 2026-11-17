@@ -443,10 +443,12 @@
         </div>
         
         <div class="bg-base-200/60 p-2.5 rounded-xl flex items-center gap-2.5 mb-4 border border-base-300">
-          <div class="w-10 h-10 rounded-lg bg-base-300 overflow-hidden shrink-0">
-            <img v-if="itemPendingDelete.imageId" :src="getImageUrl(itemPendingDelete.imageId)" class="w-full h-full object-cover" />
-            <Icon v-else icon="solar:tag-bold" class="w-5 h-5 m-2.5 opacity-40" />
-          </div>
+          <ItemThumbnail
+            :item="itemPendingDelete"
+            size="w-10 h-10"
+            rounded="lg"
+            placeholder-icon="solar:tag-bold"
+          />
           <div class="min-w-0 flex-1">
             <div class="font-bold text-xs text-base-content truncate">{{ cleanItemTitle(itemPendingDelete.title) }}</div>
             <div class="text-[11px] font-mono text-warning font-bold">${{ (itemPendingDelete.cost || 0).toFixed(2) }}</div>
@@ -614,6 +616,7 @@ import { BUCKET_ID, updateInventoryItem } from '../../lib/inventory';
 import { purchasesAPI } from '../../lib/purchases';
 import ItemPreviewModal from '../inventory/ItemPreviewModal.vue';
 import ItemDrawer from '../common/ItemDrawer.vue';
+import ItemThumbnail from '../common/ItemThumbnail.vue';
 import { evaluateSellerClusters, formatReadableSellerLabel, type SellerCluster } from '../../lib/shipping-rules';
 import { parsePacificDateToIso, formatPacificDateDisplay, isoToDatetimeLocal, datetimeLocalToIso } from '../../lib/dateTimeUtils';
 

@@ -1,4 +1,5 @@
 <template>
+  <CollectiveAccessGate>
   <div class="space-y-5 pb-24">
     <!-- ===================================================== -->
     <!-- 1. /sales-STYLE COMPACT HEADER & 2-BUTTON ACTIONS     -->
@@ -178,12 +179,13 @@
           </button>
         </div>
 
-        <!-- Inline Voter Persona Selector -->
+        <!-- Inline Voter Persona Selector (Steward Proxy or Locked Member Identity) -->
         <div class="flex items-center gap-2 shrink-0">
           <span class="text-xs font-extrabold uppercase tracking-wider opacity-65 whitespace-nowrap">
-            👤 Voting As:
+            {{ isStewardOrFounder ? '👤 Voting As:' : '🔒 Voting As:' }}
           </span>
           <select
+            v-if="isStewardOrFounder"
             v-model="activeVotingMember"
             class="select select-bordered select-sm rounded-xl font-bold text-xs h-9 min-h-9 min-w-44"
           >
@@ -191,6 +193,13 @@
               {{ m.name }} — [{{ m.partner }}-]
             </option>
           </select>
+          <span
+            v-else
+            class="badge badge-outline border-base-300 bg-base-200/60 font-bold text-xs px-3 py-3 rounded-xl whitespace-nowrap shrink-0"
+            title="Locked to your verified member profile (Account Stewards can proxy-record offline member votes)"
+          >
+            {{ activeVotingMember }}
+          </span>
         </div>
       </div>
 
@@ -934,14 +943,18 @@
       </template>
     </BottomActionDock>
   </div>
+  </CollectiveAccessGate>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted } from 'vue';
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue';
 import { Icon } from '@iconify/vue';
 import { addToast } from '../../stores/toast';
+import { askConfirm } from '../../stores/confirm';
 import { useAuth } from '../../composables/useAuth';
+import { useMemberCapabilities } from '../../lib/memberAccess';
 import { useCoopFounderGate, matchRosterMemberStrict } from '../../composables/useCoopFounderGate';
+import CollectiveAccessGate from '../common/CollectiveAccessGate.vue';
 import JoinRequestsPanel from './JoinRequestsPanel.vue';
 import CoopRolesPanel from './CoopRolesPanel.vue';
 import CoopProposalInspector from './CoopProposalInspector.vue';
@@ -989,6 +1002,7 @@ const props = withDefaults(
 );
 
 const { user, isAuthenticated, currentTeam, ownedTeam } = useAuth();
+const { capabilities } = useMemberCapabilities();
 
 type GovTab = 'proposals' | 'rules' | 'roster' | 'docs';
 type ProposalBucket = 'all' | 'active' | 'consensus' | 'blocked';
@@ -1078,11 +1092,22 @@ const newProposalExistingImages = ref<string[]>([]);
 const newProposalPhotos = ref<any[]>([]);
 
 const rosterRef = computed(() => policyConfig.value.members);
-const { isFounder, canEditGlobalFinancials } = useCoopFounderGate(rosterRef);
+const { isFounder, canEditGlobalFinancials, currentMemberName } = useCoopFounderGate(rosterRef);
 
 const isStewardOrFounder = computed(() => {
   return Boolean(isFounder.value || ownedTeam.value);
 });
+
+watch(
+  [currentMemberName, isStewardOrFounder],
+  ([name, isSteward]) => {
+    if (!isSteward && name) {
+      activeVotingMember.value = name;
+      newProposal.value.proposer = name;
+    }
+  },
+  { immediate: true }
+);
 
 function canEditProposalCard(p: CoopProposal): boolean {
   return canUserEditProposal(p, {
@@ -1223,6 +1248,7 @@ const setGovTab = (tab: GovTab) => {
 };
 
 onMounted(async () => {
+  if (!capabilities.value.canSeeCollectiveFinancials) return;
   if (typeof window !== 'undefined') {
     window.addEventListener('coop-messages-updated', onMessagesUpdated as EventListener);
     const params = new URLSearchParams(window.location.search);
@@ -1326,8 +1352,20 @@ const addConsignor = () => {
   newConsignor.value = { prefix: '', displayName: '' };
 };
 
-const removeConsignor = (idx: number) => {
+const removeConsignor = async (idx: number) => {
+  const target = policyConfig.value.consignors[idx];
+  if (!target) return;
+  const ok = await askConfirm(
+    `Remove consignor agreement for ${target.displayName || target.prefix} (${target.prefix})?`,
+    'Remove Consignor Agreement',
+    'Remove Agreement',
+    'Cancel',
+    'btn-error'
+  );
+  if (!ok) return;
   policyConfig.value.consignors.splice(idx, 1);
+  await savePolicyAndManifestState();
+  addToast({ type: 'info', message: `Removed consignor agreement for ${target.prefix}.` });
 };
 
 const onCuratorShareChange = () => {
@@ -1401,6 +1439,16 @@ const addRosterMember = async () => {
 };
 
 const removeRosterMember = async (idx: number) => {
+  const target = policyConfig.value.members[idx];
+  if (!target) return;
+  const ok = await askConfirm(
+    `Remove ${target.name} from the Collective Roster?`,
+    'Remove Roster Member',
+    'Remove Member',
+    'Cancel',
+    'btn-error'
+  );
+  if (!ok) return;
   const removed = policyConfig.value.members.splice(idx, 1);
   await savePolicyAndManifestState();
   if (removed[0]) {

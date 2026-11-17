@@ -155,6 +155,12 @@
               class="w-full text-left p-3 hover:bg-base-200/60 transition-colors flex items-center justify-between gap-3"
               :class="selectedItem?.$id === item.$id ? 'bg-primary/10 border-l-4 border-l-primary' : ''"
             >
+              <ItemThumbnail
+                :item="item"
+                size="sm"
+                rounded="lg"
+                placeholder-icon="solar:gallery-minimalistic-linear"
+              />
               <div class="min-w-0 flex-1 space-y-1">
                 <div class="flex items-center gap-1.5 flex-wrap">
                   <span
@@ -299,6 +305,7 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted } from 'vue';
 import { Icon } from '@iconify/vue';
+import ItemThumbnail from '../common/ItemThumbnail.vue';
 import SlideOverDrawer from '../common/SlideOverDrawer.vue';
 import { addToast } from '../../stores/toast';
 import { toUserMessage } from '../../lib/userFacingErrors';

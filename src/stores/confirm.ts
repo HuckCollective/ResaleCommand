@@ -57,3 +57,5 @@ export const confirmDialog = (
         });
     });
 };
+
+export const askConfirm = confirmDialog;

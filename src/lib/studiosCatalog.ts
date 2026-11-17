@@ -147,7 +147,7 @@ export function buildStudiosWorkbenches(
       label: 'Camera Barcode & QR Scanner',
       actionLabel: 'Scan Shelf Tag',
       description: 'Scan physical HUCK / PDXGL / BB stickers with your phone camera to inspect or move stock.',
-      href: '/scan',
+      href: '/scout',
       icon: 'solar:qr-code-bold-duotone',
       iconColor: 'text-success',
     },
@@ -338,16 +338,16 @@ export function buildResellerNavConfig(
           } satisfies NavDropdownLink,
         ]
       : []),
-    {
-      id: 'coop_settlements',
-      label: 'Monthly Settlements',
-      hint: '4-Gate Waterfall & Partner Statements',
-      href: '/coop/settlements',
-      icon: 'solar:hand-money-bold-duotone',
-      iconColor: 'text-primary',
-    },
     ...(caps.canViewCollectiveTools
       ? [
+          {
+            id: 'coop_settlements',
+            label: 'Monthly Settlements',
+            hint: '4-Gate Waterfall & Partner Statements',
+            href: '/coop/settlements',
+            icon: 'solar:hand-money-bold-duotone',
+            iconColor: 'text-primary',
+          } satisfies NavDropdownLink,
           {
             id: 'expenses_receipts',
             label: 'Expenses & Receipts',

@@ -124,16 +124,12 @@
           </div>
 
           <!-- Thumbnail -->
-          <div class="w-12 h-12 rounded-xl overflow-hidden bg-base-300 shrink-0 border border-base-200 flex items-center justify-center">
-            <img 
-              v-if="resolveThumbnail(item)" 
-              :src="resolveThumbnail(item)!" 
-              :alt="item.title"
-              class="w-full h-full object-cover"
-              loading="lazy"
-            />
-            <Icon v-else icon="solar:gallery-linear" class="w-5 h-5 opacity-40" />
-          </div>
+          <ItemThumbnail
+            :item="item"
+            size="md"
+            rounded="xl"
+            placeholder-icon="solar:gallery-linear"
+          />
 
           <!-- Item Details -->
           <div class="min-w-0 flex-1">
@@ -192,6 +188,7 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted } from 'vue';
 import { Icon } from '@iconify/vue';
+import ItemThumbnail from '../common/ItemThumbnail.vue';
 import { useInventory } from '../../composables/useInventory';
 import { getItemImageUrl } from '../../composables/useInventoryFilters';
 import { getItemImageUrls, type SocialStudioItem } from '../../lib/socialMediaStudio';

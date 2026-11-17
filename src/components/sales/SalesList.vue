@@ -1,14 +1,15 @@
 <template>
-  <div v-if="!capabilities.canViewSales" class="max-w-xl mx-auto my-12">
+  <CollectiveAccessGate>
+  <div v-if="!canAccessSalesSurface" class="max-w-xl mx-auto my-12">
     <div class="card bg-base-100 border-2 border-warning/40 shadow-lg rounded-2xl p-6 text-center space-y-4">
       <div class="text-4xl">🔒</div>
       <h2 class="text-xl font-black text-base-content">Founders &amp; Curators Only</h2>
       <p class="text-sm text-base-content/75 leading-relaxed">
-        The collective-wide Sales &amp; Register Ledger is restricted to Founders (👑) and Curators (💎). Your personal consignor and partner payout statement is available on your Command Dashboard.
+        The raw Register Ticket Ledger is restricted to Founders (👑) and Curators (💎). Open <strong>Monthly Settlements</strong> to inspect the 4-Gate Co-op Waterfall, Commons rent breakeven, and Sweat-Equity payouts.
       </p>
-      <div class="pt-2 flex justify-center gap-3">
-        <a href="/dashboard" class="btn btn-primary font-bold rounded-xl">View My Payout Statement (/dashboard)</a>
-        <a href="/scout" class="btn btn-outline font-bold rounded-xl">Open Camera Scout</a>
+      <div class="pt-2 flex flex-wrap justify-center gap-3">
+        <a href="/coop/settlements" class="btn btn-primary font-bold rounded-xl">Open Monthly Settlements</a>
+        <a href="/dashboard" class="btn btn-outline font-bold rounded-xl">Command Dashboard</a>
       </div>
     </div>
   </div>
@@ -18,13 +19,17 @@
       <div>
         <h1 class="text-3xl sm:text-4xl font-black text-base-content tracking-tight flex items-center gap-3">
           <Icon icon="solar:dollar-bold-duotone" class="w-8 h-8 sm:w-9 h-9 text-success shrink-0" />
-          <span>Sales &amp; Partner Settlements</span>
+          <span>{{ isSettlementRoute ? 'Monthly Settlements' : 'Sales & Partner Settlements' }}</span>
         </h1>
         <p class="text-sm text-base-content/70 mt-1">
-          One unified workspace for register sales, paper sheets, and 70/30 co-op payout checks.
+          {{
+            isSettlementRoute
+              ? '4-Gate co-op waterfall, Commons rent breakeven, and monthly partner statements.'
+              : 'One unified workspace for register sales, paper sheets, and 70/30 co-op payout checks.'
+          }}
         </p>
       </div>
-      <div class="flex items-center gap-2.5 w-full md:w-auto">
+      <div v-if="capabilities.canViewSales" class="flex items-center gap-2.5 w-full md:w-auto">
         <!-- 1. Unified Sync / Import Menu -->
         <div class="dropdown dropdown-end flex-1 sm:flex-initial">
           <label tabindex="0" class="btn btn-sm sm:btn-md btn-outline btn-secondary gap-1.5 font-bold w-full min-h-[40px] rounded-xl cursor-pointer">
@@ -104,7 +109,7 @@
 
       <!-- STAGED RICOCHET SALES COMMIT BANNER (Law 5.3 Dry-Run Preview + 1-Click Idempotent Ledger Commit) -->
       <div
-        v-if="hasLoadedLiveSalesLedger && ricochetActionableNewCount > 0"
+        v-if="capabilities.canViewSales && hasLoadedLiveSalesLedger && ricochetActionableNewCount > 0"
         class="card bg-warning/10 border-2 border-warning/50 shadow-md rounded-2xl p-4 space-y-3"
       >
         <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
@@ -216,6 +221,7 @@
           <!-- View Switcher -->
           <div class="join bg-base-200/90 p-1 rounded-xl shadow-inner w-full lg:w-auto">
             <button
+              v-if="capabilities.canViewSales"
               type="button"
               class="btn btn-sm join-item gap-2 flex-1 lg:flex-initial rounded-lg text-xs font-bold transition-all"
               :class="salesViewTab === 'ledger' ? 'btn-primary shadow-xs font-black' : 'btn-ghost opacity-75'"
@@ -973,11 +979,13 @@
 
     </div>
   </div>
+  </CollectiveAccessGate>
 </template>
 
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue';
 import { Icon } from '@iconify/vue';
+import CollectiveAccessGate from '../common/CollectiveAccessGate.vue';
 import KpiStatGrid, { type KpiStatItem } from '../common/KpiStatGrid.vue';
 import CoopSettlementView from './CoopSettlementView.vue';
 import LinkTicketInventoryModal from './LinkTicketInventoryModal.vue';
@@ -1015,6 +1023,13 @@ const props = defineProps<{
 const { currentTeam } = useAuth();
 const { capabilities } = useMemberCapabilities();
 const { inventoryItems, fetchInventory } = useInventory();
+
+const isSettlementRoute = computed(() => props.initialTab === 'coop');
+const canAccessSalesSurface = computed(() =>
+  isSettlementRoute.value
+    ? capabilities.value.canSeeCollectiveFinancials
+    : capabilities.value.canViewSales
+);
 
 const sales = ref<SaleDocument[]>([]);
 const warehouses = ref<WarehouseDocument[]>([]);
@@ -1835,7 +1850,7 @@ const initSalesRealtime = () => {
 };
 
 const fetchData = async () => {
-  if (!currentTeam.value) return;
+  if (!currentTeam.value || !capabilities.value.canSeeCollectiveFinancials) return;
   loading.value = true;
   error.value = '';
   try {

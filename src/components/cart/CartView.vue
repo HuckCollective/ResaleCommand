@@ -112,6 +112,61 @@
               <!-- FULLSCREEN PREVIEW -->
               <ItemPreviewModal :item="previewItem || undefined" @close="previewItem = null" @edit="openEditModal" />
 
+              <!-- RECORD WINNING BID SLIDE-OVER DRAWER (Zero Native Browser prompt() — §16 Mutually Exclusive) -->
+              <SlideOverDrawer
+                v-model="winDrawerOpen"
+                title="Record Winning Bid"
+                subtitle="Confirm final hammer price to move this item into Acquired inventory."
+              >
+                <form v-if="winTargetItem" class="space-y-4 text-xs" @submit.prevent="submitWinningBid">
+                  <div class="rounded-2xl bg-base-200/60 border border-base-300 p-3.5 space-y-1">
+                    <div class="font-black text-sm text-base-content">
+                      {{ winTargetItem.title || winTargetItem.identity || 'Tracked Auction Item' }}
+                    </div>
+                    <div v-if="winTargetItem.maxBid" class="font-mono text-base-content/70">
+                      Max Bid Target: ${{ Number(winTargetItem.maxBid || 0).toFixed(2) }}
+                    </div>
+                  </div>
+
+                  <div class="form-control">
+                    <label for="rc-cart-winning-bid" class="label py-1">
+                      <span class="label-text font-bold">Winning Bid ($ USD)</span>
+                    </label>
+                    <input
+                      id="rc-cart-winning-bid"
+                      v-model="winningBidInput"
+                      type="text"
+                      inputmode="decimal"
+                      placeholder="0.00"
+                      class="input input-bordered h-11 md:h-10 rounded-xl font-mono font-bold text-sm w-full"
+                      required
+                    />
+                  </div>
+                </form>
+
+                <template #footer>
+                  <div class="flex items-center justify-end gap-2">
+                    <button
+                      type="button"
+                      class="btn btn-sm h-11 md:h-9 btn-ghost rounded-xl font-bold"
+                      :disabled="isSubmittingWin"
+                      @click="winDrawerOpen = false"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      class="btn btn-sm h-11 md:h-9 btn-success text-success-content rounded-xl font-black px-4"
+                      :disabled="isSubmittingWin || !winningBidInput.trim()"
+                      @click="submitWinningBid"
+                    >
+                      <span v-if="isSubmittingWin" class="loading loading-spinner loading-xs"></span>
+                      <span>Record Winning Bid</span>
+                    </button>
+                  </div>
+                </template>
+              </SlideOverDrawer>
+
               <!-- EXPENSES SECTION -->
               <div class="divider text-xs opacity-50 uppercase">Expenses</div>
               <div class="collapse collapse-arrow bg-base-100 border border-base-200 rounded-box">
@@ -164,7 +219,10 @@ import { storage, databases, ID } from '../../lib/appwrite';
 import { useCart, type CartItem } from '../../composables/useCart';
 import { useAuth } from '../../composables/useAuth';
 import ItemDrawer from '../common/ItemDrawer.vue';
+import SlideOverDrawer from '../common/SlideOverDrawer.vue';
 import { updateInventoryItem, getSafeRawAnalysis, BUCKET_ID } from '../../lib/inventory';
+import { parsePriceValue } from '../../lib/lot-strategy';
+import { toUserMessage } from '../../lib/userFacingErrors';
 import ItemCard from '../common/ItemCard.vue';
 import ItemPreviewModal from '../inventory/ItemPreviewModal.vue';
 import { addToast } from '../../stores/toast';
@@ -285,20 +343,38 @@ const {
   deleteItem, updateItem, recordAuctionWin, recordAuctionLoss
 } = useCart();
 
-async function handleItemWon(item: any) {
+const winDrawerOpen = ref(false);
+const winTargetItem = ref<any | null>(null);
+const winningBidInput = ref('');
+const isSubmittingWin = ref(false);
+
+function handleItemWon(item: any) {
+    editingItem.value = null;
+    previewItem.value = null;
     const defaultBid = item.currentBid || item.cost || item.maxBid || 0;
-    const input = prompt(`Enter winning bid for "${item.title || item.identity}":`, String(Number(defaultBid).toFixed(2)));
-    if (input === null) return;
-    const finalBid = parseFloat(input);
+    winTargetItem.value = item;
+    winningBidInput.value = Number(defaultBid).toFixed(2);
+    winDrawerOpen.value = true;
+}
+
+async function submitWinningBid() {
+    const item = winTargetItem.value;
+    if (!item || isSubmittingWin.value) return;
+    const finalBid = parsePriceValue(winningBidInput.value, 'first', 0);
     if (isNaN(finalBid) || finalBid <= 0) {
-        addToast({ type: 'warning', message: 'Invalid winning bid amount.' });
+        addToast({ type: 'warning', message: 'Enter a winning bid amount greater than $0.00.' });
         return;
     }
+    isSubmittingWin.value = true;
     try {
         await recordAuctionWin(item.$id, finalBid);
+        winDrawerOpen.value = false;
+        winTargetItem.value = null;
         addToast({ type: 'success', message: `🏆 Won! "${item.title || item.identity}" graduated to Acquired inventory ($${finalBid.toFixed(2)}).` });
     } catch (e: any) {
-        addToast({ type: 'error', message: 'Failed to record win: ' + e.message });
+        addToast({ type: 'error', message: toUserMessage(e, 'Could not record winning bid.') });
+    } finally {
+        isSubmittingWin.value = false;
     }
 }
 
@@ -321,10 +397,14 @@ const editingItem = ref<CartItem | null>(null);
 const previewItem = ref<CartItem | null>(null);
 
 function openPreview(item: CartItem) {
+    winDrawerOpen.value = false;
+    editingItem.value = null;
     previewItem.value = item;
 }
 
 function openEditModal(item: CartItem) {
+    winDrawerOpen.value = false;
+    previewItem.value = null;
     editingItem.value = { ...item }; 
 }
 

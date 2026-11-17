@@ -9,10 +9,10 @@
 ## 🚀 How to Resume in Any New Chat (Copy-Paste Kickoff)
 
 ```text
-/plan Read docs/UX_KRUG_AUDIT_BACKLOG.md and .agents/skills/laws-of-ux/SKILL.md, then draft an implementation plan for Wave 1 (P0).
+/plan Read docs/UX_KRUG_AUDIT_BACKLOG.md and .agents/skills/laws-of-ux/SKILL.md, then draft an implementation plan for Wave 2 (P1).
 ```
 
-*(Swap `Wave 1 (P0)` for `Wave 2 (P1)` or `Wave 3 (P2)` as each wave is completed.)*
+*(Swap `Wave 2 (P1)` for `Wave 3 (P2)` as each wave is completed.)*
 
 ---
 
@@ -28,21 +28,21 @@
 
 ---
 
-## 🚨 Wave 1 (P0) — Role Isolation, Broken Clicks, Native Browser Dialogs & Media Fallbacks
+## ✅ Wave 1 (P0) — Role Isolation, Broken Clicks, Native Browser Dialogs & Media Fallbacks (`Completed Nov 17, 2026`)
 
-- [ ] **1. Two-Way Role Visibility Isolation (`Consignor` Leaks vs. `Sweat-Only` Lockout):**
-  - Gate `src/components/coop/CoopLaborView.vue:2`, `src/components/coop/CoopGovernanceView.vue:2`, `src/components/coop/FounderVaultView.vue:2`, `src/components/settings/SettingsManager.vue:64-75`, and `src/components/social/SocialCrossPostView.vue:2` behind `canSeeCollectiveFinancials` / `!isConsignor` so Straight Consignors (`BB-`) redirect cleanly to `/dashboard` and never see Collective labor, member rosters, or other consignors' contracts.
-  - Lock `Voting As` (`src/components/coop/CoopGovernanceView.vue:186-193`) to stewards only.
-  - Unblock `$0`-inventory Voting Collective members (`Promoter`, `Enabler`, `Builder`) on `/coop/settlements` (`src/components/sales/SalesList.vue:2`, `src/lib/memberAccess.ts:27-40`) and give `/coop/settlements` an honest `<h1>Monthly Settlements</h1>` Trunk Test header.
-- [ ] **2. Broken Runtime Handlers, Orphaned `/scan` Split-Brain & Storefront `/cart` Leak:**
+- [x] **1. Two-Way Role Visibility Isolation (`Consignor` Leaks vs. `Sweat-Only` Lockout):**
+  - Gate `src/components/coop/CoopLaborView.vue:2`, `src/components/coop/CoopGovernanceView.vue:2`, `src/components/coop/FounderVaultView.vue:2`, `src/components/settings/SettingsManager.vue:64-75`, and `src/components/social/SocialCrossPostView.vue:2` behind `canSeeCollectiveFinancials` / `!isConsignor` (`<CollectiveAccessGate>`) so Straight Consignors (`BB-`) redirect cleanly to `/dashboard` and never see Collective labor, member rosters, or other consignors' contracts.
+  - Lock `Voting As` (`src/components/coop/CoopGovernanceView.vue:186-193`) to stewards only (`v-if="isStewardOrFounder"`).
+  - Unblock `$0`-inventory Voting Collective members (`Promoter`, `Enabler`, `Builder`) on `/coop/settlements` (`src/components/sales/SalesList.vue:2`, `src/lib/memberAccess.ts:27-40`, `src/pages/api/bml/session.ts`) and give `/coop/settlements` an honest `<h1>Monthly Settlements</h1>` Trunk Test header.
+- [x] **2. Broken Runtime Handlers, Orphaned `/scan` Split-Brain & Storefront `/cart` Leak:**
   - Fix undefined `@click="loadLabSnapshot"` ➔ `@click="loadAllLabData(true)"` in `src/components/studios/AppraisalPricingLabView.vue:1515`.
   - 302-redirect orphaned `src/pages/scan.astro:1-19` (`src/components/CameraCapture.astro:751` banned `alert()` + stale `13%` fee) to `/scout`.
   - Fix `src/components/store/StoreHeaderCart.astro:9-39` linking public shoppers to internal `/cart` (`CartView.vue` sourcing tracker) with hardcoded `cartCount = 2` and dead `<a>` links.
-- [ ] **3. Eliminate Remaining `window.confirm` / `alert` / `prompt` & Unconfirmed 1-Click Deletions:**
-  - Replace native `confirm` / `window.confirm` / `prompt` in `src/components/warehouses/LocationDetailView.vue:1987`, `src/components/coop/FounderVaultView.vue:892`, `src/components/settings/SettingsManager.vue:624`, and `src/components/inventory/CartView.vue:290` with `askConfirm()` / `<SlideOverDrawer>`.
+- [x] **3. Eliminate Remaining `window.confirm` / `alert` / `prompt` & Unconfirmed 1-Click Deletions:**
+  - Replace native `confirm` / `window.confirm` / `prompt` in `src/components/warehouses/LocationDetailView.vue:1987`, `src/components/coop/FounderVaultView.vue:892`, `src/components/settings/SettingsManager.vue:624`, and `src/components/cart/CartView.vue:290` with `askConfirm()` / `<SlideOverDrawer>`.
   - Add `askConfirm()` guards before 1-click deletions in `src/components/coop/CoopLaborView.vue:1165`, `src/components/coop/CoopGovernanceView.vue:569,690`, `src/components/settings/SettingsManager.vue:152,224`, and `src/components/org/OrgSettingsView.vue:170`.
-- [ ] **4. Standardize `<ItemThumbnail>` (`/preview` ➔ `/view` `@error` Fallback — System Invariant #3):**
-  - Replace raw `<img>` tags missing `/view` retry + `galleryImageIds` fallback across `src/components/sales/SalesImporter.vue:764-770,1048-1054,1847-1853`, `src/components/warehouses/LocationSyncView.vue:1001-1006,1128-1133,1623-1628`, `src/components/purchases/PurchaseEditor.vue:609-614,700,720-725`, `src/components/purchases/HaulIngestionWizard.vue:293,522`, `src/components/scout/ScoutPurchaseTray.vue:447`, `src/components/social/SocialItemPickerModal.vue:128-134`, `src/components/sales/LinkTicketInventoryModal.vue:150`, and `src/components/store/StoreCatalog.vue:134-139,268-273`.
+- [x] **4. Standardize `<ItemThumbnail>` (`/preview` ➔ `/view` `@error` Fallback — System Invariant #3):**
+  - Upgraded `src/components/common/ItemThumbnail.vue` with 2-stage `/preview` ➔ `/view` (`preview: false`) + `galleryImageIds` fallback and migrated raw `<img>` tags across `src/components/sales/SalesImporter.vue`, `src/components/warehouses/LocationSyncView.vue`, `src/components/purchases/PurchaseEditor.vue`, `src/components/purchases/HaulIngestionWizard.vue`, `src/components/scout/ScoutPurchaseTray.vue`, `src/components/social/SocialItemPickerModal.vue`, `src/components/sales/LinkTicketInventoryModal.vue`, and `src/components/store/StoreCatalog.vue`.
 
 ---
 

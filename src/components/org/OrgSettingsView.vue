@@ -471,7 +471,17 @@ const addDomain = () => {
     newDomain.value = '';
 };
 
-const removeDomain = (idx: number) => {
+const removeDomain = async (idx: number) => {
+    const dom = orgSettings.value.allowedDomains?.[idx];
+    if (!dom) return;
+    const ok = await confirmDialog(
+        `Remove allowed domain "${dom}" from your organization?`,
+        'Remove Allowed Domain',
+        'Remove Domain',
+        'Cancel',
+        'btn-error'
+    );
+    if (!ok) return;
     if (orgSettings.value.allowedDomains) {
         orgSettings.value.allowedDomains.splice(idx, 1);
         saveOrgSettings();
@@ -489,7 +499,17 @@ const addLocation = () => {
     newLocation.value = '';
 };
 
-const removeLocation = (idx: number) => {
+const removeLocation = async (idx: number) => {
+    const loc = orgSettings.value.placedLocations?.[idx];
+    if (!loc) return;
+    const ok = await confirmDialog(
+        `Remove placed location "${loc}"?`,
+        'Remove Placed Location',
+        'Remove Location',
+        'Cancel',
+        'btn-error'
+    );
+    if (!ok) return;
     if (orgSettings.value.placedLocations) {
         orgSettings.value.placedLocations.splice(idx, 1);
         saveOrgSettings();

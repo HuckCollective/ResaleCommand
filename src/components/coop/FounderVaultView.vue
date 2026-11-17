@@ -1,4 +1,5 @@
 <template>
+  <CollectiveAccessGate>
   <div class="space-y-6">
     <!-- 1. TOP HEADER & PRIMARY ACTIONS -->
     <div class="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
@@ -631,13 +632,17 @@
       @upvote="upvoteById"
     />
   </div>
+  </CollectiveAccessGate>
 </template>
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
 import { Icon } from '@iconify/vue';
 import { useAuth } from '../../composables/useAuth';
+import { useMemberCapabilities } from '../../lib/memberAccess';
 import { addToast } from '../../stores/toast';
+import { askConfirm } from '../../stores/confirm';
+import CollectiveAccessGate from '../common/CollectiveAccessGate.vue';
 import BottomActionDock from '../common/BottomActionDock.vue';
 import AiFeedbackButton from '../common/AiFeedbackButton.vue';
 import VaultNoteDrawer, { type PlaybookPresetItem } from './VaultNoteDrawer.vue';
@@ -889,7 +894,14 @@ async function handleDeleteFromDrawer(id: string) {
     isDrawerOpen.value = false;
     return;
   }
-  if (!window.confirm(`Delete "${target.title}" from the Vault?`)) return;
+  const ok = await askConfirm(
+    `Delete "${target.title}" from the Vault?`,
+    'Delete Vault Card',
+    'Delete Card',
+    'Cancel',
+    'btn-error'
+  );
+  if (!ok) return;
   notes.value = notes.value.filter((n) => n.id !== id);
   isDrawerOpen.value = false;
   await persist();
@@ -915,7 +927,10 @@ async function copyText(text: string) {
   }
 }
 
+const { capabilities } = useMemberCapabilities();
+
 onMounted(async () => {
+  if (!capabilities.value.canSeeCollectiveFinancials) return;
   const params = new URLSearchParams(window.location.search);
   const tabParam = params.get('tab');
   if (tabParam === 'reports') {

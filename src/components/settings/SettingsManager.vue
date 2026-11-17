@@ -1,4 +1,5 @@
 <template>
+  <CollectiveAccessGate>
   <div class="space-y-6">
     <div v-if="!currentTeam" class="alert alert-info">
       <Icon icon="solar:info-circle-bold" class="w-6 h-6 shrink-0" />
@@ -149,7 +150,7 @@
           <div v-for="(m, idx) in policy.members" :key="m.name + idx" class="p-4 rounded-2xl bg-base-200/40 border border-base-300 space-y-3">
             <div class="flex items-center justify-between gap-2">
               <div class="font-black text-sm truncate">{{ m.name }}</div>
-              <button v-if="canEditGlobal && policy.members.length > 1" type="button" class="btn btn-ghost btn-xs text-error" @click="policy.members.splice(idx, 1)">Remove</button>
+              <button v-if="canEditGlobal && policy.members.length > 1" type="button" class="btn btn-ghost btn-xs text-error" @click="removeMemberFromSettings(idx)">Remove</button>
             </div>
             <div class="flex flex-wrap gap-1.5">
               <button
@@ -221,7 +222,7 @@
               <span class="badge badge-warning font-mono font-black">🔒 {{ c.prefix }}</span>
               <input v-model="c.displayName" type="text" :disabled="!canEditGlobal" class="input input-bordered input-sm w-56 max-w-full" />
             </div>
-            <button v-if="canEditGlobal" type="button" class="btn btn-ghost btn-xs text-error" @click="policy.consignors.splice(idx, 1)">Remove Contract</button>
+            <button v-if="canEditGlobal" type="button" class="btn btn-ghost btn-xs text-error" @click="removeConsignorFromSettings(idx)">Remove Contract</button>
           </div>
 
           <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -374,12 +375,16 @@
       <span v-if="error" class="text-error text-sm font-bold">{{ error }}</span>
     </div>
   </div>
+  </CollectiveAccessGate>
 </template>
 
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue';
 import { Icon } from '@iconify/vue';
 import { useAuth } from '../../composables/useAuth';
+import { useMemberCapabilities } from '../../lib/memberAccess';
+import { askConfirm } from '../../stores/confirm';
+import CollectiveAccessGate from '../common/CollectiveAccessGate.vue';
 import OrgSettingsView from '../org/OrgSettingsView.vue';
 import BookmarkletRegistryPanel from '../bml/BookmarkletRegistryPanel.vue';
 import {
@@ -408,6 +413,7 @@ import {
 type SettingsTab = 'personas' | 'locations' | 'team' | 'hardware';
 
 const { currentTeam, teams, user, ownedTeam, updateTeamPrefs, updatePrefs } = useAuth();
+const { capabilities } = useMemberCapabilities();
 const loading = ref(false);
 const saving = ref(false);
 const message = ref('');
@@ -508,6 +514,34 @@ const deriveRoleLabel = (m: CoopMemberProfile): CoopMemberProfile['role'] => {
   if (hats.length === 1 && hats[0] === 'consignor') return 'Consignor';
   if (!hats.some((h) => MEMBER_HAT_META[h].usesPrefix)) return 'Marketing & Social Enabler';
   return hats.includes('founder') ? 'Co-op Member' : 'Partner Curator';
+};
+
+const removeMemberFromSettings = async (idx: number) => {
+  const target = policy.value.members[idx];
+  if (!target) return;
+  const ok = await askConfirm(
+    `Remove ${target.name} from the Collective Roster? (Click Save Settings to enact.)`,
+    'Remove Roster Member',
+    'Remove Member',
+    'Cancel',
+    'btn-error'
+  );
+  if (!ok) return;
+  policy.value.members.splice(idx, 1);
+};
+
+const removeConsignorFromSettings = async (idx: number) => {
+  const target = policy.value.consignors[idx];
+  if (!target) return;
+  const ok = await askConfirm(
+    `Remove consignor contract for ${target.displayName || target.prefix} (${target.prefix})? (Click Save Settings to enact.)`,
+    'Remove Consignor Contract',
+    'Remove Contract',
+    'Cancel',
+    'btn-error'
+  );
+  if (!ok) return;
+  policy.value.consignors.splice(idx, 1);
 };
 
 const addMember = () => {
@@ -621,8 +655,12 @@ const saveSettings = async () => {
 
     const newOnes = form.value.partnerPrefixes.filter((p) => p.isNew && p.prefix);
     if (newOnes.length > 0) {
-      const ok = window.confirm(
-        `Register ${newOnes.map((p) => p.prefix).join(', ')}? Once printed on tags, a barcode prefix is permanent.`
+      const ok = await askConfirm(
+        `Register ${newOnes.map((p) => p.prefix).join(', ')}? Once printed on physical tags, a barcode prefix is permanent.`,
+        'Lock New Barcode Prefix',
+        'Register & Lock Prefix',
+        'Cancel',
+        'btn-primary'
       );
       if (!ok) {
         saving.value = false;
@@ -689,6 +727,7 @@ const saveSettings = async () => {
 };
 
 onMounted(async () => {
+  if (!capabilities.value.canSeeCollectiveFinancials) return;
   if (typeof window !== 'undefined') {
     const tab = new URLSearchParams(window.location.search).get('tab');
     if (tab === 'personas' || tab === 'locations' || tab === 'team' || tab === 'hardware') activeTab.value = tab;
@@ -699,6 +738,7 @@ onMounted(async () => {
 });
 
 watch(currentTeam, async () => {
+  if (!capabilities.value.canSeeCollectiveFinancials) return;
   await Promise.all([loadSettings(), loadWarehouses()]);
 });
 </script>
