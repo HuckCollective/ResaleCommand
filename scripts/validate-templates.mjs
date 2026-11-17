@@ -1640,6 +1640,67 @@ for (const contract of transportContracts) {
     }
 }
 
+// 20. WAVE 3 (P2) TRUNK TEST <h1> LANDMARKS, SINGLE-CPA DOCKS, HUCKLEBERRY TOKENS & PLAIN-ENGLISH SCRUB
+{
+    const fail = (msg) => { console.error(`❌ [Wave 3 P2 Guard §20] ${msg}`); hasErrors = true; };
+    const read = (p) => (fs.existsSync(p) ? fs.readFileSync(p, 'utf8') : '');
+
+    // 20A. Krug #5 Trunk Test <h1> landmarks on Auth, Join, Speed Entry, Sales Import, Scout Trackers & Subsite
+    const h1CheckedFiles = [
+        'src/components/auth/LoginView.vue',
+        'src/components/auth/SignupView.vue',
+        'src/pages/join.astro',
+        'src/pages/purchases/speed-entry.astro',
+        'src/pages/sales/import/[...location].astro',
+        'src/pages/scout/[...view].astro',
+        'src/pages/subsite/index.astro',
+    ];
+    for (const rel of h1CheckedFiles) {
+        if (!/<h1\b/.test(read(rel))) {
+            fail(`${rel} must include a visible <h1> landmark for Krug #5 Trunk Test orientation.`);
+        }
+    }
+
+    // 20B. /join 1-click recovery + zero light-only bg-gray-50 / data-theme="luxury"
+    const joinSrc = read('src/pages/join.astro');
+    if (!/href=["']\/login["']/.test(joinSrc) || !/href=["']\/signup["']/.test(joinSrc) || /bg-gray-50/.test(joinSrc)) {
+        fail('src/pages/join.astro must provide 1-click Sign In (/login) + Request Fresh Invite (/signup) recovery and use semantic huckleberry tokens.');
+    }
+    for (const subFile of ['src/pages/subsite/index.astro', 'src/pages/subsite/item/[id].astro']) {
+        if (/data-theme=["']luxury["']/.test(read(subFile))) {
+            fail(`${subFile} must use data-theme="huckleberry" instead of data-theme="luxury".`);
+        }
+    }
+
+    // 20C. <CoopSubNav> on /coop (CoopCharterView.vue) & <BottomActionDock> on SettingsManager.vue
+    if (!/<CoopSubNav\b/.test(read('src/components/coop/CoopCharterView.vue'))) {
+        fail('src/components/coop/CoopCharterView.vue must mount <CoopSubNav> for signed-in Collective members.');
+    }
+    if (!/<BottomActionDock\b/.test(read('src/components/settings/SettingsManager.vue'))) {
+        fail('src/components/settings/SettingsManager.vue must use <BottomActionDock> for its Save Settings action bar (Law 5).');
+    }
+
+    // 20D. Zero fake subtotal * 4 retail multiplier in ScoutPurchaseList.vue & zero leaked internal IDs in templates
+    const scoutListSrc = read('src/components/scout/ScoutPurchaseList.vue');
+    if (/\*\s*4\b/.test(scoutListSrc)) {
+        fail('src/components/scout/ScoutPurchaseList.vue must not invent fake subtotal * 4 retail math.');
+    }
+    const idScrubFiles = [
+        'src/components/coop/CoopMonthLockBar.vue',
+        'src/components/coop/FounderVaultView.vue',
+        'src/components/dashboard/AiUsageCard.vue',
+        'src/components/studios/AppraisalPricingLabView.vue',
+        'src/components/org/OrgSettingsView.vue',
+    ];
+    for (const rel of idScrubFiles) {
+        const rawTpl = (read(rel).split('<script')[0] || '').replace(/<!--[\s\S]*?-->/g, '');
+        const visibleText = rawTpl.replace(/<[^>]+>/g, ' ').replace(/\{\{[\s\S]*?\}\}/g, ' ');
+        if (/\{\{\s*currentTeam\.\$id\s*\}\}/.test(rawTpl) || /unlockHistory|src\/lib\/devAiRouting\.ts|items_dev|ai_appraisal_rules_v1/.test(visibleText)) {
+            fail(`${rel} template must not expose internal identifiers (unlockHistory, src/lib/devAiRouting.ts, items_dev, ai_appraisal_rules_v1, currentTeam.$id).`);
+        }
+    }
+}
+
 if (!hasErrors) {
     console.log(`✅ Clean lint! All ${vueFiles.length} Vue SFCs, ${tsFiles.length} TS files, TDZ declaration order, scripts/ allowlist, Zero Hardcoded Locations, access-control guards, and price-parsing invariants passed with ZERO errors!`);
 } else {

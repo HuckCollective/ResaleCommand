@@ -216,10 +216,9 @@
         </div>
       </div>
 
-    <!-- LOADING STATE -->
-    <div v-if="loading && purchases.length === 0" class="flex flex-col items-center justify-center py-16 gap-3">
-      <span class="loading loading-spinner loading-lg text-primary"></span>
-      <span class="text-xs font-bold opacity-60">Loading Purchases...</span>
+    <!-- SKELETON LOADING STATE -->
+    <div v-if="loading && purchases.length === 0" class="space-y-3 py-4">
+      <div v-for="n in 4" :key="n" class="skeleton h-16 w-full rounded-2xl"></div>
     </div>
 
     <!-- EMPTY STATE -->

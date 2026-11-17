@@ -16,7 +16,7 @@
     </div>
 
     <!-- MAIN CONTENT AREA (Intake Cockpit) -->
-    <div class="flex-1 p-4 md:p-6 space-y-6 w-full max-w-7xl mx-auto pb-60 sm:pb-72">
+    <div class="flex-1 p-4 md:p-6 pb-6 space-y-6 w-full max-w-7xl mx-auto">
 
         <!-- GUEST PREVIEW BANNER (logged-out visitors) -->
         <div v-if="isGuest" class="rounded-2xl border border-secondary/40 bg-secondary/10 p-3 sm:p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
@@ -124,7 +124,7 @@
 
         <!-- Scrollable Report Body (flex-1 overflow-y-auto w-full - Scrollbar on the extreme right of the window) -->
         <div class="flex-1 overflow-y-auto w-full">
-            <div class="w-full max-w-4xl mx-auto px-4 sm:px-6 md:px-8 pt-5 pb-44 sm:pb-36 space-y-6">
+            <div class="w-full max-w-4xl mx-auto px-4 sm:px-6 md:px-8 pt-5 pb-8 space-y-6">
                 <!-- 3. RESULTS (ITEM CARDS) -->
                 <div id="scout-results-section" class="space-y-6">
             <div v-for="(item, index) in ((result.items && result.items.length > 0) ? result.items : [result])" :key="index" class="card bg-base-100 shadow-sm border border-base-200">
@@ -1188,17 +1188,17 @@
                         <span class="font-extrabold uppercase text-[10px] tracking-tight">New Scout</span>
                     </button>
 
-                    <!-- Dock Item 2: Re-Identify Button (Warning Pattern) -->
+                    <!-- Dock Item 2: Re-Identify Button (Secondary Outline Pattern — Single CPA Law) -->
                     <button 
                         type="button" 
                         @click="handleAnalyze" 
-                        class="h-11 sm:h-12 my-auto px-4 rounded-2xl flex flex-col items-center justify-center gap-0.5 transition-all duration-200 bg-warning text-warning-content font-black shadow-md border border-warning-content/25 active:scale-95 hover:brightness-110"
+                        class="h-11 sm:h-12 my-auto px-4 rounded-2xl flex flex-col items-center justify-center gap-0.5 transition-all duration-200 bg-warning/15 hover:bg-warning/25 text-warning font-black border border-warning/40 active:scale-95"
                         :disabled="loading"
                         title="Re-analyze Item with AI"
                     >
-                        <span v-if="loading" class="loading loading-spinner loading-sm text-warning-content"></span>
+                        <span v-if="loading" class="loading loading-spinner loading-sm text-warning"></span>
                         <template v-else>
-                            <Icon icon="solar:magic-stick-3-bold" class="w-4.5 h-4.5 drop-shadow-xs" />
+                            <Icon icon="solar:magic-stick-3-bold" class="w-4.5 h-4.5" />
                             <span class="font-black uppercase text-[11px] tracking-wide leading-none">Re-Identify</span>
                         </template>
                     </button>
@@ -1340,10 +1340,13 @@
                 v-if="result" 
                 type="button"
                 @click="isResultsModalOpen = true" 
-                class="flex-1 sm:flex-initial h-11 sm:h-12 my-auto px-4 rounded-2xl flex flex-col items-center justify-center gap-0.5 transition-all duration-200 bg-primary text-primary-content font-black shadow-md border border-primary-content/25 active:scale-95 hover:brightness-110"
+                :class="canSaveReport
+                  ? 'bg-primary/15 hover:bg-primary/25 text-primary border border-primary/40 font-black'
+                  : 'bg-primary text-primary-content font-black shadow-md border border-primary-content/25 hover:brightness-110'"
+                class="flex-1 sm:flex-initial h-11 sm:h-12 my-auto px-4 rounded-2xl flex flex-col items-center justify-center gap-0.5 transition-all duration-200 active:scale-95"
                 title="Open current scouting report"
             >
-                <Icon icon="solar:document-text-bold" class="w-4.5 h-4.5 drop-shadow-xs" />
+                <Icon icon="solar:document-text-bold" class="w-4.5 h-4.5" />
                 <span class="font-black uppercase text-[11px] tracking-wide leading-none">View Report</span>
             </button>
 

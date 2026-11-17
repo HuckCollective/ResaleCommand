@@ -923,7 +923,7 @@
             
             <button 
               v-if="activeView === 'matching'"
-              class="btn btn-sm btn-primary shadow-md shadow-primary/20 gap-1.5" 
+              class="btn btn-sm h-11 md:h-9 btn-outline btn-primary gap-1.5 font-bold" 
               :disabled="matchedCount === 0 || isImporting" 
               @click="executeImport"
             >
@@ -933,7 +933,7 @@
 
             <button
               v-else-if="activeView === 'settlement' && partnerSettlements.length > 0"
-              class="btn btn-sm btn-success text-white shadow-md shadow-success/20 gap-1.5"
+              class="btn btn-sm h-11 md:h-9 btn-outline btn-success gap-1.5 font-bold"
               @click="exportAllPartnerPdfs"
             >
               <Icon icon="solar:file-download-bold" class="w-4 h-4" />
@@ -1464,7 +1464,7 @@
       <template #right>
         <button 
           v-if="unmatchedCount > 0"
-          class="btn btn-sm btn-secondary font-bold gap-1.5 shadow-sm"
+          class="btn btn-sm h-11 md:h-9 btn-outline btn-secondary font-bold gap-1.5"
           :disabled="isAutoCreatingAll"
           @click="autoCreateAllUnmatched"
           title="Auto-create all remaining unmatched rows with sequential barcodes and status=sold"
@@ -1477,7 +1477,7 @@
 
         <button 
           v-if="activeView === 'matching'"
-          class="btn btn-sm btn-primary font-bold shadow-md shadow-primary/20 gap-1.5" 
+          class="btn btn-sm h-11 md:h-9 btn-primary text-primary-content font-bold shadow-md shadow-primary/20 gap-1.5" 
           :disabled="matchedCount === 0 || isImporting" 
           @click="executeImport"
         >
@@ -1487,7 +1487,7 @@
 
         <button
           v-else-if="activeView === 'settlement' && partnerSettlements.length > 0"
-          class="btn btn-sm btn-success text-white font-bold shadow-md shadow-success/20 gap-1.5"
+          class="btn btn-sm h-11 md:h-9 btn-success text-success-content font-bold shadow-md shadow-success/20 gap-1.5"
           @click="exportAllPartnerPdfs"
         >
           <Icon icon="solar:file-download-bold" class="w-4 h-4" />

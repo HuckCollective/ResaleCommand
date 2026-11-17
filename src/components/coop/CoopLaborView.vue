@@ -364,7 +364,7 @@
             <button
               v-if="canApproveLabor && pendingMonthsForBulk.length > 0"
               type="button"
-              class="btn btn-xs btn-success rounded-xl font-black gap-1"
+              class="btn btn-sm h-11 md:h-8 btn-outline btn-success rounded-xl font-black gap-1"
               :disabled="isSaving"
               @click="openBulkApproveDrawer"
             >
@@ -372,7 +372,7 @@
             </button>
             <a
               href="/coop/settlements"
-              class="btn btn-xs btn-ghost border border-base-300 rounded-xl font-bold gap-1"
+              class="btn btn-sm h-11 md:h-8 btn-ghost border border-base-300 rounded-xl font-bold gap-1"
             >
               <span>View in Settlements</span>
               <Icon icon="solar:arrow-right-linear" class="w-3.5 h-3.5" />
@@ -386,16 +386,20 @@
             v-for="pill in statusFilterOptions"
             :key="pill.id"
             type="button"
-            class="btn btn-xs rounded-xl font-bold gap-1"
+            class="btn btn-sm h-11 md:h-8 rounded-xl font-bold gap-1"
             :class="statusFilter === pill.id ? 'btn-secondary' : 'btn-ghost bg-base-200/70'"
             @click="statusFilter = pill.id"
           >
             <span>{{ pill.label }}</span>
-            <span class="badge badge-2xs font-mono">{{ pill.count }}</span>
+            <span class="badge badge-2xs font-mono whitespace-nowrap shrink-0">{{ pill.count }}</span>
           </button>
         </div>
 
-        <div class="overflow-x-auto border border-base-200 rounded-2xl">
+        <div v-if="isLoadingLedger && entries.length === 0" class="space-y-2.5 py-2">
+          <div v-for="n in 4" :key="n" class="skeleton h-12 w-full rounded-xl"></div>
+        </div>
+
+        <div v-else class="overflow-x-auto border border-base-200 rounded-2xl">
           <table class="table table-sm">
             <thead>
               <tr class="bg-base-200/60 text-xs font-extrabold uppercase text-base-content/70">

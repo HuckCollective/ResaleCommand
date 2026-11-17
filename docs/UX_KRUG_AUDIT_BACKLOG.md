@@ -9,10 +9,10 @@
 ## 🚀 How to Resume in Any New Chat (Copy-Paste Kickoff)
 
 ```text
-/plan Read docs/UX_KRUG_AUDIT_BACKLOG.md and .agents/skills/laws-of-ux/SKILL.md, then draft an implementation plan for Wave 3 (P2).
+Read docs/UX_KRUG_AUDIT_BACKLOG.md and ACTIVE_SESSION.md — Waves 1 (P0), 2 (P1), and 3 (P2) are 100% completed!
 ```
 
-*(Wave 1 (P0) and Wave 2 (P1) are completed — Wave 3 (P2) is next.)*
+*(Wave 1 (P0), Wave 2 (P1), and Wave 3 (P2) are 100% completed and verified via `validate-templates.mjs` §§18–20.)*
 
 ---
 
@@ -61,16 +61,16 @@
 
 ---
 
-## ✨ Wave 3 (P2) — Mobile `44px` Touch Floor, Single-CPA Docks, Trunk Test `<h1>`s & Goodwill
+## ✅ Wave 3 (P2) — Mobile `44px` Touch Floor, Single-CPA Docks, Trunk Test `<h1>`s & Goodwill (`Completed Nov 17, 2026`)
 
-- [ ] **1. Hick's Law Single-CPA Discipline (`<= 1` Filled Primary CTA) & `<= 7` Inline Chips:**
+- [x] **1. Hick's Law Single-CPA Discipline (`<= 1` Filled Primary CTA) & `<= 7` Inline Chips:**
   - Demote competing filled dock/header buttons in `LocationSyncView.vue:1328-1409` (5 colored buttons), `RicochetLiveSalesPanel.vue:568-603`, `SalesImporter.vue:930,1474-1495`, `PurchaseEditor.vue:1046-1072`, `PurchaseItemsTray.vue:262-281`, `CoopExpensesLedger.vue:16-43`, `ScoutView.vue:1192-1385`, `AiUsageCard.vue:95-117`, `SocialCrossPostView.vue:32,569`, `CoopCharterView.vue:17,72,128,285`, `CoopGovernanceView.vue:68,928`, `FounderVaultView.vue:56,599`, `OrgSettingsView.vue`, and `ProfileView.vue`.
   - Group `8–15` inline filter chips in `RicochetLiveSalesPanel.vue:218`, `CoopExpensesLedger.vue:171`, `ScoutPurchaseList.vue:249`, `SocialCrossPostView.vue:313`, `FounderVaultView.vue:322`, and `StoreCatalog.vue:58`.
-- [ ] **2. Krug #5 Trunk Test `<h1>` Landmarks, `.rc-dock-spacer` Cleanup & `/join` Recovery:**
+- [x] **2. Krug #5 Trunk Test `<h1>` Landmarks, `.rc-dock-spacer` Cleanup & `/join` Recovery:**
   - Add `<h1>` landmarks on `/login`, `/signup`, `/join`, `/purchases/speed-entry`, `/sales/import/[...location]`, `/scout/trackers`, `/subsite`, and mount `<CoopSubNav>` on `/coop` for signed-in members; add `/studios` breadcrumb on `/labels/studio`.
   - Add 1-click `Sign In` / `Request Fresh Invite` recovery on `src/pages/join.astro:44,80` and replace light-only `bg-gray-50`/`text-gray-900` (`join.astro:6-15`, `LocationSyncView.vue:70`, `ProfileView.vue:30`, `OrgSettingsView.vue:191`) + `data-theme="luxury"` (`/subsite/*`) with `huckleberry` tokens.
   - Remove manual `pb-60`/`pb-44`/`pb-24` padding on `ScoutView.vue:19,127` and `CoopGovernanceView.vue:2`, and promote `SettingsManager.vue:368` Save bar to `<BottomActionDock>`.
-- [ ] **3. Mobile `<768px` `44px` Touch Floor (`h-11 md:h-*`), `.skeleton` Loaders & Plain-English Scrub:**
+- [x] **3. Mobile `<768px` `44px` Touch Floor (`h-11 md:h-*`), `.skeleton` Loaders & Plain-English Scrub:**
   - Upgrade remaining `<768px` `btn-xs`/`btn-sm` controls to `h-11 md:h-8`, replace bare spinners with `.skeleton` placeholders (`PurchasesList`, `PurchaseEditor`, `SalesList`, `CoopExpensesLedger`, `CoopLaborView`, `FounderVaultView`, `OrgSettingsView`, `ProfileView`, `AppraisalPricingLabView`, `LocationDetailView`), remove fake `subtotal * 4` retail math in `ScoutPurchaseList.vue:204,567`, scrub remaining internal IDs (`items_dev`, `ai_appraisal_rules_v1`, `unlockHistory`, `src/lib/devAiRouting.ts`, `currentTeam.$id`), add `whitespace-nowrap shrink-0` to `.badge` pills, and wrap raw `err.message` toasts in `toUserMessage()`.
 
 ---

@@ -22,9 +22,9 @@
           </span>
           <button
             type="button"
-            class="badge badge-outline font-mono text-xs cursor-pointer hover:border-primary transition-colors"
+            class="badge badge-outline font-mono text-xs cursor-pointer hover:border-primary transition-colors whitespace-nowrap shrink-0"
             :class="devRosterFreshness.isStale ? 'badge-warning' : ''"
-            :title="`Single source: src/lib/devAiRouting.ts (last reviewed ${devRosterFreshness.lastReviewed}) — click to view 4-tier guide`"
+            :title="`4-Tier Model Guide (last reviewed ${devRosterFreshness.lastReviewed}) — click to view 4-tier guide`"
             @click="showGuide = !showGuide"
           >
             🛠️ {{ DEV_AI_ROSTER_SUMMARY_PILL }} • {{ devRosterFreshness.isStale ? 'Review Picker' : devRosterFreshness.reviewMonthLabel }}
@@ -45,7 +45,7 @@
 
         <button
           type="button"
-          class="btn btn-sm btn-outline gap-1.5 rounded-xl font-bold h-10"
+          class="btn btn-sm h-11 md:h-9 btn-outline gap-1.5 rounded-xl font-bold"
           @click="showGuide = !showGuide"
         >
           <Icon icon="solar:question-circle-bold-duotone" class="w-4 h-4 text-primary shrink-0" />
@@ -54,7 +54,7 @@
 
         <button
           type="button"
-          class="btn btn-sm btn-secondary gap-1.5 rounded-xl font-black h-10 px-4 shadow-xs"
+          class="btn btn-sm h-11 md:h-9 btn-outline btn-secondary gap-1.5 rounded-xl font-black px-4"
           @click="openNewCardInDrawer('prompt', 'copilot')"
         >
           <Icon icon="solar:users-group-two-rounded-bold" class="w-4 h-4 shrink-0" />
@@ -63,7 +63,7 @@
 
         <button
           type="button"
-          class="btn btn-sm btn-primary gap-1.5 rounded-xl font-black shadow-md shadow-primary/20 h-10 px-4"
+          class="btn btn-sm h-11 md:h-9 btn-outline btn-primary gap-1.5 rounded-xl font-black px-4"
           @click="openNewCardInDrawer('idea', 'edit')"
         >
           <Icon icon="solar:add-circle-bold" class="w-4 h-4 shrink-0" />
@@ -110,8 +110,8 @@
 
       <div class="p-3.5 rounded-xl bg-base-200/70 border border-base-300 space-y-2 text-xs">
         <div class="flex items-center justify-between gap-2 flex-wrap">
-          <div class="font-black text-base-content">🛠️ IDE-Independent 4-Tier Model Guide (<code class="font-mono text-[11px]">src/lib/devAiRouting.ts</code>)</div>
-          <span class="badge badge-ghost badge-xs font-mono">Reviewed {{ devRosterFreshness.lastReviewed }}</span>
+          <div class="font-black text-base-content">🛠️ IDE-Independent 4-Tier Model Guide</div>
+          <span class="badge badge-ghost badge-xs font-mono whitespace-nowrap shrink-0">Reviewed {{ devRosterFreshness.lastReviewed }}</span>
         </div>
         <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 text-[11px]">
           <div
@@ -318,18 +318,18 @@
         </div>
       </div>
 
-      <!-- Horizontal Pipeline Filter Pills -->
+      <!-- Horizontal Pipeline Filter Pills (<= 7 inline chips per Hick's Law) -->
       <div class="flex items-center gap-1.5 overflow-x-auto pb-0.5 no-scrollbar">
         <button
           v-for="f in PIPELINE_FILTERS"
           :key="f.key"
           type="button"
-          class="btn btn-xs rounded-xl font-bold shrink-0 gap-1.5 h-7 px-3"
+          class="btn btn-sm h-11 md:h-8 rounded-xl font-bold shrink-0 gap-1.5 px-3"
           :class="activeFilter === f.key ? 'btn-primary shadow-2xs' : 'btn-ghost bg-base-200/60 hover:bg-base-200 text-base-content/80'"
           @click="activeFilter = f.key"
         >
           <span>{{ f.label }}</span>
-          <span class="badge badge-xs font-mono whitespace-nowrap" :class="activeFilter === f.key ? 'badge-neutral' : 'badge-ghost'">
+          <span class="badge badge-xs font-mono whitespace-nowrap shrink-0" :class="activeFilter === f.key ? 'badge-neutral' : 'badge-ghost'">
             {{ f.count }}
           </span>
         </button>
@@ -337,8 +337,12 @@
     </div>
 
     <!-- 5. VAULT CARDS GRID OR TABLE VIEW (Read-Only + 1-Tap Copy; Click Opens Drawer) -->
-    <div v-if="loading" class="card bg-base-100 border border-base-200 rounded-2xl p-10 text-center text-sm opacity-60">
-      Loading Cloud Vault…
+    <div v-if="loading" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+      <div v-for="n in 3" :key="n" class="card bg-base-100 border border-base-200 rounded-2xl p-5 space-y-3">
+        <div class="skeleton h-4 w-32 rounded"></div>
+        <div class="skeleton h-6 w-3/4 rounded"></div>
+        <div class="skeleton h-20 w-full rounded-xl"></div>
+      </div>
     </div>
 
     <div
@@ -598,7 +602,7 @@
 
         <button
           type="button"
-          class="btn btn-xs sm:btn-sm btn-secondary rounded-xl font-black gap-1.5"
+          class="btn btn-sm h-11 md:h-8 btn-outline btn-secondary rounded-xl font-black gap-1.5"
           @click="openNewCardInDrawer('prompt', 'copilot')"
         >
           <Icon icon="solar:users-group-two-rounded-bold" class="w-4 h-4" />
@@ -607,7 +611,7 @@
 
         <button
           type="button"
-          class="btn btn-xs sm:btn-sm btn-primary rounded-xl font-black gap-1.5 px-4 shadow-sm"
+          class="btn btn-sm h-11 md:h-8 btn-primary text-primary-content rounded-xl font-black gap-1.5 px-4 shadow-sm"
           @click="openNewCardInDrawer('idea', 'edit')"
         >
           <Icon icon="solar:add-circle-bold" class="w-4 h-4" />
@@ -761,7 +765,6 @@ const PIPELINE_FILTERS = computed<Array<{ key: FilterKey; label: string; count: 
   { key: 'spec', label: '📌 Specs', count: specsCount.value },
   { key: 'report', label: '🚩 AI Reports', count: reportsCount.value },
   { key: 'pending_review', label: '🟡 Pending Review', count: pendingReportsCount.value },
-  { key: 'vetted', label: '🟣/🟢 Vetted & Shipped', count: vettedAndShippedCount.value },
   { key: 'done', label: '✅ Completed', count: doneCount.value },
 ]);
 

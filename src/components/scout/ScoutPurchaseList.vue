@@ -24,22 +24,22 @@
         </div>
       </div>
 
-      <!-- Retail Boutique Potential -->
+      <!-- Scouted Items -->
       <div class="bg-base-200/60 border border-base-300 rounded-2xl p-4 flex items-center justify-between shadow-xs">
         <div>
-          <div class="text-[10px] uppercase font-bold tracking-wider opacity-60">Boutique Potential</div>
-          <div class="text-2xl sm:text-3xl font-black text-secondary mt-0.5">${{ aggregateTotals.boutique.toFixed(2) }}</div>
+          <div class="text-[10px] uppercase font-bold tracking-wider opacity-60">Scouted Items</div>
+          <div class="text-2xl sm:text-3xl font-black text-secondary mt-0.5">{{ aggregateTotals.items }}</div>
         </div>
         <div class="w-10 h-10 rounded-xl bg-secondary/10 text-secondary flex items-center justify-center shrink-0">
-          <Icon icon="solar:star-fall-minimalistic-2-bold" class="w-6 h-6" />
+          <Icon icon="solar:box-minimalistic-bold" class="w-6 h-6" />
         </div>
       </div>
 
-      <!-- ROI Multiple -->
+      <!-- Avg Cost / Item -->
       <div class="bg-base-200/60 border border-base-300 rounded-2xl p-4 flex items-center justify-between shadow-xs">
         <div>
-          <div class="text-[10px] uppercase font-bold tracking-wider opacity-60">Projected ROI</div>
-          <div class="text-2xl sm:text-3xl font-black text-success mt-0.5">{{ aggregateTotals.roi }}</div>
+          <div class="text-[10px] uppercase font-bold tracking-wider opacity-60">Avg Cost / Item</div>
+          <div class="text-2xl sm:text-3xl font-black text-success mt-0.5">{{ aggregateTotals.avgCostLabel }}</div>
         </div>
         <div class="w-10 h-10 rounded-xl bg-success/10 text-success flex items-center justify-center shrink-0">
           <Icon icon="solar:chart-2-bold" class="w-6 h-6" />
@@ -58,10 +58,20 @@
       </p>
     </div>
 
-    <!-- Loading State -->
-    <div v-if="loading && draftPurchases.length === 0" class="flex flex-col items-center justify-center py-16 text-center space-y-3">
-      <span class="loading loading-spinner loading-lg text-primary"></span>
-      <p class="text-xs font-bold uppercase tracking-wider opacity-50">Loading your draft deals...</p>
+    <!-- Loading Skeleton State -->
+    <div v-if="loading && draftPurchases.length === 0" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 py-4">
+      <div v-for="n in 3" :key="n" class="card bg-base-100 border border-base-300 rounded-3xl p-5 space-y-4">
+        <div class="flex items-center justify-between gap-2">
+          <div class="skeleton h-10 w-40 rounded-xl"></div>
+          <div class="skeleton h-5 w-20 rounded-full"></div>
+        </div>
+        <div class="grid grid-cols-3 gap-2">
+          <div class="skeleton h-14 rounded-2xl"></div>
+          <div class="skeleton h-14 rounded-2xl"></div>
+          <div class="skeleton h-14 rounded-2xl"></div>
+        </div>
+        <div class="skeleton h-10 w-full rounded-xl"></div>
+      </div>
     </div>
 
     <!-- Empty State -->
@@ -199,9 +209,9 @@
             </div>
 
             <div class="bg-base-200/50 p-2.5 rounded-2xl border border-base-content/5">
-              <div class="text-[9px] uppercase font-bold opacity-60">Est. Ret.</div>
+              <div class="text-[9px] uppercase font-bold opacity-60">Avg / Item</div>
               <div class="font-black text-sm text-secondary font-mono mt-0.5">
-                ${{ ( (purchase.subtotal || 0) * 4 ).toFixed(2) }}
+                {{ getTrackerItemCount(purchase) > 0 ? `$${((purchase.subtotal || 0) / getTrackerItemCount(purchase)).toFixed(2)}` : '—' }}
               </div>
             </div>
           </div>
@@ -211,7 +221,7 @@
         <div class="p-4 bg-base-200/40 border-t border-base-200 flex items-center justify-between gap-2">
           <button 
             @click="handleResume(purchase)"
-            class="btn btn-primary btn-sm font-black text-primary-content shadow-xs gap-1 grow"
+            class="btn btn-primary btn-sm h-11 md:h-8 font-black text-primary-content shadow-xs gap-1 grow"
             title="Resume scouting items into this purchase"
           >
             <Icon icon="solar:play-circle-bold" class="w-4 h-4" />
@@ -222,7 +232,7 @@
           <button 
             @click="handleDiscardPurchase(purchase)"
             :disabled="actionInProgress === purchase.$id"
-            class="btn btn-ghost btn-sm btn-square text-error/60 hover:text-error hover:bg-error/10"
+            class="btn btn-ghost btn-sm h-11 md:h-8 btn-square text-error/60 hover:text-error hover:bg-error/10"
             title="Discard draft purchase"
           >
             <Icon icon="solar:trash-bin-trash-linear" class="w-4 h-4" />
@@ -238,7 +248,7 @@
       subtitle="Choose where you are sourcing today. Items you scout will be ready to review and add directly into this Buy Tracker."
       icon="lucide:truck"
     >
-      <!-- Preset Vendor Chips -->
+      <!-- Preset Vendor Chips (<= 7 per Hick's Law) -->
       <div class="space-y-2 mb-4">
         <label class="text-[10px] uppercase font-bold tracking-wider opacity-60">Quick Presets</label>
         <div class="flex flex-wrap gap-2">
@@ -247,7 +257,7 @@
             :key="preset.name"
             type="button"
             @click="selectPreset(preset.name)"
-            class="btn btn-xs rounded-full font-bold transition-all"
+            class="btn btn-sm h-11 md:h-8 rounded-full font-bold transition-all"
             :class="newVendorName === preset.name ? 'btn-primary shadow-xs' : 'btn-outline border-base-300 hover:border-primary'"
           >
             <span>{{ preset.icon }}</span>
@@ -444,6 +454,7 @@ import { useDockClearance } from '../../composables/useDockClearance';
 const { dockEl, dockHeightRem } = useDockClearance(5.75);
 import { addToast } from '../../stores/toast';
 import { confirmDialog } from '../../stores/confirm';
+import { toUserMessage } from '../../lib/userFacingErrors';
 import SlideOverDrawer from '../common/SlideOverDrawer.vue';
 
 const emit = defineEmits<{
@@ -459,6 +470,7 @@ const handleResume = (purchase: ScoutPurchase) => {
 
 const { 
   draftPurchases, 
+  purchaseItems,
   loading, 
   loadDraftPurchases, 
   startDraftPurchase, 
@@ -512,7 +524,7 @@ const saveCardTitle = async (purchaseId: string) => {
     editingPurchaseId.value = null;
     addToast({ type: 'success', message: `Tracker renamed to "${newName}"` });
   } catch (err: any) {
-    addToast({ type: 'error', message: 'Failed to rename: ' + err.message });
+    addToast({ type: 'error', message: toUserMessage(err, 'Failed to rename tracker.') });
   } finally {
     savingCardTitle.value = false;
   }
@@ -543,29 +555,32 @@ const vendorPresets = [
   { name: 'ShopGoodwill', icon: '💻' },
   { name: 'Flea Market', icon: '🎪' },
   { name: 'Thrift Store', icon: '🛍️' },
-  { name: 'Auction Lot', icon: '🔨' },
-  { name: 'Storage Locker', icon: '📦' }
+  { name: 'Auction Lot', icon: '🔨' }
 ];
 
 onMounted(async () => {
   await loadDraftPurchases();
 });
 
+const getTrackerItemCount = (purchase: ScoutPurchase): number => {
+  if (purchase.$id === activePurchase.value?.$id && purchaseItems.value.length > 0) {
+    return purchaseItems.value.length;
+  }
+  return Number(purchase.itemCount || 0);
+};
+
 const aggregateTotals = computed(() => {
   let cost = 0;
-  let boutique = 0;
+  let items = 0;
 
   draftPurchases.value.forEach(p => {
     cost += (p.subtotal || 0);
-    // Estimate 4x average markup for draft deals
-    boutique += (p.subtotal || 0) * 4;
+    items += getTrackerItemCount(p);
   });
 
-  const profit = Math.max(0, boutique - cost);
-  const roi = cost > 0 ? `${(boutique / cost).toFixed(1)}x` : '0.0x';
-  const margin = boutique > 0 ? Math.round(((boutique - cost) / boutique) * 100) : 0;
+  const avgCostLabel = items > 0 ? `$${(cost / items).toFixed(2)}` : '—';
 
-  return { cost, boutique, profit, roi, margin };
+  return { cost, items, avgCostLabel };
 });
 
 const openNewPurchaseModal = () => {
@@ -590,7 +605,7 @@ const confirmStartPurchase = async () => {
     closeNewPurchaseModal();
     emit('start-purchase', purchase as unknown as ScoutPurchase);
   } catch (err: any) {
-    addToast({ type: 'error', message: 'Failed to start purchase: ' + err.message });
+    addToast({ type: 'error', message: toUserMessage(err, 'Failed to start buy tracker.') });
   } finally {
     creatingPurchase.value = false;
   }
@@ -612,7 +627,7 @@ const handleDiscardPurchase = async (purchase: ScoutPurchase) => {
     await discardPurchase(purchase.$id);
     addToast({ type: 'info', message: `Discarded "${purchase.vendor}".` });
   } catch (err: any) {
-    addToast({ type: 'error', message: 'Discard failed: ' + err.message });
+    addToast({ type: 'error', message: toUserMessage(err, 'Failed to discard buy tracker.') });
   } finally {
     actionInProgress.value = null;
   }

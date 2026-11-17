@@ -4,8 +4,8 @@
       <div class="card-body">
         <div class="text-center space-y-1 mb-5">
           <div class="flex items-center justify-center gap-1.5">
-            <h2 class="text-2xl sm:text-3xl font-black tracking-tight text-primary">{{ siteConfig.shortTitle }}</h2>
-            <span class="badge badge-primary badge-outline badge-sm font-mono font-black">{{ siteConfig.badgeText }}</span>
+            <h1 class="text-2xl sm:text-3xl font-black tracking-tight text-primary">{{ siteConfig.shortTitle }}</h1>
+            <span class="badge badge-primary badge-outline badge-sm font-mono font-black whitespace-nowrap shrink-0">{{ siteConfig.badgeText }}</span>
           </div>
           <p class="text-xs font-semibold text-base-content/70">{{ siteConfig.subtitle }}</p>
           <span v-if="isDevLogin" class="badge badge-primary badge-sm mt-1 absolute top-4 right-4">Dev Mode</span>

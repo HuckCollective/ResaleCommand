@@ -30,7 +30,7 @@
         <div class="flex flex-wrap items-center gap-2 shrink-0">
           <button
             type="button"
-            class="btn btn-sm h-11 md:h-9 btn-primary text-primary-content rounded-xl font-black gap-1.5 px-4 shadow-xs"
+            class="btn btn-sm h-11 md:h-9 btn-outline btn-primary rounded-xl font-black gap-1.5 px-4"
             @click="openNewCampaignDrawer"
           >
             <Icon icon="solar:add-circle-bold" class="w-4 h-4 shrink-0" />
@@ -312,10 +312,10 @@
           <label class="text-xs font-bold text-base-content/80">Target Channels to Cross-Post</label>
           <div class="flex flex-wrap gap-1.5">
             <button
-              v-for="ch in SOCIAL_CHANNELS"
+              v-for="ch in SOCIAL_CHANNELS.slice(0, 6)"
               :key="`form-ch-${ch.id}`"
               type="button"
-              class="btn btn-xs h-10 px-3 rounded-xl font-bold"
+              class="btn btn-sm h-11 md:h-9 px-3 rounded-xl font-bold"
               :class="
                 campaignForm.targetChannels.includes(ch.id)
                   ? 'btn-primary text-primary-content'
@@ -326,6 +326,27 @@
               {{ ch.label }}
             </button>
           </div>
+          <details v-if="SOCIAL_CHANNELS.length > 6" class="pt-1">
+            <summary class="text-xs font-bold text-primary cursor-pointer select-none">
+              +{{ SOCIAL_CHANNELS.length - 6 }} more resale marketplaces
+            </summary>
+            <div class="flex flex-wrap gap-1.5 mt-2">
+              <button
+                v-for="ch in SOCIAL_CHANNELS.slice(6)"
+                :key="`form-ch-more-${ch.id}`"
+                type="button"
+                class="btn btn-sm h-11 md:h-9 px-3 rounded-xl font-bold"
+                :class="
+                  campaignForm.targetChannels.includes(ch.id)
+                    ? 'btn-primary text-primary-content'
+                    : 'btn-ghost bg-base-200/60 border border-base-300'
+                "
+                @click="toggleTargetChannel(ch.id)"
+              >
+                {{ ch.label }}
+              </button>
+            </div>
+          </details>
         </div>
 
         <div class="form-control gap-1">

@@ -73,15 +73,16 @@
 
     <!-- Compact On-Page Body (3-Stat Summary Strip Only) -->
     <div v-show="!isCollapsed" class="p-3.5 sm:p-5 space-y-3">
-      <div v-if="loading && !metrics" class="py-6 flex items-center justify-center gap-2 text-xs text-base-content/70">
-        <span class="loading loading-spinner loading-sm text-primary"></span>
-        <span>Loading Google Cloud Billing reconciliation...</span>
+      <div v-if="loading && !metrics" class="grid grid-cols-1 sm:grid-cols-3 gap-3 py-2">
+        <div class="skeleton h-16 rounded-2xl"></div>
+        <div class="skeleton h-16 rounded-2xl"></div>
+        <div class="skeleton h-16 rounded-2xl"></div>
       </div>
 
       <div v-else-if="error" class="alert alert-error shadow-sm text-xs">
         <Icon icon="solar:danger-triangle-bold" class="w-5 h-5 shrink-0" />
         <span class="break-words">{{ error }}</span>
-        <button type="button" @click="fetchMetrics(true)" class="btn btn-xs btn-outline">Retry</button>
+        <button type="button" @click="fetchMetrics(true)" class="btn btn-sm h-11 md:h-8 btn-outline">Retry</button>
       </div>
 
       <template v-else-if="metrics">
@@ -96,7 +97,7 @@
               type="button"
               @click="logExpense"
               :disabled="loggingExpense || expenseLogged || !activeTenantId"
-              class="btn btn-xs gap-1 font-bold rounded-lg"
+              class="btn btn-sm h-11 md:h-8 gap-1 font-bold rounded-lg"
               :class="expenseLogged ? 'btn-success text-success-content' : 'btn-primary text-primary-content'"
             >
               <Icon
@@ -106,16 +107,16 @@
               />
               <span>{{ expenseLogged ? 'Logged!' : 'Log Expense' }}</span>
             </button>
-            <button type="button" @click="fetchMetrics(true)" :disabled="loading" class="btn btn-xs btn-ghost rounded-lg" title="Refresh">
+            <button type="button" @click="fetchMetrics(true)" :disabled="loading" class="btn btn-sm h-11 md:h-8 btn-ghost rounded-lg" title="Refresh">
               <Icon icon="solar:refresh-linear" class="w-3.5 h-3.5" :class="{ 'animate-spin': loading }" />
             </button>
             <a
               href="/studios/appraisal"
-              class="btn btn-xs btn-secondary rounded-lg font-bold gap-1"
+              class="btn btn-sm h-11 md:h-8 btn-outline rounded-lg font-bold gap-1"
             >
               <span>🔬 Appraisal &amp; Pricing Lab →</span>
             </a>
-            <button type="button" @click="showDetailsDrawer = true" class="btn btn-xs btn-outline rounded-lg font-bold">
+            <button type="button" @click="showDetailsDrawer = true" class="btn btn-sm h-11 md:h-8 btn-outline rounded-lg font-bold">
               Timeline &amp; Prod/Dev Split →
             </button>
           </div>
@@ -156,7 +157,7 @@
             </div>
             <div class="flex items-center justify-between p-3 rounded-xl bg-base-100 border border-base-200">
               <div>
-                <div class="font-bold text-base-content">Development (`items_dev`)</div>
+                <div class="font-bold text-base-content">Development Sandbox</div>
                 <div class="text-[11px] text-base-content/60">{{ metrics.summary.allTime.devScans }} items</div>
               </div>
               <div class="font-mono font-black text-warning">${{ metrics.summary.allTime.devCost.toFixed(2) }}</div>

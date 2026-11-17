@@ -262,7 +262,7 @@
                     <button
                       v-if="!isReceivedStatus(item.status)"
                       type="button"
-                      class="btn btn-xs btn-success text-success-content font-black gap-1 flex-1 h-8 rounded-xl shadow-xs border border-success-content/25 active:scale-95"
+                      class="btn btn-sm h-11 md:h-8 btn-success text-success-content font-black gap-1 flex-1 rounded-xl shadow-xs border border-success-content/25 active:scale-95"
                       :disabled="receivingItemId === item.$id"
                       @click="receiveItem(item)"
                     >
@@ -273,7 +273,7 @@
 
                     <button
                       type="button"
-                      class="btn btn-xs btn-primary text-primary-content font-black gap-1 flex-1 h-8 rounded-xl shadow-xs border border-primary-content/25 active:scale-95"
+                      class="btn btn-sm h-11 md:h-8 btn-outline btn-primary font-black gap-1 flex-1 rounded-xl shadow-xs active:scale-95"
                       @click="openEditItem(item)"
                     >
                       <Icon icon="solar:pen-bold" class="w-3.5 h-3.5" />
@@ -282,7 +282,7 @@
 
                     <button
                       type="button"
-                      class="btn btn-xs btn-ghost text-error hover:bg-error/15 font-bold rounded-xl px-2.5 h-8 active:scale-95"
+                      class="btn btn-sm h-11 md:h-8 btn-ghost text-error hover:bg-error/15 font-bold rounded-xl px-2.5 active:scale-95"
                       :disabled="unlinkingItemId === item.$id"
                       @click="unlinkItem(item)"
                     >

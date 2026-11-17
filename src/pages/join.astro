@@ -3,18 +3,29 @@ import Layout from "../layouts/Layout.astro";
 ---
 
 <Layout title="Joining Team...">
-  <div class="flex min-h-screen items-center justify-center bg-gray-50 px-4 py-12 sm:px-6 lg:px-8">
-    <div class="w-full max-w-md space-y-8 text-center">
-      <h2 class="mt-6 text-3xl font-bold tracking-tight text-gray-900">Joining Team...</h2>
-      <div id="join-loading" class="loading loading-spinner loading-lg text-primary"></div>
-      <div id="join-error" class="text-red-500 hidden"></div>
-      <div id="join-success" class="text-green-500 hidden">
-        <p class="text-xl font-bold mb-2">Successfully joined <span id="join-team-name"></span>!</p>
-        <p class="text-sm text-gray-600 mb-4">Managed by: <span id="join-owners"></span></p>
-        <p class="text-xs text-gray-500 pt-2 border-t border-gray-200">
-          Operates under the <a href="/coop" target="_blank" class="text-primary font-bold underline">Huckleberry Collective Charter</a>
-        </p>
-        <p>Redirecting to dashboard...</p>
+  <div class="flex min-h-screen items-center justify-center bg-base-200 px-4 py-12 sm:px-6 lg:px-8">
+    <div class="card w-full max-w-md bg-base-100 border border-base-300 shadow-2xl rounded-3xl">
+      <div class="card-body p-6 sm:p-8 space-y-6 text-center">
+        <h1 class="text-2xl sm:text-3xl font-black tracking-tight text-base-content">Joining Team...</h1>
+        <div id="join-loading" class="flex flex-col items-center justify-center gap-3 py-4">
+          <div class="skeleton h-12 w-12 rounded-2xl"></div>
+          <div class="skeleton h-4 w-48"></div>
+        </div>
+        <div id="join-error" class="hidden space-y-4">
+          <div id="join-error-text" class="alert alert-error text-xs sm:text-sm font-semibold"></div>
+          <div class="flex flex-wrap items-center justify-center gap-2 pt-1">
+            <a href="/login" class="btn btn-primary btn-sm h-11 md:h-9 font-black text-primary-content rounded-xl">Sign In</a>
+            <a href="/signup" class="btn btn-outline btn-sm h-11 md:h-9 font-bold rounded-xl">Request Fresh Invite</a>
+          </div>
+        </div>
+        <div id="join-success" class="text-success hidden space-y-2">
+          <p class="text-xl font-bold mb-2">Successfully joined <span id="join-team-name"></span>!</p>
+          <p class="text-sm text-base-content/75 mb-4">Managed by: <span id="join-owners"></span></p>
+          <p class="text-xs text-base-content/60 pt-2 border-t border-base-300">
+            Operates under the <a href="/coop" target="_blank" class="text-primary font-bold underline">Huckleberry Collective Charter</a>
+          </p>
+          <p class="text-xs text-base-content/70">Redirecting to dashboard...</p>
+        </div>
       </div>
     </div>
   </div>
@@ -22,13 +33,19 @@ import Layout from "../layouts/Layout.astro";
 
 <script>
   import { auth } from "../lib/auth";
+  import { toUserMessage } from "../lib/userFacingErrors";
 
   const loadingEl = document.getElementById('join-loading') as HTMLElement;
   const errorEl = document.getElementById('join-error') as HTMLElement;
+  const errorTextEl = document.getElementById('join-error-text') as HTMLElement;
   const successEl = document.getElementById('join-success') as HTMLElement;
 
   function showError(message: string) {
-    errorEl.textContent = message;
+    if (errorTextEl) {
+      errorTextEl.textContent = message;
+    } else {
+      errorEl.textContent = message;
+    }
     errorEl.classList.remove('hidden');
     loadingEl.classList.add('hidden');
   }
@@ -77,7 +94,7 @@ import Layout from "../layouts/Layout.astro";
       }, 3000);
     } catch (err: any) {
       console.error(err);
-      showError(err.message || 'Failed to join team.');
+      showError(toUserMessage(err, 'Failed to join team. Your invitation link may have expired.'));
     }
   }
 

@@ -88,7 +88,7 @@
               <a href="/coop" class="link link-primary font-bold ml-1">How partner splits work &rarr;</a>
             </p>
           </div>
-          <button type="button" class="btn btn-sm btn-primary gap-1.5 rounded-xl" :disabled="!canEditGlobal" @click="addPrefixRow">
+          <button type="button" class="btn btn-sm h-11 md:h-8 btn-outline btn-primary gap-1.5 rounded-xl font-bold" :disabled="!canEditGlobal" @click="addPrefixRow">
             <Icon icon="solar:add-circle-bold" class="w-4 h-4" />
             Register New Prefix
           </button>
@@ -141,8 +141,8 @@
             <h3 class="text-lg font-black">Everyone wears the hats that fit. Hats can be combined.</h3>
           </div>
           <div class="flex items-center gap-2 flex-wrap">
-            <input v-model="newMemberName" type="text" placeholder="New member name" class="input input-bordered input-sm rounded-xl w-44" />
-            <button type="button" class="btn btn-sm btn-secondary rounded-xl font-bold" :disabled="!canEditGlobal" @click="addMember">+ Add Member</button>
+            <input v-model="newMemberName" type="text" placeholder="New member name" class="input input-bordered input-sm h-11 md:h-8 rounded-xl w-44" />
+            <button type="button" class="btn btn-sm h-11 md:h-8 btn-outline rounded-xl font-bold" :disabled="!canEditGlobal" @click="addMember">+ Add Member</button>
           </div>
         </div>
 
@@ -188,11 +188,11 @@
             <h3 class="text-lg font-black">Straight % split, fixed shelf rent, or pro-rata booth rent</h3>
           </div>
           <div class="flex items-center gap-2 flex-wrap">
-            <select v-model="newConsignorPrefix" class="select select-bordered select-sm rounded-xl font-mono font-bold text-xs">
+            <select v-model="newConsignorPrefix" class="select select-bordered select-sm h-11 md:h-8 rounded-xl font-mono font-bold text-xs">
               <option value="">Pick a prefix...</option>
               <option v-for="px in availableConsignorPrefixes" :key="px" :value="px">{{ px }}</option>
             </select>
-            <button type="button" class="btn btn-sm btn-warning rounded-xl font-bold" :disabled="!canEditGlobal || !newConsignorPrefix" @click="addConsignorContract">
+            <button type="button" class="btn btn-sm h-11 md:h-8 btn-outline rounded-xl font-bold" :disabled="!canEditGlobal || !newConsignorPrefix" @click="addConsignorContract">
               + Add Consignor Contract
             </button>
           </div>
@@ -365,15 +365,32 @@
       </div>
     </div>
 
-    <!-- Save bar (personas + locations tabs) -->
-    <div v-if="currentTeam && (activeTab === 'personas' || activeTab === 'locations')" class="flex items-center gap-3 flex-wrap">
-      <button type="button" class="btn btn-primary px-8 rounded-xl font-black" :disabled="loading || saving || !canEditGlobal" @click="saveSettings">
-        <span v-if="saving" class="loading loading-spinner loading-sm"></span>
-        {{ canEditGlobal ? 'Save Settings' : '🔒 Founder Required to Save' }}
-      </button>
-      <span v-if="message" class="text-success text-sm font-bold">{{ message }}</span>
-      <span v-if="error" class="text-error text-sm font-bold">{{ error }}</span>
-    </div>
+    <!-- Sticky Bottom Action Dock (personas + locations tabs — Law 5) -->
+    <BottomActionDock
+      :visible="Boolean(currentTeam && (activeTab === 'personas' || activeTab === 'locations'))"
+      placement="viewport"
+    >
+      <template #left>
+        <div class="flex items-center gap-2 text-xs">
+          <span v-if="message" class="text-success font-bold">{{ message }}</span>
+          <span v-else-if="error" class="text-error font-bold">{{ error }}</span>
+          <span v-else class="text-base-content/70 font-semibold">
+            {{ canEditGlobal ? 'Save changes to update Collective prefixes, hats, and location defaults.' : '🔒 Founder required to enact Collective changes.' }}
+          </span>
+        </div>
+      </template>
+      <template #right>
+        <button
+          type="button"
+          class="btn btn-primary btn-sm h-11 md:h-9 px-6 rounded-xl font-black text-primary-content"
+          :disabled="loading || saving || !canEditGlobal"
+          @click="saveSettings"
+        >
+          <span v-if="saving" class="loading loading-spinner loading-xs"></span>
+          {{ canEditGlobal ? 'Save Settings' : '🔒 Founder Required to Save' }}
+        </button>
+      </template>
+    </BottomActionDock>
   </div>
   </CollectiveAccessGate>
 </template>
@@ -384,6 +401,8 @@ import { Icon } from '@iconify/vue';
 import { useAuth } from '../../composables/useAuth';
 import { useMemberCapabilities } from '../../lib/memberAccess';
 import { askConfirm } from '../../stores/confirm';
+import { toUserMessage } from '../../lib/userFacingErrors';
+import BottomActionDock from '../common/BottomActionDock.vue';
 import CollectiveAccessGate from '../common/CollectiveAccessGate.vue';
 import OrgSettingsView from '../org/OrgSettingsView.vue';
 import BookmarkletRegistryPanel from '../bml/BookmarkletRegistryPanel.vue';
@@ -721,7 +740,7 @@ const saveSettings = async () => {
     setTimeout(() => { message.value = ''; }, 3500);
   } catch (err: any) {
     console.error('Failed to save settings:', err);
-    error.value = err.message || 'Failed to save settings.';
+    error.value = toUserMessage(err, 'Failed to save settings.');
   } finally {
     saving.value = false;
   }

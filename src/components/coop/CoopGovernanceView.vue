@@ -1,6 +1,6 @@
 <template>
   <CollectiveAccessGate>
-  <div class="space-y-5 pb-24">
+  <div class="space-y-5">
     <!-- ===================================================== -->
     <!-- 1. /sales-STYLE COMPACT HEADER & 2-BUTTON ACTIONS     -->
     <!-- ===================================================== -->
@@ -66,7 +66,7 @@
 
         <button
           type="button"
-          class="btn btn-sm btn-primary gap-1.5 rounded-xl font-black shadow-md shadow-primary/20 h-10 px-4"
+          class="btn btn-sm h-11 md:h-9 btn-outline btn-primary gap-1.5 rounded-xl font-black px-4"
           @click="openNewProposalDrawer()"
         >
           <Icon icon="solar:add-circle-bold" class="w-4 h-4 shrink-0" />
@@ -913,18 +913,18 @@
       <template #right>
         <button
           type="button"
-          class="btn btn-xs sm:btn-sm btn-outline rounded-xl font-bold gap-1.5"
+          class="btn btn-sm h-11 md:h-8 btn-outline rounded-xl font-bold gap-1.5"
           title="Slide up the Co-op Messages & Bug Reports tray"
           @click="openMessagesTray('list')"
         >
           <Icon icon="solar:chat-round-dots-bold-duotone" class="w-4 h-4 text-info" />
           <span>Messages &amp; Bugs</span>
-          <span v-if="messagesCount > 0" class="badge badge-info badge-2xs font-mono font-bold">{{ messagesCount }}</span>
+          <span v-if="messagesCount > 0" class="badge badge-info badge-2xs font-mono font-bold whitespace-nowrap shrink-0">{{ messagesCount }}</span>
         </button>
 
         <button
           type="button"
-          class="btn btn-xs sm:btn-sm btn-outline border-warning/60 text-warning rounded-xl font-bold gap-1"
+          class="btn btn-sm h-11 md:h-8 btn-outline border-warning/60 text-warning rounded-xl font-bold gap-1"
           title="Snap or paste a screenshot to report a UI bug"
           @click="openMessagesTray('new_bug')"
         >
@@ -934,7 +934,7 @@
 
         <button
           type="button"
-          class="btn btn-xs sm:btn-sm btn-primary rounded-xl font-black gap-1 px-3 shadow-sm"
+          class="btn btn-sm h-11 md:h-8 btn-primary text-primary-content rounded-xl font-black gap-1 px-3 shadow-sm"
           @click="openNewProposalDrawer()"
         >
           <Icon icon="solar:add-circle-bold" class="w-4 h-4" />

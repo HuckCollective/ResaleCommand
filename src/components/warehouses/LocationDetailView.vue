@@ -11,16 +11,16 @@
         <span class="font-bold text-base-content truncate">{{ warehouse?.name || 'Location' }}</span>
       </div>
 
-      <div class="flex items-center gap-2">
+      <div class="flex items-center gap-2 flex-wrap">
         <button 
           type="button" 
           @click="openLocationStagingTray" 
-          class="btn btn-sm btn-outline border-base-300 gap-1.5 font-bold shadow-xs"
+          class="btn btn-sm h-11 md:h-9 btn-outline border-base-300 gap-1.5 font-bold shadow-xs"
           title="Open Outbound Location Manifest Tray"
         >
           <Icon icon="solar:box-minimalistic-bold" class="w-4 h-4 text-primary" />
           <span>Staging Tray</span>
-          <span v-if="activeDraft && (activeDraft.itemCount || activeDraftItems.length)" class="badge badge-xs badge-secondary font-mono font-bold">
+          <span v-if="activeDraft && (activeDraft.itemCount || activeDraftItems.length)" class="badge badge-xs badge-secondary font-mono font-bold whitespace-nowrap shrink-0">
             {{ activeDraft.itemCount || activeDraftItems.length }}
           </span>
         </button>
@@ -28,7 +28,7 @@
         <a 
           v-if="warehouse && activeLocationMeta.usesRicochet" 
           :href="'/warehouse/sync/' + encodeURIComponent(resolveCanonicalLocationCode(warehouse) || warehouse.code || 'MD')" 
-          class="btn btn-sm btn-secondary gap-1.5 font-bold shadow-xs"
+          class="btn btn-sm h-11 md:h-9 btn-outline btn-secondary gap-1.5 font-bold shadow-xs"
         >
           <Icon icon="solar:round-transfer-horizontal-bold-duotone" class="w-4 h-4" />
           <span>Inventory Sync</span>
@@ -37,7 +37,7 @@
         <a 
           v-if="warehouse" 
           :href="'/sales/import/' + encodeURIComponent(resolveCanonicalLocationCode(warehouse) || warehouse.code || 'MD')" 
-          class="btn btn-sm btn-outline btn-success gap-1.5 font-bold shadow-xs"
+          class="btn btn-sm h-11 md:h-9 btn-outline btn-success gap-1.5 font-bold shadow-xs"
         >
           <Icon icon="solar:import-bold-duotone" class="w-4 h-4" />
           <span>Sales Importer</span>
@@ -45,9 +45,12 @@
       </div>
     </div>
 
-    <!-- Loading State -->
-    <div v-if="loading" class="flex justify-center p-16">
-      <span class="loading loading-spinner loading-lg text-primary"></span>
+    <!-- Loading Skeleton State -->
+    <div v-if="loading" class="space-y-4 py-4">
+      <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <div v-for="n in 4" :key="n" class="skeleton h-24 rounded-2xl"></div>
+      </div>
+      <div class="skeleton h-64 w-full rounded-2xl"></div>
     </div>
 
     <!-- Error State -->

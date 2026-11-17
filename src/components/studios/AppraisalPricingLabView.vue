@@ -148,12 +148,13 @@
     <!-- Loading Skeleton -->
     <div
       v-if="loadingLab && !scorecard"
-      class="card bg-base-100 border border-base-300 rounded-2xl p-8 text-center space-y-3"
+      class="card bg-base-100 border border-base-300 rounded-2xl p-6 space-y-4"
     >
-      <span class="loading loading-spinner loading-lg text-primary mx-auto"></span>
-      <p class="text-sm font-bold text-base-content/75">
-        Auditing Estimate-vs-Sold lineage across warehouses, register tickets &amp; Gemini telemetry...
-      </p>
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <div class="skeleton h-40 w-full rounded-2xl"></div>
+        <div class="skeleton h-40 w-full rounded-2xl"></div>
+      </div>
+      <div class="skeleton h-56 w-full rounded-2xl"></div>
     </div>
 
     <!-- =================================================================== -->
@@ -1000,7 +1001,7 @@
               📝 {{ ruleDiffs.length }} Pending Change(s) Before Save:
             </template>
             <template v-else>
-              ✅ Calibration rules are synced with `ai_appraisal_rules_v1` (v{{ liveRules?.version || 1 }}).
+              ✅ Calibration rules are synced to the Collective Ledger (v{{ liveRules?.version || 1 }}).
             </template>
           </div>
           <div v-if="ruleDiffs.length > 0" class="flex items-center gap-1.5 flex-wrap">

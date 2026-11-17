@@ -3,10 +3,10 @@
     <div class="card w-full max-w-lg bg-base-100 shadow-2xl border border-base-300 rounded-3xl">
       <div class="card-body p-6 sm:p-8 space-y-4">
         <div class="text-center space-y-1">
-          <div class="badge badge-primary badge-outline font-bold text-xs">
+          <div class="badge badge-primary badge-outline font-bold text-xs whitespace-nowrap shrink-0">
             {{ hasValidInvite ? '✅ Invitation Verified' : '🤝 Invite-Only Cooperative' }}
           </div>
-          <h2 class="text-2xl sm:text-3xl font-black tracking-tight">{{ heading }}</h2>
+          <h1 class="text-2xl sm:text-3xl font-black tracking-tight">{{ heading }}</h1>
           <p v-if="subheading && !checking" class="text-xs sm:text-sm text-base-content/70">{{ subheading }}</p>
         </div>
 
@@ -42,14 +42,14 @@
             <div class="flex flex-wrap items-center gap-2">
               <button
                 type="button"
-                class="btn btn-xs btn-outline rounded-xl font-bold"
+                class="btn btn-sm h-11 md:h-8 btn-outline rounded-xl font-bold"
                 :disabled="resendBusy || cooldownMs > 0"
                 @click="resend"
               >
                 <span v-if="resendBusy" class="loading loading-spinner loading-xs"></span>
                 {{ cooldownMs > 0 ? `Resend available in ${cooldownLabel}` : 'Resend email' }}
               </button>
-              <button type="button" class="btn btn-xs btn-ghost rounded-xl" @click="editOpen = true">Wrong email?</button>
+              <button type="button" class="btn btn-sm h-11 md:h-8 btn-ghost rounded-xl" @click="editOpen = true">Wrong email?</button>
             </div>
             <p v-if="resendMsg" class="text-[11px] text-base-content/70">{{ resendMsg }}</p>
           </div>

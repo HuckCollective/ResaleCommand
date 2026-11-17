@@ -15,7 +15,7 @@
       <div class="flex items-center gap-2 flex-wrap w-full md:w-auto">
         <a
           href="/purchases/speed-entry?mode=all_expense"
-          class="btn btn-sm sm:btn-md btn-secondary gap-1.5 shadow-md shadow-secondary/20 font-bold flex-1 sm:flex-initial min-h-[40px]"
+          class="btn btn-sm sm:btn-md h-11 md:h-10 btn-outline btn-secondary gap-1.5 shadow-xs font-bold flex-1 sm:flex-initial"
           title="Scan itemized multi-line paper receipt or screenshot into business expenses via OCR"
         >
           <Icon icon="solar:scanner-bold-duotone" class="w-4 h-4 shrink-0" />
@@ -24,7 +24,7 @@
         <button
           type="button"
           @click="openImportModal"
-          class="btn btn-sm sm:btn-md btn-outline btn-primary gap-1.5 shadow-xs font-bold flex-1 sm:flex-initial min-h-[40px]"
+          class="btn btn-sm sm:btn-md h-11 md:h-10 btn-outline btn-primary gap-1.5 shadow-xs font-bold flex-1 sm:flex-initial"
           data-vendor-ok
           title="Upload multiple invoice PDFs at once (Appwrite, Google, Vercel, etc.)"
         >
@@ -34,7 +34,7 @@
         <button
           type="button"
           @click="openSubmitModal"
-          class="btn btn-sm sm:btn-md btn-primary gap-1.5 shadow-lg shadow-primary/20 font-bold flex-1 sm:flex-initial min-h-[40px]"
+          class="btn btn-sm sm:btn-md h-11 md:h-10 btn-primary text-primary-content gap-1.5 shadow-lg shadow-primary/20 font-black flex-1 sm:flex-initial"
           title="Manually log a single expense or receipt"
         >
           <Icon icon="solar:add-circle-bold" class="w-4 h-4 shrink-0" />
@@ -166,99 +166,71 @@
         </div>
       </div>
 
-      <!-- Row 2: Horizontal Scope & Status Pipeline Pills (Matches PurchasesList & InventoryHeader) -->
+      <!-- Row 2: Horizontal Scope Pills (<= 4 chips) + Compact Status Select (Hick's Law <= 7 inline chips) -->
       <div class="flex items-center justify-between gap-2 flex-wrap pt-2.5 mt-1 border-t border-base-200/60 text-xs">
         <div class="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5 max-w-full">
           <!-- Scope Pills -->
           <button
             type="button"
-            class="btn btn-xs rounded-lg font-bold gap-1.5 transition-all shrink-0"
+            class="btn btn-sm h-11 md:h-8 rounded-lg font-bold gap-1.5 transition-all shrink-0"
             :class="scopeFilter === 'all' ? 'btn-primary text-primary-content shadow-xs' : 'btn-ghost bg-base-200/60 text-base-content/80 hover:bg-base-200'"
             @click="scopeFilter = 'all'"
           >
             <span>All Scopes</span>
-            <span class="badge badge-xs font-mono font-bold" :class="scopeFilter === 'all' ? 'badge-neutral' : 'badge-ghost'">{{ monthScopedExpenses.length }}</span>
+            <span class="badge badge-xs font-mono font-bold whitespace-nowrap shrink-0" :class="scopeFilter === 'all' ? 'badge-neutral' : 'badge-ghost'">{{ monthScopedExpenses.length }}</span>
           </button>
 
           <button
             type="button"
-            class="btn btn-xs rounded-lg font-bold gap-1.5 transition-all shrink-0"
+            class="btn btn-sm h-11 md:h-8 rounded-lg font-bold gap-1.5 transition-all shrink-0"
             :class="scopeFilter === 'coop_shared' ? 'btn-primary text-primary-content shadow-xs' : 'btn-ghost bg-base-200/60 text-base-content/80 hover:bg-base-200'"
             @click="scopeFilter = 'coop_shared'"
           >
             <span>🤝 Co-op Shared</span>
-            <span class="badge badge-xs font-mono font-bold" :class="scopeFilter === 'coop_shared' ? 'badge-neutral' : 'badge-ghost'">{{ countByScope.coop }}</span>
+            <span class="badge badge-xs font-mono font-bold whitespace-nowrap shrink-0" :class="scopeFilter === 'coop_shared' ? 'badge-neutral' : 'badge-ghost'">{{ countByScope.coop }}</span>
           </button>
 
           <button
             type="button"
-            class="btn btn-xs rounded-lg font-bold gap-1.5 transition-all shrink-0"
+            class="btn btn-sm h-11 md:h-8 rounded-lg font-bold gap-1.5 transition-all shrink-0"
             :class="scopeFilter === 'personal_write_off' ? 'btn-secondary text-secondary-content shadow-xs' : 'btn-ghost bg-base-200/60 text-base-content/80 hover:bg-base-200'"
             @click="scopeFilter = 'personal_write_off'"
           >
             <span>👤 Personal Write-Offs</span>
-            <span class="badge badge-xs font-mono font-bold" :class="scopeFilter === 'personal_write_off' ? 'badge-neutral' : 'badge-ghost'">{{ countByScope.personal }}</span>
+            <span class="badge badge-xs font-mono font-bold whitespace-nowrap shrink-0" :class="scopeFilter === 'personal_write_off' ? 'badge-neutral' : 'badge-ghost'">{{ countByScope.personal }}</span>
           </button>
 
           <button
             type="button"
-            class="btn btn-xs rounded-lg font-bold gap-1.5 transition-all shrink-0"
+            class="btn btn-sm h-11 md:h-8 rounded-lg font-bold gap-1.5 transition-all shrink-0"
             :class="scopeFilter === 'split' ? 'btn-accent text-accent-content shadow-xs' : 'btn-ghost bg-base-200/60 text-base-content/80 hover:bg-base-200'"
             @click="scopeFilter = 'split'"
           >
             <span>⚖️ Split</span>
-            <span class="badge badge-xs font-mono font-bold" :class="scopeFilter === 'split' ? 'badge-neutral' : 'badge-ghost'">{{ countByScope.split }}</span>
+            <span class="badge badge-xs font-mono font-bold whitespace-nowrap shrink-0" :class="scopeFilter === 'split' ? 'badge-neutral' : 'badge-ghost'">{{ countByScope.split }}</span>
           </button>
+        </div>
 
-          <div class="h-3.5 w-px bg-base-content/20 shrink-0 mx-1"></div>
-
-          <!-- Status Pipeline Pills -->
-          <button
-            type="button"
-            class="btn btn-xs rounded-lg font-bold gap-1.5 transition-all shrink-0"
-            :class="statusFilter === 'all' ? 'btn-neutral text-neutral-content shadow-xs' : 'btn-ghost bg-base-200/60 text-base-content/80 hover:bg-base-200'"
-            @click="statusFilter = 'all'"
+        <!-- Status Pipeline Dropdown -->
+        <div class="flex items-center gap-2 shrink-0">
+          <label class="text-[11px] font-bold opacity-60">Status:</label>
+          <select
+            v-model="statusFilter"
+            class="select select-bordered select-sm h-11 md:h-8 rounded-xl bg-base-100 text-xs font-bold"
+            aria-label="Filter by reimbursement status"
           >
-            <span>All Status</span>
-          </button>
-
-          <button
-            type="button"
-            class="btn btn-xs rounded-lg font-bold gap-1.5 transition-all shrink-0"
-            :class="statusFilter === 'pending' ? 'btn-warning text-warning-content shadow-xs' : 'btn-ghost bg-base-200/60 text-base-content/80 hover:bg-base-200'"
-            @click="statusFilter = 'pending'"
-          >
-            <span>🟡 Pending</span>
-            <span class="badge badge-xs font-mono font-bold" :class="statusFilter === 'pending' ? 'badge-neutral' : 'badge-ghost'">{{ countByStatus.pending }}</span>
-          </button>
-
-          <button
-            type="button"
-            class="btn btn-xs rounded-lg font-bold gap-1.5 transition-all shrink-0"
-            :class="statusFilter === 'approved' ? 'btn-success text-success-content shadow-xs' : 'btn-ghost bg-base-200/60 text-base-content/80 hover:bg-base-200'"
-            @click="statusFilter = 'approved'"
-          >
-            <span>🟢 Approved</span>
-            <span class="badge badge-xs font-mono font-bold" :class="statusFilter === 'approved' ? 'badge-neutral' : 'badge-ghost'">{{ countByStatus.approved }}</span>
-          </button>
-
-          <button
-            type="button"
-            class="btn btn-xs rounded-lg font-bold gap-1.5 transition-all shrink-0"
-            :class="statusFilter === 'reimbursed' ? 'btn-info text-info-content shadow-xs' : 'btn-ghost bg-base-200/60 text-base-content/80 hover:bg-base-200'"
-            @click="statusFilter = 'reimbursed'"
-          >
-            <span>💎 Reimbursed</span>
-            <span class="badge badge-xs font-mono font-bold" :class="statusFilter === 'reimbursed' ? 'badge-neutral' : 'badge-ghost'">{{ countByStatus.reimbursed }}</span>
-          </button>
+            <option value="all">All Status ({{ monthScopedExpenses.length }})</option>
+            <option value="pending">🟡 Pending ({{ countByStatus.pending }})</option>
+            <option value="approved">🟢 Approved ({{ countByStatus.approved }})</option>
+            <option value="reimbursed">💎 Reimbursed ({{ countByStatus.reimbursed }})</option>
+          </select>
         </div>
       </div>
     </div>
 
-    <!-- Loading State -->
-    <div v-if="loading && expenses.length === 0" class="flex flex-col items-center justify-center py-16 gap-3">
-      <span class="loading loading-spinner loading-lg text-primary"></span>
-      <span class="text-xs font-bold opacity-60">Loading Shared Commons &amp; Tax Ledger...</span>
+    <!-- Loading Skeleton State -->
+    <div v-if="loading && expenses.length === 0" class="space-y-3 py-4">
+      <div v-for="n in 4" :key="n" class="skeleton h-16 w-full rounded-2xl"></div>
     </div>
 
     <!-- Empty State -->

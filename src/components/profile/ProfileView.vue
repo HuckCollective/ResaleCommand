@@ -1,6 +1,10 @@
 <template>
-  <div v-if="loading" class="flex justify-center py-12">
-    <span class="loading loading-spinner loading-lg"></span>
+  <div v-if="loading" class="space-y-6 py-6">
+    <div class="skeleton h-32 w-full rounded-2xl"></div>
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <div class="skeleton h-64 w-full rounded-2xl"></div>
+      <div class="skeleton h-64 w-full rounded-2xl"></div>
+    </div>
   </div>
 
   <div v-else-if="!isAuthenticated" class="alert alert-warning">
@@ -23,14 +27,12 @@
           <div class="flex flex-col md:flex-row md:items-center gap-2">
             <h2 class="text-2xl font-bold">{{ user?.name || 'Unnamed User' }}</h2>
             <div class="flex gap-2 justify-center md:justify-start">
-              <span v-if="isPartner" class="badge badge-secondary font-semibold">Partner</span>
-              <span v-if="user?.labels?.includes('alpha')" class="badge badge-warning font-semibold">Alpha</span>
+              <span v-if="isPartner" class="badge badge-secondary font-semibold whitespace-nowrap shrink-0">Partner</span>
+              <span v-if="user?.labels?.includes('alpha')" class="badge badge-warning font-semibold whitespace-nowrap shrink-0">Alpha</span>
             </div>
           </div>
-          <p class="text-gray-500 font-mono text-sm">{{ user?.email }}</p>
-          <div class="flex flex-wrap gap-2 justify-center md:justify-start text-xs text-gray-400">
-            <span>ID: <code class="bg-base-200 px-1.5 py-0.5 rounded">{{ user?.$id }}</code></span>
-            <span>•</span>
+          <p class="text-base-content/70 font-mono text-sm">{{ user?.email }}</p>
+          <div class="flex flex-wrap gap-2 justify-center md:justify-start text-xs text-base-content/60">
             <span>Joined: {{ new Date(user?.$createdAt || '').toLocaleDateString() }}</span>
           </div>
         </div>
@@ -63,7 +65,7 @@
             
             <div class="card-actions justify-end mt-4">
               <button 
-                class="btn btn-primary btn-sm gap-2" 
+                class="btn btn-primary btn-sm h-11 md:h-9 gap-2 font-black" 
                 @click="handleUpdateName" 
                 :disabled="savingName || !editName.trim() || editName.trim() === user?.name"
               >
@@ -82,7 +84,7 @@
               <Icon icon="solar:letter-linear" class="w-5 h-5 text-primary" />
               Change Email
             </h3>
-            <p class="text-xs text-gray-500 mb-2">Note: Changing your email will update your login credentials.</p>
+            <p class="text-xs text-base-content/70 mb-2">Note: Changing your email will update your login credentials.</p>
 
             <div class="space-y-4">
               <div class="form-control w-full">
@@ -117,7 +119,7 @@
 
             <div class="card-actions justify-end mt-4">
               <button 
-                class="btn btn-primary btn-sm gap-2" 
+                class="btn btn-outline btn-primary btn-sm h-11 md:h-9 gap-2 font-bold" 
                 @click="handleUpdateEmail" 
                 :disabled="savingEmail || !editEmail.trim() || !emailConfirmPassword || editEmail.trim().toLowerCase() === (user?.email || '').toLowerCase()"
               >
@@ -140,7 +142,7 @@
                 <Icon icon="solar:lock-password-linear" class="w-5 h-5 text-primary" />
                 Change Password
               </h3>
-              <p class="text-xs text-gray-500 mb-4">Ensure your account is using a long, random password to stay secure.</p>
+              <p class="text-xs text-base-content/70 mb-4">Ensure your account is using a long, random password to stay secure.</p>
 
               <div class="space-y-4">
                 <div class="form-control w-full">
@@ -189,7 +191,7 @@
 
             <div class="card-actions justify-end mt-6">
               <button 
-                class="btn btn-primary btn-sm gap-2" 
+                class="btn btn-outline btn-primary btn-sm h-11 md:h-9 gap-2 font-bold" 
                 @click="handleUpdatePassword" 
                 :disabled="savingPassword || !oldPassword || !newPassword || !confirmPassword"
               >
@@ -209,6 +211,7 @@
 import { ref, computed, watch, onMounted } from 'vue';
 import { useAuth } from '../../composables/useAuth';
 import { addToast } from '../../stores/toast';
+import { toUserMessage } from '../../lib/userFacingErrors';
 import { Icon } from '@iconify/vue';
 
 const { user, isAuthenticated, loading, isPartner, updateName, updateEmail, updatePassword } = useAuth();
@@ -255,7 +258,7 @@ const handleUpdateName = async () => {
     await updateName(nameToSave);
     addToast({ type: 'success', message: 'Name updated successfully!' });
   } catch (error: any) {
-    addToast({ type: 'error', message: error.message || 'Failed to update name.' });
+    addToast({ type: 'error', message: toUserMessage(error, 'Failed to update name.') });
   } finally {
     savingName.value = false;
   }
@@ -271,7 +274,7 @@ const handleUpdateEmail = async () => {
     emailConfirmPassword.value = '';
     addToast({ type: 'success', message: 'Email updated successfully!' });
   } catch (error: any) {
-    addToast({ type: 'error', message: error.message || 'Failed to update email.' });
+    addToast({ type: 'error', message: toUserMessage(error, 'Failed to update email.') });
   } finally {
     savingEmail.value = false;
   }
@@ -302,7 +305,7 @@ const handleUpdatePassword = async () => {
     confirmPassword.value = '';
     addToast({ type: 'success', message: 'Password updated successfully!' });
   } catch (error: any) {
-    addToast({ type: 'error', message: error.message || 'Failed to update password.' });
+    addToast({ type: 'error', message: toUserMessage(error, 'Failed to update password.') });
   } finally {
     savingPassword.value = false;
   }

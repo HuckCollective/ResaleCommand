@@ -14,12 +14,16 @@
         </div>
       </div>
 
-      <div class="flex items-center gap-2">
-        <a href="/settings" class="btn btn-sm btn-ghost gap-1 font-bold">
+      <div class="flex flex-wrap items-center gap-2">
+        <a href="/studios" class="btn btn-sm h-11 md:h-8 btn-ghost gap-1 font-bold">
+          <Icon icon="solar:widget-2-linear" class="w-4 h-4" />
+          <span>← Studios</span>
+        </a>
+        <a href="/settings" class="btn btn-sm h-11 md:h-8 btn-ghost gap-1 font-bold">
           <Icon icon="solar:settings-linear" class="w-4 h-4" />
           <span>Settings</span>
         </a>
-        <a href="/inventory" class="btn btn-sm btn-ghost gap-1 font-bold">
+        <a href="/inventory" class="btn btn-sm h-11 md:h-8 btn-ghost gap-1 font-bold">
           <Icon icon="solar:box-linear" class="w-4 h-4" />
           <span>Inventory</span>
         </a>

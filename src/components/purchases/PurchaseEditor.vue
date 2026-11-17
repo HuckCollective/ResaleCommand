@@ -1,7 +1,8 @@
 <template>
   <div class="space-y-8">
-    <div v-if="loadingInit" class="flex justify-center py-12">
-      <span class="loading loading-spinner loading-lg text-primary"></span>
+    <div v-if="loadingInit" class="space-y-4 py-6">
+      <div class="skeleton h-48 w-full rounded-2xl"></div>
+      <div class="skeleton h-64 w-full rounded-2xl"></div>
     </div>
 
     <template v-else>
@@ -1031,10 +1032,10 @@
             v-if="isEdit && (isDraft || hasUnreceivedItems)" 
             type="button"
             @click="handleReceiveOrPurchase(defaultBackstock)" 
-            class="h-11 my-auto px-3 rounded-2xl flex flex-col items-center justify-center gap-0.5 transition-all duration-200 bg-success text-success-content font-black shadow-md border border-success-content/25 active:scale-95 hover:brightness-110 cursor-pointer"
+            class="h-11 my-auto px-3 rounded-2xl flex flex-col items-center justify-center gap-0.5 transition-all duration-200 bg-success/15 hover:bg-success/25 text-success font-black border border-success/40 active:scale-95 cursor-pointer"
             :title="isDraft ? 'Complete purchase and activate items into Backstock (HG)' : 'Receive all unreceived items into Backstock (HG)'"
           >
-            <Icon :icon="isDraft ? 'solar:box-minimalistic-bold' : 'solar:check-circle-bold'" class="w-4.5 h-4.5 drop-shadow-xs" />
+            <Icon :icon="isDraft ? 'solar:box-minimalistic-bold' : 'solar:check-circle-bold'" class="w-4.5 h-4.5" />
             <span class="font-black uppercase text-[10px] sm:text-[11px] tracking-wide leading-none whitespace-nowrap">{{ isDraft ? 'Purchase' : 'Receive All' }}</span>
           </button>
 

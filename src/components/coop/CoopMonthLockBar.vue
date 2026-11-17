@@ -215,7 +215,7 @@
       <div v-else class="space-y-4 text-xs">
         <div class="alert alert-warning rounded-2xl text-xs">
           <span>
-            Reopening a locked month allows labor edits and re-locking as revision {{ (activeLock?.revision || 1) + 1 }}. This action is permanently recorded in <code>unlockHistory</code>.
+            Reopening a locked month allows labor edits and re-locking as revision {{ (activeLock?.revision || 1) + 1 }}. This action is permanently recorded in the Lock Audit History.
           </span>
         </div>
 

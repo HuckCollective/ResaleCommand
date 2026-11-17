@@ -50,20 +50,36 @@
         </div>
       </div>
 
-      <!-- Condition Tags Filter -->
+      <!-- Condition Tags Filter (<= 7 inline chips per Hick's Law) -->
       <div class="form-control w-full">
         <label class="label"><span class="label-text-alt font-bold uppercase opacity-60">Keywords / Tags</span></label>
         <div class="flex flex-wrap gap-2 mt-1">
           <button 
-            v-for="tag in allKeywords" 
+            v-for="tag in primaryKeywords" 
             :key="tag"
             @click="toggleKeyword(tag)"
-            class="badge badge-sm border-none cursor-pointer transition-all hover:scale-105"
+            class="badge badge-sm border-none cursor-pointer transition-all hover:scale-105 whitespace-nowrap shrink-0"
             :class="selectedKeywords.includes(tag) ? 'badge-primary text-primary-content font-bold' : 'badge-neutral bg-base-300 text-base-content/70 hover:bg-base-300/80'"
           >
             #{{ tag }}
           </button>
         </div>
+        <details v-if="overflowKeywords.length > 0" class="mt-2">
+          <summary class="text-xs font-bold text-primary cursor-pointer select-none">
+            +{{ overflowKeywords.length }} more tags
+          </summary>
+          <div class="flex flex-wrap gap-2 mt-2">
+            <button
+              v-for="tag in overflowKeywords"
+              :key="tag"
+              @click="toggleKeyword(tag)"
+              class="badge badge-sm border-none cursor-pointer transition-all hover:scale-105 whitespace-nowrap shrink-0"
+              :class="selectedKeywords.includes(tag) ? 'badge-primary text-primary-content font-bold' : 'badge-neutral bg-base-300 text-base-content/70 hover:bg-base-300/80'"
+            >
+              #{{ tag }}
+            </button>
+          </div>
+        </details>
         <button 
           v-if="selectedKeywords.length > 0" 
           @click="selectedKeywords = []" 
@@ -617,7 +633,7 @@ const absoluteMaxPrice = computed(() => {
 
 const maxPriceFilter = ref(0);
 
-// Keywords extraction from initial items
+// Keywords extraction from initial items (<= 7 primary inline chips per Hick's Law)
 const allKeywords = computed(() => {
   const keywordsSet = new Set();
   props.initialItems.forEach(item => {
@@ -629,8 +645,10 @@ const allKeywords = computed(() => {
       });
     }
   });
-  return Array.from(keywordsSet).slice(0, 15); // limit to top 15 keywords
+  return Array.from(keywordsSet).slice(0, 15);
 });
+const primaryKeywords = computed(() => allKeywords.value.slice(0, 7));
+const overflowKeywords = computed(() => allKeywords.value.slice(7));
 
 // Helper: Toggle selected keywords
 const toggleKeyword = (tag) => {

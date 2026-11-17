@@ -4,6 +4,10 @@
 
 ---
 
+## ✅ WAVE 1 (P0) & WAVE 2 (P1) KRUG & LAWS OF UX OVERHAUL (`c49685c` & `588cce7` on `alpha-1` — Nov 17, 2026)
+- **Wave 1 (P0) (`c49685c`)**: Shipped two-way role isolation (`CollectiveAccessGate.vue`, `serverAuth.ts`, `session.ts`, `memberAccess.ts`, `SalesList.vue`), fixed broken handlers + `/scan` ➔ `/scout` 302 redirect + `StoreHeaderCart.astro`, eliminated native browser `confirm`/`prompt` dialogs, upgraded `<ItemThumbnail>` with 2-stage `/preview` ➔ `/view` + `galleryImageIds` fallback, and added `validate-templates.mjs` **§18**.
+- **Wave 2 (P1) (`588cce7`)**: Rewired `RolloLabelTestWorkbench.vue` to `warehouses.ts` + `siteConfig.domain`, removed Law-1-violating free-text location creators (`LocationSyncView.vue`, `OrgSettingsView.vue`), replaced hardcoded fee/rent/policy fallbacks + static `MOCK_TENANTS`/`DB_TENANT_MAP`, unified `<SlideOverDrawer>` + ref-counted `useBodyScrollLock()` across 18 views, normalized auth emails + converted currency/hours inputs to `type="text" inputmode="decimal"`, and added `validate-templates.mjs` **§19**.
+
 ## ✅ HEADLESS FLAGSHIP & EVENTS CMS (`/coop/cms` ➔ `thehc.llc`) + MULTI-CHANNEL SALES CHECKOUT (`main` & `alpha-1` — Nov 16, 2026)
 - **Headless Flagship Content Manager & Multi-Channel Checkout (`5cae49c` — Merged & Deployed to Live `main`)**:
   - Shipped `/coop/cms`, zero-PII `GET /api/public/flagship-content`, and `RecordSaleDrawer.vue` Step 1 (`🌐 Online & Live`, `🎪 Pop-Ups & Events` 1-tap Event Chips, and dynamic Retail Booths).

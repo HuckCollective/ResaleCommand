@@ -209,7 +209,7 @@
       </button>
     </div>
 
-    <!-- Sub-Filter Pills (All Sold | Pending Payout | Paid History | Space Rental) + Match/Sync Status Pills -->
+    <!-- Sub-Filter Pills (5 inline chips <= 7 per Hick's Law; Matched/Unmatched/Synced live in top KPI tiles) -->
     <div
       v-if="stagedRows.length > 0 || spaceRentalAdjustments.length > 0"
       class="flex flex-col gap-2"
@@ -217,7 +217,7 @@
       <div class="flex items-center gap-1.5 flex-wrap">
         <button
           type="button"
-          class="btn btn-xs font-bold rounded-full"
+          class="btn btn-sm h-11 md:h-8 font-bold rounded-full"
           :class="subFilter === 'all' && matchFilter === 'all' && partnerFilter === 'all' ? 'btn-primary' : 'btn-ghost border border-base-300'"
           @click="resetAllFilters"
         >
@@ -225,58 +225,31 @@
         </button>
         <button
           type="button"
-          class="btn btn-xs font-bold rounded-full"
+          class="btn btn-sm h-11 md:h-8 font-bold rounded-full"
           :class="subFilter === 'pending_payout' ? 'btn-warning text-warning-content' : 'btn-ghost border border-base-300'"
           @click="emit('update:subFilter', subFilter === 'pending_payout' ? 'all' : 'pending_payout')"
         >
-          ⏳ Pending Payout /payouts ({{ pendingRowsCount }})
+          ⏳ Pending Payout ({{ pendingRowsCount }})
         </button>
         <button
           type="button"
-          class="btn btn-xs font-bold rounded-full"
+          class="btn btn-sm h-11 md:h-8 font-bold rounded-full"
           :class="subFilter === 'paid' ? 'btn-success text-success-content' : 'btn-ghost border border-base-300'"
           @click="emit('update:subFilter', subFilter === 'paid' ? 'all' : 'paid')"
         >
-          ✅ Paid History /payout_history ({{ paidRowsCount }})
+          ✅ Paid History ({{ paidRowsCount }})
         </button>
         <button
           type="button"
-          class="btn btn-xs font-bold rounded-full"
+          class="btn btn-sm h-11 md:h-8 font-bold rounded-full"
           :class="subFilter === 'space_rental' ? 'btn-error text-error-content' : 'btn-ghost border border-base-300'"
           @click="emit('update:subFilter', subFilter === 'space_rental' ? 'all' : 'space_rental')"
         >
-          🏢 Space Rental &amp; Adjustments ({{ spaceRentalAdjustments.length }})
-        </button>
-
-        <span class="mx-1 opacity-30 hidden sm:inline">|</span>
-
-        <button
-          type="button"
-          class="btn btn-xs font-bold rounded-full"
-          :class="matchFilter === 'matched' ? 'btn-success text-success-content' : 'btn-ghost border border-base-300'"
-          @click="toggleMatchFilter('matched')"
-        >
-          🔗 Matched ({{ matchedRowsCount }})
+          🏢 Space Rental ({{ spaceRentalAdjustments.length }})
         </button>
         <button
           type="button"
-          class="btn btn-xs font-bold rounded-full"
-          :class="matchFilter === 'unmatched' ? 'btn-warning text-warning-content' : 'btn-ghost border border-base-300'"
-          @click="toggleMatchFilter('unmatched')"
-        >
-          ⚪ Unmatched ({{ unmatchedRowsCount }})
-        </button>
-        <button
-          type="button"
-          class="btn btn-xs font-bold rounded-full"
-          :class="matchFilter === 'already_synced' ? 'btn-info text-info-content' : 'btn-ghost border border-base-300'"
-          @click="toggleMatchFilter('already_synced')"
-        >
-          ✅ Already Synced / In DB ({{ alreadySyncedRowsCount }})
-        </button>
-        <button
-          type="button"
-          class="btn btn-xs font-bold rounded-full"
+          class="btn btn-sm h-11 md:h-8 font-bold rounded-full"
           :class="matchFilter === 'ready_to_sync' ? 'btn-accent text-accent-content' : 'btn-ghost border border-base-300'"
           @click="toggleMatchFilter('ready_to_sync')"
         >
@@ -568,7 +541,7 @@
           <button
             v-if="stagedRows.length > 0"
             type="button"
-            class="btn btn-sm btn-info text-info-content font-black gap-1.5 whitespace-nowrap"
+            class="btn btn-sm h-11 md:h-9 btn-outline btn-info font-black gap-1.5 whitespace-nowrap"
             :disabled="isSimulating || isCommitting"
             @click="emit('simulate')"
           >
@@ -578,7 +551,7 @@
           </button>
 
           <label
-            class="label cursor-pointer gap-1.5 bg-base-200 px-2.5 py-1 rounded-lg border border-base-300 text-xs font-bold whitespace-nowrap"
+            class="label cursor-pointer gap-1.5 bg-base-200 px-2.5 py-1 h-11 md:h-9 rounded-lg border border-base-300 text-xs font-bold whitespace-nowrap"
             title="Unlock Live Commit when ready to write sales & mark booth inventory sold"
           >
             <input
@@ -593,7 +566,7 @@
 
           <button
             type="button"
-            class="btn btn-sm btn-success text-success-content font-black gap-1.5 shadow-md whitespace-nowrap"
+            class="btn btn-sm h-11 md:h-9 btn-success text-success-content font-black gap-1.5 shadow-md whitespace-nowrap"
             :disabled="isCommitting || !isLiveCommitUnlocked || actionableNewCount === 0"
             @click="emit('commit')"
           >

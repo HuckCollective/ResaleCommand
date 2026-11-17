@@ -37,8 +37,8 @@
                             <span class="label-text font-bold">Target Database</span>
                         </label>
                         <select v-model="targetDb" class="select select-bordered w-full font-mono text-sm shadow-sm bg-base-200">
-                            <option value="items_dev">DEV SANDBOX (items_dev)</option>
-                            <option value="items">PRODUCTION (items)</option>
+                            <option value="items_dev">DEV SANDBOX</option>
+                            <option value="items">PRODUCTION</option>
                         </select>
                     </div>
 

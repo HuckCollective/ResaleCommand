@@ -67,12 +67,12 @@
 
         <button 
           type="button" 
-          class="btn btn-sm gap-1.5 font-bold text-slate-700 bg-white border border-slate-300 hover:bg-slate-100"
+          class="btn btn-sm h-11 md:h-9 gap-1.5 font-bold btn-outline border-base-300 bg-base-100 hover:bg-base-200 text-base-content"
           @click="showHistoryModal = true"
           title="View previous sync audit log"
         >
           <span>🕒 History</span>
-          <span v-if="locationHistory.length > 0" class="badge badge-xs badge-neutral font-mono font-bold">{{ locationHistory.length }}</span>
+          <span v-if="locationHistory.length > 0" class="badge badge-xs badge-neutral font-mono font-bold whitespace-nowrap shrink-0">{{ locationHistory.length }}</span>
         </button>
 
         <a
@@ -1271,18 +1271,18 @@
         <!-- TIER 2: ACTION BUTTONS STRIP (THUMB ZONE) -->
         <div class="py-2.5 px-4 flex items-center justify-center">
           <div class="max-w-5xl w-full mx-auto flex items-center justify-between gap-2.5 flex-wrap sm:flex-nowrap">
-            <!-- Left: Batch Resolution Actions -->
+            <!-- Left: Batch Resolution Actions (Outline Secondary CTAs — Single CPA Discipline) -->
             <div class="flex items-center gap-1.5 flex-wrap sm:flex-nowrap shrink-0">
               <button 
                 v-if="unmatchedCount > 0"
                 type="button"
-                class="btn btn-xs sm:btn-sm bg-linear-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-black shadow-xs gap-1.5 border-none active:scale-95 shrink-0 min-h-[40px]"
+                class="btn btn-sm h-11 md:h-9 btn-outline btn-secondary font-black shadow-xs gap-1.5 active:scale-95 shrink-0"
                 :disabled="isAiMatching || isBulkQuickAdding"
                 @click="triggerAiMatching"
                 title="Use Gemini AI to semantically match abbreviations, editions, and RPG sourcebooks in batches of 20"
               >
                 <span v-if="isAiMatching" class="loading loading-spinner loading-xs"></span>
-                <Icon v-else icon="solar:magic-stick-3-bold" class="w-4 h-4 text-yellow-300" />
+                <Icon v-else icon="solar:magic-stick-3-bold" class="w-4 h-4 text-warning" />
                 <span v-if="isAiMatching">{{ aiMatchingProgressText || '⏳ AI Analyzing...' }}</span>
                 <template v-else>
                   <span class="hidden md:inline">✨ AI Match</span>
@@ -1294,7 +1294,7 @@
               <button 
                 v-if="unmatchedSoldCount > 0"
                 type="button"
-                class="btn btn-xs sm:btn-sm btn-error text-white font-extrabold shadow-xs gap-1.5 active:scale-95 shrink-0 min-h-[40px]"
+                class="btn btn-sm h-11 md:h-9 btn-outline btn-error font-extrabold shadow-xs gap-1.5 active:scale-95 shrink-0"
                 :disabled="isBulkQuickAdding || isAiMatching"
                 @click="bulkQuickAddUnmatched(true)"
                 title="Auto-create inventory items for sold lines so net profit is recorded"
@@ -1307,7 +1307,7 @@
               <button 
                 v-if="unmatchedInStockCount > 0"
                 type="button"
-                class="btn btn-xs sm:btn-sm btn-warning text-black font-bold shadow-xs gap-1.5 active:scale-95 shrink-0 min-h-[40px]"
+                class="btn btn-sm h-11 md:h-9 btn-outline btn-warning font-bold shadow-xs gap-1.5 active:scale-95 shrink-0"
                 :disabled="isBulkQuickAdding || isAiMatching"
                 @click="bulkQuickAddUnmatched(false)"
                 title="Auto-create in-stock items with sequential barcodes"
@@ -1318,11 +1318,11 @@
               </button>
             </div>
 
-            <!-- Center: CONTEXTUAL PRIMARY ACTION (Solid Elevated Tactile Pill) & Safe Test Pill -->
+            <!-- Center: Safe Test & Copy Script Utilities (Outline) -->
             <div v-if="activeCanonicalLocationMeta.usesRicochet" class="flex items-center gap-1.5 shrink-0">
               <button 
                 type="button" 
-                class="btn btn-sm btn-outline btn-primary font-bold shadow-xs active:scale-95 gap-1.5 min-h-[44px] text-xs px-3"
+                class="btn btn-sm h-11 md:h-9 btn-outline border-base-300 font-bold shadow-xs active:scale-95 gap-1.5 text-xs px-3"
                 :disabled="matchedCount === 0"
                 @click="copyPreloadedConsoleScript('single')"
                 title="Safely test 1 single item first on your live Ricochet store before syncing all 240"
@@ -1333,7 +1333,7 @@
 
               <button 
                 type="button" 
-                class="btn btn-sm btn-primary text-primary-content font-black shadow-md border border-primary-content/25 active:scale-95 hover:brightness-110 gap-2 px-5 min-h-[44px] text-xs sm:text-sm shrink-0"
+                class="btn btn-sm h-11 md:h-9 btn-outline btn-primary font-black shadow-xs active:scale-95 gap-2 px-4 text-xs sm:text-sm shrink-0"
                 :disabled="matchedCount === 0"
                 @click="copyPreloadedConsoleScript('full')"
                 title="1-Click copy pre-bundled script with all matched items and barcodes"
@@ -1343,17 +1343,17 @@
               </button>
             </div>
 
-            <!-- Right: Commit to Local DB -->
+            <!-- Right: Single Primary Commit CTA -->
             <button 
               type="button"
-              class="btn btn-sm btn-secondary text-secondary-content font-bold shadow-md shadow-secondary/20 active:scale-95 min-h-[44px] gap-1.5 px-4 text-xs sm:text-sm shrink-0"
+              class="btn btn-sm h-11 md:h-9 btn-primary text-primary-content font-black shadow-md shadow-primary/20 active:scale-95 gap-1.5 px-5 text-xs sm:text-sm shrink-0"
               :disabled="matchedCount === 0 || isCommitting" 
               @click="executeSync"
               title="Record sales transactions and assign SKUs in local database"
             >
               <span v-if="isCommitting" class="loading loading-spinner loading-xs"></span>
               <Icon v-else icon="solar:check-read-linear" class="w-4 h-4" />
-              <span>Sync & Commit</span>
+              <span>Sync &amp; Commit</span>
             </button>
           </div>
         </div>

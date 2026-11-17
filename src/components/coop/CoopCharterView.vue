@@ -1,5 +1,8 @@
 <template>
   <div class="rc-page-shell space-y-6 pb-10">
+    <!-- Co-op Workspace Sub-Navigation (Signed-in Collective Members) -->
+    <CoopSubNav v-if="showMemberActions" active-tab="charter" class="print:hidden" />
+
     <!-- Guest Onboarding Banner -->
     <div
       v-if="!showMemberActions"
@@ -14,14 +17,14 @@
       <div class="flex flex-wrap items-center gap-2 shrink-0">
         <button
           type="button"
-          class="btn btn-sm btn-primary text-primary-content rounded-xl font-black gap-1.5"
+          class="btn btn-sm h-11 md:h-8 btn-outline border-primary/40 text-primary rounded-xl font-black gap-1.5"
           @click="showConnectModal = true"
         >
           <Icon icon="solar:hand-shake-bold" class="w-4 h-4 shrink-0" />
           <span>Connect With Us</span>
         </button>
-        <a href="/login" class="btn btn-sm btn-outline rounded-xl font-bold">Member Login</a>
-        <a href="/demo" class="btn btn-sm btn-ghost border border-base-300 rounded-xl font-bold">Example Dashboard</a>
+        <a href="/login" class="btn btn-sm h-11 md:h-8 btn-outline rounded-xl font-bold">Member Login</a>
+        <a href="/demo" class="btn btn-sm h-11 md:h-8 btn-ghost border border-base-300 rounded-xl font-bold">Example Dashboard</a>
       </div>
     </div>
 
@@ -30,12 +33,12 @@
       <div class="flex flex-col md:flex-row items-start md:items-center justify-between gap-6 relative z-10">
         <div class="space-y-3 max-w-2xl">
           <div class="flex items-center gap-2 flex-wrap">
-            <span class="badge badge-primary font-bold gap-1 text-xs px-3 py-1 shadow-sm">
+            <span class="badge badge-primary font-bold gap-1 text-xs px-3 py-1 shadow-sm whitespace-nowrap shrink-0">
               <Icon icon="solar:shield-star-bold" class="w-3.5 h-3.5 shrink-0" />
               <span>Worker Self-Directed Enterprise (WSDE)</span>
             </span>
-            <span class="badge badge-outline text-xs font-semibold">Democracy at Work</span>
-            <span class="badge badge-neutral text-xs font-mono font-bold">1 Member = 1 Vote</span>
+            <span class="badge badge-outline text-xs font-semibold whitespace-nowrap shrink-0">Democracy at Work</span>
+            <span class="badge badge-neutral text-xs font-mono font-bold whitespace-nowrap shrink-0">1 Member = 1 Vote</span>
           </div>
 
           <h1 class="text-3xl sm:text-4xl lg:text-5xl font-black tracking-tight text-base-content">
@@ -50,16 +53,16 @@
           <a
             v-if="showMemberActions"
             href="/expenses"
-            class="btn btn-sm btn-secondary text-secondary-content gap-2 shadow-sm font-bold rounded-xl"
+            class="btn btn-sm h-11 md:h-8 btn-outline gap-2 shadow-sm font-bold bg-base-100/80 hover:bg-base-200 rounded-xl"
             title="Upload invoice PDFs and view Commons Expense Ledger"
           >
-            <Icon icon="solar:document-bold" class="w-4 h-4 shrink-0" />
+            <Icon icon="solar:document-bold" class="w-4 h-4 text-secondary shrink-0" />
             <span>Expenses &amp; Receipts</span>
           </a>
 
           <button
             type="button"
-            class="btn btn-sm btn-outline gap-2 shadow-sm font-bold bg-base-100/80 hover:bg-base-200 rounded-xl"
+            class="btn btn-sm h-11 md:h-8 btn-outline gap-2 shadow-sm font-bold bg-base-100/80 hover:bg-base-200 rounded-xl"
             title="Print or Save Charter as PDF"
             @click="handlePrint"
           >
@@ -69,7 +72,7 @@
 
           <button
             type="button"
-            class="btn btn-sm btn-primary text-primary-content gap-2 shadow-sm font-bold rounded-xl"
+            class="btn btn-sm h-11 md:h-8 btn-primary text-primary-content gap-2 shadow-sm font-bold rounded-xl"
             title="Copy link to send to prospective members or partner curators"
             @click="copyShareLink"
           >
@@ -125,7 +128,7 @@
         <button
           v-if="!showMemberActions"
           type="button"
-          class="btn btn-sm btn-primary text-primary-content rounded-xl font-bold print:hidden"
+          class="btn btn-sm h-11 md:h-8 btn-outline border-primary/40 text-primary rounded-xl font-bold print:hidden"
           @click="showConnectModal = true"
         >
           Connect With Us
@@ -133,7 +136,7 @@
         <a
           v-else
           href="/dashboard"
-          class="btn btn-sm btn-primary text-primary-content rounded-xl font-bold gap-1.5 print:hidden"
+          class="btn btn-sm h-11 md:h-8 btn-outline border-primary/40 text-primary rounded-xl font-bold gap-1.5 print:hidden"
         >
           <Icon icon="solar:rocket-2-bold" class="w-4 h-4 shrink-0" />
           <span>Open My Role Dashboard</span>
@@ -274,20 +277,20 @@
       </div>
       <div class="flex flex-wrap items-center gap-3">
         <template v-if="showMemberActions">
-          <a href="/sales/import" class="btn btn-sm btn-outline gap-1.5 font-bold rounded-xl">
+          <a href="/sales/import" class="btn btn-sm h-11 md:h-8 btn-outline gap-1.5 font-bold rounded-xl">
             <Icon icon="solar:document-medicine-bold" class="w-4 h-4 text-primary shrink-0" />
             <span>Sales &amp; Settlements</span>
           </a>
-          <a href="/settings" class="btn btn-sm btn-outline font-bold rounded-xl">Partner Settings</a>
-          <a href="/scout" class="btn btn-sm btn-primary text-primary-content font-bold rounded-xl">Start Scouting Inventory</a>
+          <a href="/settings" class="btn btn-sm h-11 md:h-8 btn-outline font-bold rounded-xl">Partner Settings</a>
+          <a href="/scout" class="btn btn-sm h-11 md:h-8 btn-outline border-primary/40 text-primary font-bold rounded-xl">Start Scouting Inventory</a>
         </template>
         <template v-else>
-          <button type="button" class="btn btn-sm btn-primary text-primary-content font-bold rounded-xl" @click="showConnectModal = true">
+          <button type="button" class="btn btn-sm h-11 md:h-8 btn-outline border-primary/40 text-primary font-bold rounded-xl" @click="showConnectModal = true">
             Connect With Us
           </button>
-          <a href="/scout" class="btn btn-sm btn-outline font-bold rounded-xl">Try AI Scout Preview</a>
-          <a href="/demo" class="btn btn-sm btn-outline font-bold rounded-xl">See the example dashboard</a>
-          <a href="/login" class="btn btn-sm btn-outline font-bold rounded-xl">Member Login</a>
+          <a href="/scout" class="btn btn-sm h-11 md:h-8 btn-outline font-bold rounded-xl">Try AI Scout Preview</a>
+          <a href="/demo" class="btn btn-sm h-11 md:h-8 btn-outline font-bold rounded-xl">See the example dashboard</a>
+          <a href="/login" class="btn btn-sm h-11 md:h-8 btn-outline font-bold rounded-xl">Member Login</a>
         </template>
       </div>
     </div>
@@ -301,6 +304,7 @@ import { addToast } from '../../stores/toast';
 import { useAuth } from '../../composables/useAuth';
 import { resolveDefaultRicochetLocationMeta } from '../../lib/warehouses';
 import SlideOverDrawer from '../common/SlideOverDrawer.vue';
+import CoopSubNav from './CoopSubNav.vue';
 import type { CharterRoleCard, CharterSectionId, CharterSectionView } from '../../lib/charterCms';
 
 const ConnectWithUsForm = defineAsyncComponent(() => import('./ConnectWithUsForm.vue'));

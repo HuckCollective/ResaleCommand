@@ -1,6 +1,7 @@
 <template>
-  <div v-if="loading" class="flex justify-center py-12">
-    <span class="loading loading-spinner loading-lg"></span>
+  <div v-if="loading" class="space-y-6 py-6">
+    <div class="skeleton h-32 w-full rounded-2xl"></div>
+    <div class="skeleton h-48 w-full rounded-2xl"></div>
   </div>
 
   <div v-else-if="!isAuthenticated" class="alert alert-warning">
@@ -19,7 +20,7 @@
             <div class="flex justify-between items-center mb-4">
                 <h2 class="card-title text-2xl">{{ currentTeam.name }}</h2>
                 <div class="flex flex-col items-end gap-1">
-                    <span class="badge badge-neutral font-mono text-xs">ID: {{ currentTeam.$id }}</span>
+                    <span class="badge badge-neutral font-mono text-xs whitespace-nowrap shrink-0">Active Workspace</span>
                     <span class="text-xs opacity-75">Logged in as: <strong class="text-primary">{{ user?.email }}</strong></span>
                 </div>
             </div>
@@ -35,7 +36,7 @@
                 </div>
                 <div class="stat">
                     <div class="stat-title">My Role</div>
-                    <div class="stat-value text-lg badge badge-primary mt-2">{{ isOwner ? 'Owner' : 'Member' }}</div>
+                    <div class="stat-value text-lg badge badge-primary mt-2 whitespace-nowrap shrink-0">{{ isOwner ? 'Account Steward' : 'Member' }}</div>
                 </div>
             </div>
         </div>
@@ -55,7 +56,7 @@
             </p>
           </div>
         </div>
-        <a href="/coop" class="btn btn-sm btn-primary gap-1.5 font-bold shrink-0">
+        <a href="/coop" class="btn btn-sm h-11 md:h-8 btn-outline btn-primary gap-1.5 font-bold shrink-0">
           <span>Read Co-op Charter</span>
           <Icon icon="solar:arrow-right-linear" class="w-4 h-4" />
         </a>
@@ -67,7 +68,7 @@
         <div class="card-body">
             <div class="flex justify-between items-center mb-4">
                 <h3 class="font-bold text-xl">Team Members</h3>
-                <button @click="showInviteModal = true" class="btn btn-primary btn-sm gap-2">
+                <button @click="showInviteModal = true" class="btn btn-outline btn-primary btn-sm h-11 md:h-8 gap-2 font-bold">
                     <Icon icon="solar:user-plus-linear" class="w-4 h-4" />
                     Invite Member
                 </button>
@@ -89,17 +90,17 @@
                             <td>{{ member.userName || member.name || (member.confirm ? 'Unnamed User' : '(Pending)') }}</td>
                             <td>{{ member.userEmail || member.email }}</td>
                             <td>
-                                <span v-if="member.roles.includes('owner')" class="badge badge-primary badge-outline">Owner</span>
-                                <span v-else class="badge badge-ghost">Member</span>
+                                <span v-if="member.roles.includes('owner')" class="badge badge-primary badge-outline whitespace-nowrap shrink-0">Account Steward</span>
+                                <span v-else class="badge badge-ghost whitespace-nowrap shrink-0">Member</span>
                             </td>
                             <td>{{ new Date(member.$createdAt).toLocaleDateString() }}</td>
                             <td>
-                                <button v-if="!member.confirm" class="btn btn-ghost btn-xs text-primary" @click="handleResend(member)">Resend</button>
-                                <button v-if="!member.roles.includes('owner')" class="btn btn-ghost btn-xs text-error" @click="confirmRemove(member)">Remove</button>
+                                <button v-if="!member.confirm" class="btn btn-ghost btn-sm h-11 md:h-8 text-primary" @click="handleResend(member)">Resend</button>
+                                <button v-if="!member.roles.includes('owner')" class="btn btn-ghost btn-sm h-11 md:h-8 text-error" @click="confirmRemove(member)">Remove</button>
                             </td>
                         </tr>
                         <tr v-if="resolvedMembers.length === 0">
-                            <td colspan="5" class="text-center opacity-50">No members found (Wait, that's impossible if you are here!)</td>
+                            <td colspan="5" class="text-center opacity-50">No members found</td>
                         </tr>
                     </tbody>
                 </table>
@@ -117,7 +118,7 @@
 
     <div v-else class="alert">
         <Icon icon="solar:info-circle-linear" class="w-6 h-6 text-info" />
-        <span>Only organization owners can manage settings.</span>
+        <span>Only Account Stewards can manage organization settings.</span>
     </div>
 
     <!-- API Security Settings (Owner Only) -->
@@ -133,14 +134,14 @@
                 
                 <div class="flex gap-2">
                     <input type="url" v-model="newDomain" placeholder="https://example.com" class="input input-bordered w-full" @keydown.enter.prevent="addDomain" :disabled="orgSettings.allowedDomains && orgSettings.allowedDomains.length >= 3" />
-                    <button class="btn btn-primary" @click="addDomain" :disabled="!newDomain || savingSettings || (orgSettings.allowedDomains && orgSettings.allowedDomains.length >= 3)">Add</button>
+                    <button class="btn btn-outline btn-primary h-11 md:h-10 font-bold" @click="addDomain" :disabled="!newDomain || savingSettings || (orgSettings.allowedDomains && orgSettings.allowedDomains.length >= 3)">Add</button>
                 </div>
             </div>
 
             <div class="flex flex-col gap-2 mt-4" v-if="orgSettings.allowedDomains && orgSettings.allowedDomains.length > 0">
                 <div v-for="(dom, idx) in orgSettings.allowedDomains" :key="idx" class="flex justify-between items-center bg-base-200 p-2 rounded">
                     <span class="font-mono text-sm">{{ dom }}</span>
-                    <button class="btn btn-xs btn-error btn-ghost" @click="removeDomain(idx)">Remove</button>
+                    <button class="btn btn-sm h-11 md:h-8 btn-error btn-ghost" @click="removeDomain(idx)">Remove</button>
                 </div>
             </div>
             <div v-else class="text-sm opacity-50 mt-4">
@@ -173,10 +174,11 @@
                 <Icon icon="solar:shop-linear" class="w-6 h-6 text-primary" />
                 Storefront Custom Site Settings
             </h3>
-            <p class="text-sm text-gray-500 mb-4">Configure your public storefront name and custom domain/subdomain mapping.</p>
+            <p class="text-sm text-base-content/70 mb-4">Configure your public storefront name and custom domain/subdomain mapping.</p>
             
-            <div v-if="fetchingDomain" class="flex justify-center py-4">
-                <span class="loading loading-spinner loading-md"></span>
+            <div v-if="fetchingDomain" class="space-y-3 py-4 max-w-md">
+                <div class="skeleton h-10 w-full rounded-xl"></div>
+                <div class="skeleton h-10 w-full rounded-xl"></div>
             </div>
             <div v-else class="space-y-4 max-w-md">
                 <div class="form-control w-full">
@@ -192,12 +194,12 @@
                     </label>
                     <input type="text" v-model="tenantDomain.domain" :placeholder="`e.g. retro.${siteConfig.tenantRootDomain}`" class="input input-bordered w-full font-mono text-sm" />
                     <label class="label">
-                        <span class="label-text-alt text-gray-400">Enter a subdomain like <code>vintage.{{ siteConfig.tenantRootDomain }}</code> or your own custom domain.</span>
+                        <span class="label-text-alt text-base-content/60">Enter a subdomain like <code>vintage.{{ siteConfig.tenantRootDomain }}</code> or your own custom domain.</span>
                     </label>
                 </div>
 
                 <div class="flex justify-end pt-2">
-                    <button class="btn btn-primary btn-sm gap-2" @click="saveTenantDomain" :disabled="savingDomain || !tenantDomain.storeName || !tenantDomain.domain">
+                    <button class="btn btn-primary btn-sm h-11 md:h-9 gap-2 font-black" @click="saveTenantDomain" :disabled="savingDomain || !tenantDomain.storeName || !tenantDomain.domain">
                         <span v-if="savingDomain" class="loading loading-spinner loading-xs"></span>
                         <Icon icon="solar:disk-linear" class="w-4 h-4" />
                         Save Storefront Settings
@@ -214,14 +216,14 @@
                 <Icon icon="solar:settings-linear" class="w-6 h-6 text-primary" />
                 Inventory Preferences
             </h3>
-            <p class="text-sm text-gray-500 mb-4">Set default display options for your organization's inventory.</p>
+            <p class="text-sm text-base-content/70 mb-4">Set default display options for your organization's inventory.</p>
             
             <div class="form-control">
                 <label class="label cursor-pointer justify-start gap-4">
                     <input type="checkbox" v-model="onlyShowFlaggedLocated" class="checkbox checkbox-primary" @change="saveInventoryPrefs" />
                     <div>
                         <span class="label-text font-bold text-base">Only Show Placed & Located Items by Default</span>
-                        <p class="text-xs text-gray-400 mt-0.5">Filter the inventory dashboard to show only items with status 'placed' that are categorized by storage or selling location.</p>
+                        <p class="text-xs text-base-content/60 mt-0.5">Filter the inventory dashboard to show only items with status 'placed' that are categorized by storage or selling location.</p>
                     </div>
                 </label>
             </div>
@@ -272,6 +274,7 @@ import { teams, ID, databases, Query } from '../../lib/appwrite';
 import type { Models } from 'appwrite';
 import { addToast } from '../../stores/toast';
 import { confirmDialog } from '../../stores/confirm';
+import { toUserMessage } from '../../lib/userFacingErrors';
 import { Icon } from '@iconify/vue';
 import { siteConfig } from '../../site-config';
 import SlideOverDrawer from '../common/SlideOverDrawer.vue';
@@ -349,7 +352,7 @@ const saveTenantDomain = async () => {
         }
     } catch (e: any) {
         console.error("Failed to save tenant domain:", e);
-        addToast({ type: 'error', message: "Failed to save storefront settings: " + e.message });
+        addToast({ type: 'error', message: toUserMessage(e, "Failed to save storefront settings.") });
     } finally {
         savingDomain.value = false;
     }
@@ -543,10 +546,10 @@ const handleInvite = async () => {
         addToast({ type: 'success', message: 'Invitation sent!' });
         fetchMembers(); // Refresh list to show pending
     } catch (e: any) {
-        if (e.message.includes('unique') || e.code === 409) {
+        if (e.message?.includes('unique') || e.code === 409) {
             addToast({ type: 'warning', message: 'This user is already a member or has a pending invitation.' });
         } else {
-            addToast({ type: 'error', message: `Failed to send invite: ${e.message}` });
+            addToast({ type: 'error', message: toUserMessage(e, 'Failed to send invitation.') });
         }
     } finally {
         inviting.value = false;
@@ -561,7 +564,7 @@ const confirmRemove = async (member: Models.Membership) => {
             fetchMembers();
             addToast({ type: 'success', message: 'Member removed.' });
         } catch (e: any) {
-             addToast({ type: 'error', message: e.message });
+             addToast({ type: 'error', message: toUserMessage(e, 'Failed to remove member.') });
         }
     }
 };
@@ -599,7 +602,7 @@ const handleResend = async (member: Models.Membership) => {
              fetchMembers();
         } catch (e: any) {
              console.error("Resend flow error:", e);
-             addToast({ type: 'error', message: `Failed to resend: ${e.message}` });
+             addToast({ type: 'error', message: toUserMessage(e, 'Failed to resend invitation.') });
         }
     }
 };
