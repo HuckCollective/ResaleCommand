@@ -7,129 +7,37 @@
     subtitle="Scan tags or search items to build your sale cart, inspect items, and check out."
   >
     <div class="space-y-5">
-      <!-- STEP 1: REQUIRED VENUE / CHANNEL GATE + SALE DATE -->
-      <section class="space-y-2.5">
-        <div class="flex items-center justify-between gap-2">
-          <span
-            class="text-xs font-black uppercase tracking-wider flex items-center gap-1.5"
-            :class="!selectedChannel ? 'text-warning' : 'text-base-content/80'"
-          >
-            <span>1. Venue &amp; Sale Date</span>
-            <span v-if="!selectedChannel" class="badge badge-xs badge-warning font-black">Required</span>
-          </span>
-          <a
-            :href="advancedEditorHref"
-            class="text-[11px] font-bold text-primary hover:underline flex items-center gap-0.5"
-            title="Open the full-page Sales Order form"
-          >
-            <span>Full Order Editor</span>
-            <Icon icon="solar:arrow-right-up-linear" class="w-3.5 h-3.5" />
-          </a>
-        </div>
+      <!-- STEP 1: MULTI-CHANNEL SALES GATE (ONLINE, OUR EVENTS, PARTNER MARKETS & BOOTHS) -->
+      <SaleChannelPicker
+        :selected-channel="selectedChannel"
+        :booth-locations="boothLocationOptions"
+        :online-preset-id="onlinePresetId"
+        :event-preset-id="eventPresetId"
+        :event-name="eventName"
+        :effective-fee-rate="effectiveFeeRate"
+        :sale-date="saleDate"
+        :fee-input="feeInput"
+        :total-commission-fee="totalCommissionFee"
+        :advanced-editor-href="advancedEditorHref"
+        :cms-events="activeCmsEvents"
+        @select-channel="selectChannel"
+        @select-online-preset="applyOnlinePreset"
+        @select-event-preset="applyEventPreset"
+        @select-cms-event="applyCmsEventChip"
+        @update:event-name="eventName = $event"
+        @update:sale-date="saleDate = $event"
+        @update:fee-input="onFeeInputChange"
+      />
 
-        <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
-          <!-- Dynamic Booth / Consignment Locations from warehouses.ts -->
-          <button
-            v-for="loc in boothLocationOptions"
-            :key="loc.code"
-            type="button"
-            @click="selectChannel(loc.code)"
-            class="p-2.5 rounded-2xl border-2 text-left transition-all cursor-pointer flex flex-col justify-between gap-1"
-            :class="selectedChannel === loc.code
-              ? 'border-primary bg-primary/10 shadow-sm'
-              : 'border-base-300 bg-base-100 hover:border-base-content/30'"
-          >
-            <div class="flex items-center justify-between gap-1">
-              <span class="font-black text-xs text-base-content truncate">{{ loc.icon }} {{ loc.shortName }}</span>
-              <span class="badge badge-xs font-mono font-bold" :class="selectedChannel === loc.code ? 'badge-primary' : 'badge-ghost'">
-                {{ loc.feePct }}%
-              </span>
-            </div>
-            <span class="text-[10px] text-base-content/65 leading-tight">
-              {{ loc.supportsPaperSalesSheet ? 'Paper sheet • No SKU needed' : `Booth ${loc.code} register` }}
-            </span>
-          </button>
-
-          <!-- Online / Pop-Up Channel -->
-          <button
-            type="button"
-            @click="selectChannel('ONLINE')"
-            class="p-2.5 rounded-2xl border-2 text-left transition-all cursor-pointer flex flex-col justify-between gap-1"
-            :class="selectedChannel === 'ONLINE'
-              ? 'border-info bg-info/10 shadow-sm'
-              : 'border-base-300 bg-base-100 hover:border-base-content/30'"
-          >
-            <div class="flex items-center justify-between gap-1">
-              <span class="font-black text-xs text-base-content truncate">🌐 Online / Pop-Up</span>
-              <span class="badge badge-xs font-mono font-bold" :class="selectedChannel === 'ONLINE' ? 'badge-info' : 'badge-ghost'">
-                {{ effectiveFeeRate }}%
-              </span>
-            </div>
-            <span class="text-[10px] text-base-content/65 leading-tight">
-              eBay, Posh, Direct + Postage
-            </span>
-          </button>
-        </div>
-
-        <!-- Online Sub-Channel Presets -->
-        <div v-if="selectedChannel === 'ONLINE'" class="p-2.5 rounded-xl bg-base-200/60 border border-base-300 space-y-2">
-          <div class="flex items-center justify-between text-[11px]">
-            <span class="font-bold opacity-75">Platform / Event Preset:</span>
-            <span class="font-mono opacity-65">100% label postage recouped first</span>
-          </div>
-          <div class="flex flex-wrap gap-1.5">
-            <button
-              v-for="preset in ONLINE_PRESETS"
-              :key="preset.id"
-              type="button"
-              @click="applyOnlinePreset(preset)"
-              class="btn btn-xs rounded-lg font-bold"
-              :class="onlinePresetId === preset.id ? 'btn-info' : 'btn-ghost bg-base-100 border border-base-300'"
-            >
-              {{ preset.label }} ({{ preset.feePct }}%)
-            </button>
-          </div>
-        </div>
-
-        <!-- Date + Fee Rate Row (Once Venue Picked) -->
-        <div v-if="selectedChannel" class="grid grid-cols-2 gap-2.5 pt-0.5">
-          <div class="space-y-1">
-            <label class="text-[11px] font-bold text-base-content/70 block">Sale / Sheet Date</label>
-            <input
-              v-model="saleDate"
-              type="date"
-              class="input input-bordered input-sm w-full h-9 rounded-xl font-mono font-bold text-xs bg-base-100"
-            />
-          </div>
-          <div class="space-y-1">
-            <label class="text-[11px] font-bold text-base-content/70 flex items-center justify-between">
-              <span>Commission Fee (%)</span>
-              <span class="font-mono text-[10px] text-error">-${{ totalCommissionFee.toFixed(2) }}</span>
-            </label>
-            <div class="relative">
-              <input
-                v-model.number="customFeePct"
-                type="number"
-                min="0"
-                max="100"
-                step="0.1"
-                class="input input-bordered input-sm w-full pr-7 h-9 rounded-xl font-mono font-bold text-xs bg-base-100"
-              />
-              <span class="absolute right-2.5 top-1/2 -translate-y-1/2 font-mono font-bold text-xs opacity-60">%</span>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <!-- GUARD WHEN NO VENUE IS PICKED YET -->
+      <!-- GUARD WHEN NO CHANNEL IS PICKED YET -->
       <div
         v-if="!selectedChannel"
         class="p-6 rounded-2xl border border-dashed border-warning/50 bg-warning/5 text-center space-y-1.5"
       >
         <div class="text-2xl">👆</div>
-        <div class="text-sm font-black text-base-content">Pick where this sold first</div>
+        <div class="text-sm font-black text-base-content">Pick how this sold first</div>
         <p class="text-xs text-base-content/65 max-w-xs mx-auto">
-          Selecting the venue sets the commission rate and unlocks Tag Scanning, Item Lookup, and Quick Paper-Sheet entry.
+          Choose Online &amp; Live, Pop-Ups &amp; Events (ours or partner markets), or a Retail Booth to unlock Tag Scanning, Lookup, and Quick Checkout.
         </p>
       </div>
 
@@ -533,7 +441,7 @@
             type="button"
             :disabled="!canCheckout || saving"
             @click="checkoutCart(true)"
-            class="btn btn-sm sm:btn-md btn-outline btn-primary rounded-xl font-bold flex-1 gap-1"
+            class="btn btn-sm sm:btn-md h-11 rounded-xl btn-outline btn-primary font-bold flex-1 gap-1"
             title="Record cart and stay open on this venue & date for the next sale"
           >
             <span>Save &amp; Next</span>
@@ -542,7 +450,7 @@
             type="button"
             :disabled="!canCheckout || saving"
             @click="checkoutCart(false)"
-            class="btn btn-sm sm:btn-md btn-primary rounded-xl font-black flex-1 gap-1.5 shadow-md"
+            class="btn btn-sm sm:btn-md h-11 rounded-xl btn-primary text-primary-content font-black flex-1 gap-1.5 shadow-md"
           >
             <span v-if="saving" class="loading loading-spinner loading-xs"></span>
             <Icon v-else icon="solar:check-circle-bold" class="w-4 h-4 shrink-0" />
@@ -560,10 +468,23 @@ import { Icon } from '@iconify/vue';
 import SlideOverDrawer from '../common/SlideOverDrawer.vue';
 import ItemThumbnail from '../common/ItemThumbnail.vue';
 import BarcodeScannerModal from '../common/BarcodeScannerModal.vue';
+import SaleChannelPicker from './SaleChannelPicker.vue';
 import { resolveMultiQtyCost } from '../../composables/useItemDrawerForm';
 import { databases } from '../../lib/appwrite';
 import { getDatabaseId, getItemsCollectionId } from '../../lib/appwriteEnv';
+import { normalizePublicEvent, type CoopPublicEvent } from '../../lib/flagshipContent';
+import { parsePriceValue } from '../../lib/lot-strategy';
 import { salesApi, type SaleData, type SaleDocument } from '../../lib/sales';
+import {
+  EVENT_CHECKOUT_PRESETS,
+  ONLINE_MARKETPLACE_PRESETS,
+  buildCatalogSaleOrderId,
+  buildQuickSaleOrderCodes,
+  isRecentOrActiveCheckoutEvent,
+  sanitizeEventName,
+  type EventChannelPreset,
+  type OnlineChannelPreset,
+} from '../../lib/salesChannels';
 import { extractOrgPrefix } from '../../lib/inventoryUpc';
 import {
   getAllLocationSettingMetas,
@@ -578,13 +499,6 @@ import {
 } from '../../lib/salesBucketing';
 import { addToast } from '../../stores/toast';
 
-interface OnlinePreset {
-  id: string;
-  label: string;
-  feePct: number;
-  tag: string;
-}
-
 interface SaleCartLine {
   cartKey: string;
   mode: 'catalog' | 'quick';
@@ -595,13 +509,6 @@ interface SaleCartLine {
   grossPrice: number;
   unitCost: number;
 }
-
-const ONLINE_PRESETS: OnlinePreset[] = [
-  { id: 'ebay', label: '📦 eBay', feePct: 13.6, tag: 'EBAY' },
-  { id: 'poshmark', label: '👗 Poshmark', feePct: 20, tag: 'POSH' },
-  { id: 'popup_card', label: '🎪 Pop-Up (Card)', feePct: 2.9, tag: 'POPUP' },
-  { id: 'popup_cash', label: '💵 Pop-Up / Direct (Cash)', feePct: 0, tag: 'POPUP' },
-];
 
 const PAPER_SHEET_CHIPS = [
   'Pins & Buttons',
@@ -636,7 +543,11 @@ const todayLocalIso = () => {
 
 const selectedChannel = ref<string>('');
 const entryMode = ref<'lookup' | 'quick'>('lookup');
-const onlinePresetId = ref<string>('ebay');
+const onlinePresetId = ref<OnlineChannelPreset['id']>('ebay');
+const eventPresetId = ref<EventChannelPreset['id']>('hosted_card');
+const eventName = ref<string>('');
+const cmsEventsCache = ref<CoopPublicEvent[]>([]);
+const cmsEventsLoaded = ref<boolean>(false);
 const lookupQuery = ref<string>('');
 const restrictToVenueStock = ref<boolean>(true);
 const quickPartner = ref<'HUCK-' | 'PDXGL-' | 'BB-'>('HUCK-');
@@ -645,6 +556,7 @@ const quickPrice = ref<number | null>(null);
 const quickCost = ref<number>(0);
 const cartLines = ref<SaleCartLine[]>([]);
 const customFeePct = ref<number>(15);
+const feeInput = ref<string>('15');
 const shippingCharged = ref<number>(0);
 const shippingCost = ref<number>(0);
 const saleDate = ref<string>(todayLocalIso());
@@ -652,20 +564,60 @@ const saving = ref<boolean>(false);
 const errorMsg = ref<string>('');
 const showScanner = ref<boolean>(false);
 
+const isNonBoothChannel = computed(
+  () => selectedChannel.value === 'ONLINE' || selectedChannel.value === 'EVENT'
+);
+
+const activeOnlinePreset = computed(
+  () => ONLINE_MARKETPLACE_PRESETS.find((p) => p.id === onlinePresetId.value) || ONLINE_MARKETPLACE_PRESETS[0]
+);
+
+const activeCmsEvents = computed(() =>
+  cmsEventsCache.value.filter((ev) => isRecentOrActiveCheckoutEvent(ev, todayLocalIso(), 14))
+);
+
 const boothLocationOptions = computed(() =>
   getAllLocationSettingMetas(props.warehouses).filter((m) => m.monthlyRent > 0 || m.commissionRate > 0)
 );
 
 const activeBoothMeta = computed(() => {
-  if (!selectedChannel.value || selectedChannel.value === 'ONLINE') return null;
+  if (!selectedChannel.value || isNonBoothChannel.value) return null;
   return boothLocationOptions.value.find((m) => m.code === selectedChannel.value) || null;
 });
 
 const advancedEditorHref = computed(() => {
+  if (selectedChannel.value === 'EVENT') return '';
   if (selectedChannel.value === 'ONLINE') return '/sales/new?channel=online';
   if (selectedChannel.value) return `/sales/new?location=${encodeURIComponent(selectedChannel.value)}`;
   return '/sales/new';
 });
+
+const setFeeRate = (pct: number) => {
+  const safe = Math.min(100, Math.max(0, Number(Number(pct || 0).toFixed(2))));
+  customFeePct.value = safe;
+  feeInput.value = String(safe);
+};
+
+const onFeeInputChange = (raw: string) => {
+  feeInput.value = raw;
+  const parsed = parsePriceValue(raw, 'first', 0);
+  customFeePct.value = Math.min(100, Math.max(0, parsed));
+};
+
+const loadCmsEventChipsOnce = async () => {
+  if (cmsEventsLoaded.value) return;
+  cmsEventsLoaded.value = true;
+  try {
+    const res = await fetch('/api/public/flagship-content');
+    if (!res.ok) return;
+    const data = await res.json();
+    if (Array.isArray(data?.events)) {
+      cmsEventsCache.value = data.events.map((ev: any, idx: number) => normalizePublicEvent(ev, idx));
+    }
+  } catch {
+    // Non-fatal: free-text Event Name input remains available offline
+  }
+};
 
 const resolveItemUnitCost = (item: any): number => {
   if (!item) return 0;
@@ -690,24 +642,50 @@ const selectChannel = (code: string) => {
   errorMsg.value = '';
 
   if (code === 'ONLINE') {
-    const preset = ONLINE_PRESETS.find((p) => p.id === onlinePresetId.value) || ONLINE_PRESETS[0];
-    customFeePct.value = preset.feePct;
+    const preset = activeOnlinePreset.value;
+    setFeeRate(preset.feePct);
     restrictToVenueStock.value = false;
     entryMode.value = 'lookup';
     return;
   }
 
+  if (code === 'EVENT') {
+    const preset = EVENT_CHECKOUT_PRESETS.find((p) => p.id === eventPresetId.value) || EVENT_CHECKOUT_PRESETS[0];
+    setFeeRate(preset.feePct);
+    shippingCharged.value = 0;
+    shippingCost.value = 0;
+    restrictToVenueStock.value = false;
+    entryMode.value = 'lookup';
+    loadCmsEventChipsOnce();
+    return;
+  }
+
   const meta = boothLocationOptions.value.find((m) => m.code === code);
-  customFeePct.value = Number(meta?.feePct ?? 0);
+  setFeeRate(Number(meta?.feePct ?? 0));
   shippingCharged.value = 0;
   shippingCost.value = 0;
   restrictToVenueStock.value = true;
   entryMode.value = meta?.supportsPaperSalesSheet ? 'quick' : 'lookup';
 };
 
-const applyOnlinePreset = (preset: OnlinePreset) => {
+const applyOnlinePreset = (preset: OnlineChannelPreset) => {
   onlinePresetId.value = preset.id;
-  customFeePct.value = preset.feePct;
+  setFeeRate(preset.feePct);
+};
+
+const applyEventPreset = (preset: EventChannelPreset) => {
+  eventPresetId.value = preset.id;
+  setFeeRate(preset.feePct);
+};
+
+const applyCmsEventChip = (ev: CoopPublicEvent) => {
+  eventName.value = sanitizeEventName(ev.title);
+  setFeeRate(ev.defaultFeePct);
+  if (ev.eventKind === 'hosted_by_us') {
+    eventPresetId.value = ev.defaultFeePct === 0 ? 'hosted_cash' : 'hosted_card';
+  } else if (ev.eventKind === 'partner_event') {
+    eventPresetId.value = ev.defaultFeePct === 0 ? 'partner_cash' : ev.defaultFeePct > 5 ? 'partner_split' : 'partner_card';
+  }
 };
 
 const countInCartForItem = (itemId: string): number =>
@@ -799,7 +777,7 @@ const activeInventoryPool = computed(() =>
 );
 
 const venueScopedCandidates = computed(() => {
-  if (!selectedChannel.value || selectedChannel.value === 'ONLINE' || !restrictToVenueStock.value) {
+  if (!selectedChannel.value || isNonBoothChannel.value || !restrictToVenueStock.value) {
     return activeInventoryPool.value;
   }
   return activeInventoryPool.value.filter((it) => matchesLocationFilter(it, selectedChannel.value));
@@ -883,6 +861,7 @@ watch(
     quickCost.value = 0;
     lookupQuery.value = '';
     saleDate.value = todayLocalIso();
+    loadCmsEventChipsOnce();
 
     const initLoc = (props.initialLocation || '').trim().toUpperCase();
     if (initLoc && initLoc !== 'ALL') {
@@ -894,12 +873,18 @@ watch(
 );
 
 const resolveTargetWarehouseId = (): string => {
-  if (selectedChannel.value === 'ONLINE') {
+  if (isNonBoothChannel.value) {
     const hg = getLocationSettingMeta('HG', props.warehouses);
-    return hg.id || props.warehouses[0]?.$id || 'General';
+    if (!hg.id) {
+      throw new Error('Backstock warehouse (HG) is not loaded yet — please refresh and try again.');
+    }
+    return hg.id;
   }
   const fac = getLocationSettingMeta(selectedChannel.value, props.warehouses);
-  return fac.id || selectedChannel.value;
+  if (!fac.id) {
+    throw new Error(`Selected location (${selectedChannel.value}) is not loaded yet — please refresh and try again.`);
+  }
+  return fac.id;
 };
 
 const checkoutCart = async (keepOpenForNext: boolean) => {
@@ -929,19 +914,25 @@ const checkoutCart = async (keepOpenForNext: boolean) => {
 
       if (line.mode === 'catalog' && line.item) {
         soNumber = line.item.upc || line.item.locationSku || `${line.partnerPrefix}${stamp}`;
-        orderId = `${selectedChannel.value === 'ONLINE' ? 'ONLINE' : selectedChannel.value} • ${line.title}`;
+        orderId = buildCatalogSaleOrderId({
+          selectedChannel: selectedChannel.value,
+          onlineTag: activeOnlinePreset.value.tag,
+          title: line.title,
+          eventName: eventName.value,
+        });
       } else {
-        const chanCode =
-          selectedChannel.value === 'ONLINE'
-            ? ONLINE_PRESETS.find((p) => p.id === onlinePresetId.value)?.tag || 'ONLINE'
-            : selectedChannel.value;
-        soNumber = `${line.partnerPrefix}${chanCode}-${stamp}`;
-        const cleanDesc = line.title.replace(/•/g, '-').trim();
-        const costTag = line.unitCost > 0 ? ` [COST:${line.unitCost.toFixed(2)}]` : '';
-        const sheetPrefix = activeBoothMeta.value?.supportsPaperSalesSheet
-          ? `${selectedChannel.value}-SHEET`
-          : chanCode;
-        orderId = `${sheetPrefix}${costTag} • ${cleanDesc}`;
+        const codes = buildQuickSaleOrderCodes({
+          selectedChannel: selectedChannel.value,
+          partnerPrefix: line.partnerPrefix,
+          stamp,
+          onlineTag: activeOnlinePreset.value.tag,
+          supportsPaperSalesSheet: activeBoothMeta.value?.supportsPaperSalesSheet,
+          unitCost: line.unitCost,
+          title: line.title,
+          eventName: eventName.value,
+        });
+        soNumber = codes.soNumber;
+        orderId = codes.orderId;
       }
 
       const payload: SaleData = {

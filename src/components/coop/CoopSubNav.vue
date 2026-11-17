@@ -56,7 +56,7 @@ import {
 } from '../../lib/coopGovernance';
 
 const props = defineProps<{
-  activeTab?: 'settlements' | 'governance' | 'labor' | 'expenses' | 'vault' | 'charter';
+  activeTab?: 'settlements' | 'governance' | 'labor' | 'expenses' | 'vault' | 'cms' | 'charter';
 }>();
 
 const currentPath = ref('');
@@ -92,6 +92,12 @@ const navTabs = [
     label: 'AI Vault & Prompts',
     href: '/coop/vault',
     icon: 'solar:notebook-bold-duotone',
+  },
+  {
+    id: 'cms',
+    label: 'Flagship & Events CMS',
+    href: '/coop/cms',
+    icon: 'solar:globus-bold-duotone',
   },
   {
     id: 'charter',

@@ -42,7 +42,7 @@
             The Huckleberry Collective
           </h1>
           <p class="text-sm sm:text-base text-base-content/85 leading-relaxed font-medium">
-            Worker Cooperative &amp; Multi-Channel Resale Consortium. Equal partners, 100% open-book transparency, and shared prosperity without middleman cuts.
+            Worker Cooperative &amp; Multi-Channel Sales Consortium—selling across shared online storefronts, live auctions, our own pop-ups, partner markets &amp; conventions, and Portland retail booths with 100% open-book transparency.
           </p>
         </div>
 
@@ -109,7 +109,7 @@
           </div>
           <div class="text-base font-black text-base-content">{{ commonsPct }}% Shared Commons Pool</div>
           <p class="text-xs text-base-content/75 leading-relaxed">
-            Covers retail booth rent ({{ primaryBoothRentLabel }}/mo primary booth), thermal labels, software, and Sweat-Equity labor dividends.
+            Covers pop-up &amp; convention table fees, shared shipping mailers &amp; thermal labels, retail booth rent ({{ primaryBoothRentLabel }}/mo primary booth), software, and Sweat-Equity labor dividends.
           </p>
         </div>
       </div>
@@ -140,7 +140,7 @@
         </a>
       </div>
 
-      <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
+      <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3.5">
         <div
           v-for="hat in joinRoleCards"
           :key="hat.id"

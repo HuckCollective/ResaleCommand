@@ -1,0 +1,18 @@
+---
+import Layout from '../../layouts/Layout.astro';
+import CoopSubNav from '../../components/coop/CoopSubNav.vue';
+import CoopFlagshipCmsView from '../../components/coop/CoopFlagshipCmsView.vue';
+
+export const prerender = false;
+---
+
+<Layout
+  title="Flagship & Multi-Channel Events CMS | Works@TheHC"
+  description="Manage public flagship copy for thehc.llc/#works, online storefronts, Huckleberry-hosted pop-ups, and partner markets."
+  hideFooter={true}
+>
+  <div class="rc-page-shell">
+    <CoopSubNav client:only="vue" activeTab="cms" />
+    <CoopFlagshipCmsView client:only="vue" />
+  </div>
+</Layout>

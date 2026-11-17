@@ -43,6 +43,13 @@ export const COOP_FOUNDER_ROLES: readonly CoopAppwriteRole[] = [
   'founder',
 ] as const;
 
+export const COOP_CMS_PUBLISH_ROLES: readonly CoopAppwriteRole[] = [
+  'owner',
+  'founder',
+  'promoter',
+  'builder',
+] as const;
+
 const KNOWN_ROLES = new Set<CoopAppwriteRole>([
   'owner',
   'founder',

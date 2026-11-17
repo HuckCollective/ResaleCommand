@@ -1202,7 +1202,7 @@ for (const contract of transportContracts) {
     }
 
     const publicRoutes = read('src/lib/publicRoutes.ts');
-    for (const mustBeMemberOnly of ['/dashboard', '/inventory', '/sales', '/expenses', '/warehouse', '/purchases', '/settings', '/coop/vault', '/coop/settlements', '/item']) {
+    for (const mustBeMemberOnly of ['/dashboard', '/inventory', '/sales', '/expenses', '/warehouse', '/purchases', '/settings', '/coop/vault', '/coop/settlements', '/coop/cms', '/item']) {
         if (new RegExp(`['"]${mustBeMemberOnly}['"]`).test(publicRoutes.split('PUBLIC_PREFIXES')[0])) {
             fail(`src/lib/publicRoutes.ts must NOT list ${mustBeMemberOnly} as a public path.`);
         }

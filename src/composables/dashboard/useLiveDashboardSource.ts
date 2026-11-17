@@ -41,6 +41,7 @@ import {
   splitTrailingBoothSku,
 } from '../../lib/salesBucketing';
 import { salesApi } from '../../lib/sales';
+import { isIntentionalNoSkuOrderId } from '../../lib/salesChannels';
 import type { DashboardSource } from './useDashboardSource';
 
 /** Real dashboard data (signed-in members). The ONLY dashboard file that talks to Appwrite. */
@@ -115,12 +116,7 @@ export function useLiveDashboardSource(): DashboardSource {
       const ordUpper = String(d.orderId || '').trim().toUpperCase();
       const isCommons =
         soUpper.startsWith('COMMONS-') || soUpper.startsWith('COMMONS') || ordUpper.includes('[COMMONS]');
-      const isIntentionalNoSku =
-        ordUpper.includes('-SHEET') ||
-        ordUpper.startsWith('ONLINE') ||
-        ordUpper.startsWith('EBAY') ||
-        ordUpper.startsWith('POSH') ||
-        ordUpper.startsWith('POPUP');
+      const isIntentionalNoSku = isIntentionalNoSkuOrderId(d.orderId);
 
       const item =
         (sSo && multiBins.get(sSo)) ||

@@ -31,6 +31,7 @@ export function getRoleActionsForHat(hat: MemberHat, prefix: string): RoleAction
       return [
         { label: 'Collective Settlements', hint: 'Monthly payouts & breakeven', icon: 'solar:hand-money-bold-duotone', href: '/coop/settlements' },
         { label: 'Governance & Votes', hint: 'Proposals and sliders', icon: 'solar:users-group-two-rounded-bold-duotone', href: '/coop/governance' },
+        { label: 'Flagship & Events CMS', hint: 'thehc.llc copy, pop-ups & live drops', icon: 'solar:globus-bold-duotone', href: '/coop/cms' },
         { label: 'Org & Co-op Settings', hint: 'Personas, prefixes, contracts', icon: 'solar:settings-bold-duotone', href: '/settings' },
         { label: 'Expenses & Receipts', hint: 'Commons vs personal', icon: 'solar:bill-list-bold-duotone', href: '/expenses' },
         { label: 'Idea & Prompt Vault', hint: 'Phone notes & Gemini prompts', icon: 'solar:notebook-bold-duotone', href: '/coop/vault' },
@@ -44,7 +45,8 @@ export function getRoleActionsForHat(hat: MemberHat, prefix: string): RoleAction
       ];
     case 'promoter':
       return [
-        { label: 'Social Dropcast Studio', hint: 'Booth drops & reels', icon: 'solar:broadcast-bold-duotone', href: '/social' },
+        { label: 'Social Dropcast Studio', hint: 'Drops, events & reels', icon: 'solar:broadcast-bold-duotone', href: '/social' },
+        { label: 'Flagship & Events CMS', hint: 'Post pop-ups, markets & live drops', icon: 'solar:globus-bold-duotone', href: '/coop/cms' },
         { label: 'Labor Ledger', hint: 'My logged work', icon: 'solar:clock-circle-bold-duotone', href: '/coop/labor' },
         { label: 'Collective Home', hint: 'Charter and pillars', icon: 'solar:shield-star-bold-duotone', href: '/coop' },
       ];
@@ -58,6 +60,7 @@ export function getRoleActionsForHat(hat: MemberHat, prefix: string): RoleAction
     case 'builder':
       return [
         { label: 'Idea & Prompt Vault', hint: 'Bug reports, specs & AI prompts', icon: 'solar:notebook-bold-duotone', href: '/coop/vault?tab=reports' },
+        { label: 'Flagship & Events CMS', hint: 'thehc.llc/#works copy & channels', icon: 'solar:globus-bold-duotone', href: '/coop/cms' },
         { label: 'Thermal Label Studio', hint: 'Signage, shelf cards & barcode tags', icon: 'solar:printer-bold-duotone', href: '/labels/studio' },
         { label: 'Locations & Booth Sync', hint: 'Booth fixtures, SKUs & floor setup', icon: 'solar:shop-2-bold-duotone', href: '/warehouse' },
         { label: 'Labor Ledger', hint: 'My logged Commons build hours', icon: 'solar:clock-circle-bold-duotone', href: '/coop/labor' },

@@ -991,6 +991,7 @@ import { useRicochetSalesSync } from '../../composables/useRicochetSalesSync';
 import { resolveMultiQtyCost } from '../../composables/useItemDrawerForm';
 import { client } from '../../lib/appwrite';
 import { salesApi } from '../../lib/sales';
+import { isIntentionalNoSkuOrderId } from '../../lib/salesChannels';
 import { warehousesApi, matchesLocationFilter, findFacility, resolveDefaultRicochetLocationMeta, getAllLocationSettingMetas } from '../../lib/warehouses';
 import PaginationDock from '../common/PaginationDock.vue';
 import BarcodeScannerModal from '../common/BarcodeScannerModal.vue';
@@ -1065,16 +1066,7 @@ const handleRecordedSalesSaved = async ({ sales: newSales }: { sales: SaleDocume
   }
 };
 
-const isIntentionalNoSkuSale = (sale: any): boolean => {
-  const ord = String(sale?.orderId || '').trim().toUpperCase();
-  return (
-    ord.includes('-SHEET') ||
-    ord.startsWith('ONLINE') ||
-    ord.startsWith('EBAY') ||
-    ord.startsWith('POSH') ||
-    ord.startsWith('POPUP')
-  );
-};
+const isIntentionalNoSkuSale = (sale: any): boolean => isIntentionalNoSkuOrderId(sale?.orderId);
 
 const isUnlinkedTicketSale = (sale: any): boolean => {
   if (!sale) return false;

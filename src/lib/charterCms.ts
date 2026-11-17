@@ -18,7 +18,7 @@ export interface CharterSectionView {
 }
 
 export interface CharterRoleCard {
-  id: 'curator' | 'promoter' | 'enabler' | 'consignor' | 'founder';
+  id: 'curator' | 'promoter' | 'enabler' | 'builder' | 'consignor' | 'founder';
   order: number;
   icon: string;
   title: string;

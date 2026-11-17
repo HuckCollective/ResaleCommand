@@ -43,7 +43,7 @@ export const siteConfig = {
   tagline: "Where the collective builds, sources, and operates.",
   subtitle: "Cooperative Operations & Inventory",
   description:
-    "Works@TheHC (The Huckleberry Works) — Where The Huckleberry Collective builds, sources, and operates multi-channel resale, booth sync, and cooperative settlements.",
+    "Works@TheHC (The Huckleberry Works) — Where The Huckleberry Collective builds, sources, and operates multi-channel sales across online marketplaces, live drops, pop-ups & hosted events, retail booths, and cooperative settlements.",
   siteUrl: envSiteUrl.replace(/\/+$/, ""),
   fallbackOrigins: SYNC_FALLBACK_ORIGINS,
   tenantRootDomain: TENANT_ROOT_DOMAIN,
@@ -54,34 +54,34 @@ export const siteConfig = {
   // Configurable Social Thumbnails (Open Graph / Discord / iMessage / Twitter Cards & On-Page Share Cards)
   socialMeta: {
     defaultImage: "/images/mt-hoodoutline-sign.png",
-    defaultImageAlt: "The Huckleberry Collective — Pacific Northwest Vintage, Booth #0EJ & The Works",
+    defaultImageAlt: "The Huckleberry Collective — Multi-Channel Vintage, Events, Online Drops & Works@TheHC",
     logoImage: "/images/badge-qr-sticker-fullname.png",
     themeColor: "#D4672A",
     pages: {
       home: {
-        title: "The Huckleberry Collective | PNW Co-op, Vintage & Works@TheHC",
+        title: "The Huckleberry Collective | PNW Co-op, Live Drops, Events & Works@TheHC",
         description:
-          "The Huckleberry Collective is a Pacific Northwest hub for thrift adventures, Booth #0EJ, and The Works (works.thehc.llc) — the cooperative AI resale, booth sync, and WSDE settlement platform.",
+          "The Huckleberry Collective is a Pacific Northwest cooperative powering online drops, live auctions, pop-ups & community events, Portland retail booths, and The Works (works.thehc.llc).",
         image: "/images/mt-hoodoutline-sign.png",
         imageAlt: "The Huckleberry Collective — Built on the road, rooted in the PNW",
       },
       works: {
-        title: "The Huckleberry Works (Works@TheHC) — Cooperative Resale & Booth OS",
+        title: "The Huckleberry Works (Works@TheHC) — Multi-Channel Sales, Events & Co-op OS",
         description:
-          "AI Quick Scout, Multi-Item Photo Slicer, Antique Mall Booth Sync & Democratic 70/30 Co-op OS at works.thehc.llc.",
+          "AI Quick Scout, Multi-Item Photo Slicer, Online + Pop-Up + Event Checkout, Retail Booth Sync & Democratic 70/30 Co-op OS at works.thehc.llc.",
         image: "/images/mt-hoodoutline-sign.png",
         badgeImage: "/images/SpaceHCBadge.png",
-        imageAlt: "The Huckleberry Works (Works@TheHC) — From Thrift Haul to Booth Payout",
+        imageAlt: "The Huckleberry Works (Works@TheHC) — From Haul to Every Way We Sell",
         shareUrl: "https://works.thehc.llc",
         shareText:
-          "Explore Works@TheHC by The Huckleberry Collective — AI Quick Scout, Vintage Booth Sync & Democratic 70/30 Co-op OS:",
+          "Explore Works@TheHC by The Huckleberry Collective — Multi-Channel Sales, Pop-Ups & Events, AI Quick Scout & 70/30 Co-op OS:",
       },
       huckfinds: {
         title: "HuckFinds & Huck's Adventures Outfitter | The Huckleberry Collective",
         description:
-          "HuckFinds is the reselling & Adventurer Outfitter arm of The Huckleberry Collective. Visit Booth #0EJ inside The Memory Den in Portland, OR, or follow our live drops.",
+          "HuckFinds is the multi-channel reselling & Adventurer Outfitter arm of The Huckleberry Collective—shop our live online drops, Portland pop-ups & partner events, or Booth #0EJ at The Memory Den.",
         image: "/images/hucks-sign.png",
-        imageAlt: "HuckFinds & Huck's Adventures Outfitter — Booth #0EJ at The Memory Den",
+        imageAlt: "HuckFinds & Huck's Adventures Outfitter — Online Drops, Pop-Ups & Booth #0EJ",
       },
     },
   },

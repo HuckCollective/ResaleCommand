@@ -4,6 +4,10 @@
 
 ---
 
+## ✅ CO-OP SWEAT-EQUITY (`SWEAT-`), GATE 4B WATERFALL, SERVER-ENFORCED LABOR APPROVAL, POST-PAYOUT MONTH LOCK & APPWRITE TEAM ROLES (`alpha-1` & `main` — Nov 16, 2026)
+- **Additive Server-Only `coop_ledger` Collection, Pure Integer-Cent 4-Gate Engine & Official PDFs (`src/lib/coopLedgerServer.ts`, `src/lib/coop/settlementEngine.ts`, `src/components/coop/CoopRolesPanel.vue`, `src/components/coop/CoopMonthLockBar.vue`, `src/components/sales/CoopSettlementView.vue`, `src/lib/coopSettlementPdf.ts`)**:
+  - Provisioned `resale_db.coop_ledger` with live `COOP_TEAM_ID` role enforcement, Founder labor approval, SHA-256 `coop_lock_YYYY-MM` post-payout Month Locks, `BigInt` largest-remainder `allocateCents`, individual `SWEAT-` worker rows, and Mondragon Cash vs. ICA comparison drawers & PDFs.
+
 ## ✅ `🕸️ AUCTION SWEEP` (`v4.5`) — ACTIVE AUCTION GRID TRIAGE, HYBRID 2-SPEED SLEEPER VISION, WEBPAGE CARD OVERLAYS & IN-DRAWER `⚡ FULL SCOUT` DRILL-DOWN (`alpha-1` & `main` — Nov 15, 2026)
 - **Isomorphic Sweep Engine & Authenticated Batch API (`src/lib/auctionSweep.ts`, `src/pages/api/bml/auction-sweep.ts`)**:
   - Built `sanitizeSweepCandidates`, `selectSleeperThumbnailIndices` (`MAX_SWEEP_LOTS = 40`, `MAX_SLEEPER_THUMBS = 8` rationed strictly to vague `"Lot / Box / Jar / Assorted / Mystery / RPG / Jewelry"` cards), `buildAuctionSweepPrompt`, and deterministic `scoreAndRankSweepLots` grounded dynamically in `loadLiveWarehouseDocs()` + `getLocationSettingMeta()` (Law 2 Zero Hardcoding) and `loadAppraisalRules()` (`manifests/ai_appraisal_rules_v1`).

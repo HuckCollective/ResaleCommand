@@ -27,6 +27,8 @@ Under our **{{CURATOR_PCT}} / {{COMMONS_PCT}} waterfall**, the **{{COMMONS_PCT}}
 | **{{COMMONS_PCT}}% Commons Pool** | **$472.50** | *Covers ${{PRIMARY_BOOTH_RENT}} rent + supplies & reserve* | — |
 | **Total Partner Payout Check** | **$1,652.50** | **$1,057.00** | **$595.50** |
 
-#### Across Online & Pop-Up Channels
-- **Online Marketplaces (eBay, Etsy, Storefront):** Platform fees (12%–15%) and outbound postage labels are recouped at Gates 1–2; Curators keep **{{CURATOR_PCT}}%** of Net Surplus while **{{COMMONS_PCT}}%** funds poly mailers, boxes, thermal labels, and hosting.
-- **Pop-Ups & Conventions:** Card processing (~2.9%) is deducted at Gate 1; the **{{COMMONS_PCT}}%** Commons Pool covers table fees, signage, and booth hardware.
+#### Multi-Channel Sales Engines (Online, Hosted Events, Partner Markets & Booths)
+- **🌐 Online Marketplaces & Live Auctions (Shared eBay + Pirate Ship, Whatnot, Depop, Poshmark, District):** Platform fees and actual Pirate Ship outbound postage labels are recouped **100%** at Gates 1–2; Curators keep **{{CURATOR_PCT}}%** of Net Surplus while **{{COMMONS_PCT}}%** funds shared poly mailers, boxes, Rollo `4×6` labels, and software.
+- **🎪 Events & Pop-Ups Hosted by Us:** Zero external venue commission (`0%` cash / `~2.9%` tap-to-pay card processing at Gate 1); event promotion, signage, and crew setup hours earn Sweat-Equity dividends.
+- **🤝 Partner Markets, Flea Swaps & Conventions:** Card processing (`~2.9%`) or host split is deducted at Gate 1, while weekend table/booth fees are reimbursed from the **{{COMMONS_PCT}}%** Shared Commons Pool.
+- **🏪 Permanent Retail Booths ({{PRIMARY_BOOTH_NAME}} & {{SECONDARY_BOOTH_NAME}}):** Automated 2-way barcode & monthly POS payout sync, with monthly booth rent absorbed by the **{{COMMONS_PCT}}%** Commons Pool.

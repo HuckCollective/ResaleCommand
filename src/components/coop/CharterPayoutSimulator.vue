@@ -10,7 +10,7 @@
             Live Member Payout Simulator ({{ liveCuratorPct }} / {{ liveCommonsPct }} Net Surplus)
           </h2>
           <p class="text-xs text-base-content/70">
-            Test any item across retail booths, online marketplaces, or pop-ups to see your exact take-home check.
+            Test any item across online marketplaces, live auctions, our own pop-ups, partner conventions, or retail booths.
           </p>
         </div>
       </div>
@@ -209,11 +209,12 @@ const channelPresets = computed<ChannelPreset[]>(() => {
     }));
 
   return [
-    ...retailPresets,
-    { id: 'ebay-etsy', label: 'eBay / Etsy (13%)', rate: 13, defaultShipping: 8 },
-    { id: 'poshmark', label: 'Poshmark (20%)', rate: 20, defaultShipping: 0 },
-    { id: 'popup-card', label: 'Pop-up Card (2.9%)', rate: 2.9, defaultShipping: 0 },
-    { id: 'popup-cash', label: 'Pop-up Cash (0%)', rate: 0, defaultShipping: 0 },
+    { id: 'ebay-ship', label: '🌐 eBay + Ship (13.6%)', rate: 13.6, defaultShipping: 8 },
+    { id: 'whatnot-depop', label: '📡 Whatnot / Depop (11%)', rate: 11, defaultShipping: 0 },
+    { id: 'poshmark', label: '👗 Poshmark (20%)', rate: 20, defaultShipping: 0 },
+    { id: 'hosted-card', label: '🎪 Our Event Card (2.9%)', rate: 2.9, defaultShipping: 0 },
+    { id: 'direct-cash', label: '💵 Event / Cash (0%)', rate: 0, defaultShipping: 0 },
+    ...retailPresets.slice(0, 2),
   ];
 });
 
