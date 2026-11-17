@@ -243,7 +243,7 @@
         <section class="rounded-2xl border border-base-300 bg-base-200/50 p-3.5 sm:p-4 space-y-3">
           <div class="flex items-center justify-between gap-2 flex-wrap">
             <h5 class="text-xs font-extrabold uppercase tracking-wider text-base-content">
-              Live Waterfall Preview (Integer-Cent Exact)
+              Live Waterfall Preview (Exact to the Penny)
             </h5>
             <span class="badge badge-xs badge-success text-success-content font-semibold">
               🔒 Official Ledger Math

@@ -27,6 +27,14 @@
         </div>
 
         <div class="flex flex-wrap items-center gap-2 shrink-0">
+          <button
+            type="button"
+            class="btn btn-sm h-11 md:h-9 btn-primary text-primary-content rounded-xl font-black gap-1.5 px-4 shadow-xs"
+            @click="openNewCampaignDrawer"
+          >
+            <Icon icon="solar:add-circle-bold" class="w-4 h-4 shrink-0" />
+            <span>+ New Promo / Drop</span>
+          </button>
           <a
             href="/coop/cms"
             class="btn btn-sm h-11 md:h-9 btn-outline rounded-xl font-bold gap-1.5"
@@ -116,8 +124,18 @@
     >
       <div class="text-base font-black text-base-content">No social promos in this view yet</div>
       <p class="text-xs text-base-content/65 max-w-md mx-auto">
-        Tap <strong>+ New Promo / Drop</strong> in the bottom bar (or pick an upcoming event above) to track cross-posts across Instagram, TikTok, Facebook, Whatnot, Depop, and eBay.
+        Tap <strong>+ New Promo / Drop</strong> (or pick an upcoming event above) to track cross-posts across Instagram, TikTok, Facebook, Whatnot, Depop, and eBay.
       </p>
+      <div class="pt-1">
+        <button
+          type="button"
+          class="btn btn-sm h-11 md:h-9 btn-primary text-primary-content rounded-xl font-black gap-1.5 px-4"
+          @click="openNewCampaignDrawer"
+        >
+          <Icon icon="solar:add-circle-bold" class="w-4 h-4 shrink-0" />
+          <span>+ New Promo / Drop</span>
+        </button>
+      </div>
     </div>
 
     <!-- CAMPAIGN CROSS-POST MATRIX CARDS -->
@@ -186,13 +204,18 @@
             </button>
 
             <button
-              v-if="progressOf(camp).liveUrls.length > 0 && !camp.laborLoggedEntryId"
+              v-if="!camp.laborLoggedEntryId"
               type="button"
-              class="btn btn-xs h-11 md:h-8 px-3 btn-outline btn-secondary rounded-xl font-black gap-1.5"
+              class="btn btn-xs h-11 md:h-8 px-3 rounded-xl font-black gap-1.5"
+              :class="
+                progressOf(camp).liveUrls.length > 0
+                  ? 'btn-outline btn-secondary'
+                  : 'btn-outline border-base-300 text-base-content/85'
+              "
               @click="openLaborDrawer(camp)"
             >
               <Icon icon="solar:clock-circle-bold" class="w-3.5 h-3.5 shrink-0" />
-              <span>Log Promo Hours</span>
+              <span>⏱️ Log Promo Hours</span>
             </button>
 
             <button
@@ -462,8 +485,27 @@
       <div v-if="laborTargetCampaign" class="space-y-4">
         <div class="rounded-2xl bg-base-200/60 border border-base-300 p-3.5 space-y-1.5 text-xs">
           <div class="font-black text-sm text-base-content">{{ laborTargetCampaign.title }}</div>
-          <div class="text-base-content/70 font-mono break-all">
+          <div
+            v-if="progressOf(laborTargetCampaign).liveUrls.length > 0"
+            class="text-base-content/70 font-mono break-all"
+          >
             Proof link(s): {{ progressOf(laborTargetCampaign).liveUrls.join(' | ') }}
+          </div>
+          <div v-else class="space-y-2 pt-0.5">
+            <div class="text-warning font-bold">
+              Step 1 needed: Save at least 1 live https:// post link on a channel tile first so Founder approval includes proof.
+            </div>
+            <button
+              type="button"
+              class="btn btn-xs h-10 px-3 btn-primary text-primary-content rounded-xl font-black gap-1.5"
+              @click="
+                laborDrawerOpen = false;
+                openPostLogDrawer(laborTargetCampaign, laborTargetCampaign.targetChannels[0] || 'instagram');
+              "
+            >
+              <span>Paste First Post Link</span>
+              <span>➔</span>
+            </button>
           </div>
         </div>
 
@@ -500,7 +542,7 @@
           </button>
           <button
             type="button"
-            :disabled="loggingLabor"
+            :disabled="loggingLabor || !laborTargetCampaign || progressOf(laborTargetCampaign).liveUrls.length === 0"
             class="btn btn-sm h-11 md:h-9 btn-success text-success-content rounded-xl font-black px-4 shadow-sm"
             @click="submitVerifiedPromoLabor"
           >
@@ -521,14 +563,16 @@
         </div>
       </template>
       <template #right>
-        <button
-          type="button"
-          class="btn btn-sm sm:btn-md h-11 btn-primary text-primary-content rounded-2xl font-black gap-1.5 px-5 shadow-md"
-          @click="openNewCampaignDrawer"
-        >
-          <Icon icon="solar:add-circle-bold" class="w-4 h-4 shrink-0" />
-          <span>+ New Promo / Drop</span>
-        </button>
+        <div class="sm:mr-16 flex items-center">
+          <button
+            type="button"
+            class="btn btn-sm sm:btn-md h-11 btn-primary text-primary-content rounded-2xl font-black gap-1.5 px-5 shadow-md"
+            @click="openNewCampaignDrawer"
+          >
+            <Icon icon="solar:add-circle-bold" class="w-4 h-4 shrink-0" />
+            <span>+ New Promo / Drop</span>
+          </button>
+        </div>
       </template>
     </BottomActionDock>
   </div>
