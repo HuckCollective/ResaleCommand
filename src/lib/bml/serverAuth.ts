@@ -18,7 +18,7 @@ export interface BookmarkletMemberSession {
 }
 
 const TOKEN_PREFIX = 'rcbml_v1';
-const DEFAULT_TTL_SECONDS = 3 * 24 * 60 * 60; // 3 days
+const DEFAULT_TTL_SECONDS = 14 * 24 * 60 * 60; // 14 days (matches UI 14-Day Token badge; rotate BML_TOKEN_SECRET to revoke)
 
 export const BML_CORS_HEADERS: Record<string, string> = {
   'Access-Control-Allow-Origin': '*',
@@ -27,13 +27,26 @@ export const BML_CORS_HEADERS: Record<string, string> = {
   'Content-Type': 'application/json',
 };
 
+let warnedImplicitBmlSecret = false;
+
 function getSigningSecret(): string {
+  const keyVersion = getEnvVar('BML_TOKEN_KEY_VERSION') || 'v1';
   const explicit = getEnvVar('BML_TOKEN_SECRET') || getEnvVar('JOIN_LINK_SECRET');
-  if (explicit) return explicit;
+  if (explicit) {
+    return `${keyVersion}:${explicit}`;
+  }
   const apiKey = getEnvVar('APPWRITE_API_KEY');
-  const project = getEnvVar('PUBLIC_APPWRITE_PROJECT_ID') || '69714b35003a8adab6bb';
+  if (!apiKey) {
+    throw new Error('BML_TOKEN_SECRET (or APPWRITE_API_KEY) must be configured on the server.');
+  }
+  if (!warnedImplicitBmlSecret) {
+    warnedImplicitBmlSecret = true;
+    console.warn(
+      '[bml/serverAuth] BML_TOKEN_SECRET is not explicitly set; deriving HMAC key from server secret. Set BML_TOKEN_SECRET in production for independent token rotation.'
+    );
+  }
   return createHash('sha256')
-    .update(`rc-bml-secret:${apiKey || project}`)
+    .update(`rc-bml-secret:${keyVersion}:${apiKey}`)
     .digest('hex');
 }
 

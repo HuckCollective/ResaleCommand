@@ -15,13 +15,14 @@
 
 ---
 
-## 5.2 Peak-End Rule `[LINT]` — Reassurance at the Peak, Clarity at the End
-*People judge an experience largely by how they felt at its most intense moment (Peak) and at its conclusion (End).*
+## 5.2 Peak-End Rule `[LINT]` & Krug #6 *Reservoir of Goodwill* `[LINT]`
+*People judge an experience by its most intense moment and conclusion (Peak-End), and every user arrives with a finite Reservoir of Goodwill that friction drains and transparency refills (Krug #6).*
 
 ### Concrete Checks
 - **At the Peak (High-Stakes Money, Sync, or Tag Actions):**
   - **Pre-Flight Transparency:** Always render a visible **Pre-Flight Queue Preview** before batch writes (`Law #2`: exact `N` blank items `0EJ... | Blank ➔ HUCK-XXXX` before `🚀 Fill Missing`; live `"Before ➔ After"` payout/snapshot summary before `🔒 Lock Month`).
-  - **Actionable Error Recovery:** If an Appwrite batch or child component fails, unlock the UI and surface the exact human-readable reason + a `Reload` / `Retry` action (`InventoryViewHub.vue` `onErrorCaptured` pattern) — never fail silently or dump raw stack traces.
+  - **Never Hide Key Status Data (Krug #6b):** Surface item counts, `$` totals, dynamic venue codes (`MD`, `DT`, `HG`, `HH`), commission rates, and ledger state (`✅ Saved` / `🔒 Official Ledger`) upfront without extra clicks.
+  - **Apologetic, 1-Click Error Recovery (Krug #6c):** If a request or child component fails, unlock the UI, apologize plainly (`toUserMessage` — never dump stack traces), and offer a **1-click fix** (`Retry`, `Paste First Post Link ➔`, `Reconnect`) (`InventoryViewHub.vue` `onErrorCaptured` pattern; input leniency enforced under Postel's Law in `03`).
 - **At the End (Workflow Closure):**
   - Transition committed manifests cleanly to a permanent affirmative state (`✅ Already Synced ({{ lockedItemCount }} items committed)`, or `🔒 Locked · snapshot #xxxxxxxx`), hiding the Commit button so the user knows with 100% certainty the job is done (`Law 6` Layer 2).
 

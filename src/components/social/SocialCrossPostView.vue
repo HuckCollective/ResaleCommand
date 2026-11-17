@@ -848,6 +848,8 @@ const persistCampaignMutation = async (
 };
 
 const openNewCampaignDrawer = () => {
+  postLogDrawerOpen.value = false;
+  laborDrawerOpen.value = false;
   isEditingExisting.value = false;
   linkedSkusInput.value = '';
   campaignForm.value = normalizeSocialCampaign({
@@ -864,6 +866,8 @@ const openNewCampaignDrawer = () => {
 };
 
 const openEditCampaignDrawer = (camp: SocialPromoCampaign) => {
+  postLogDrawerOpen.value = false;
+  laborDrawerOpen.value = false;
   isEditingExisting.value = true;
   campaignForm.value = JSON.parse(JSON.stringify(camp));
   linkedSkusInput.value = camp.linkedSkus.join(', ');
@@ -943,6 +947,8 @@ const seedFromEvent = async (ev: CoopPublicEvent) => {
 };
 
 const openPostLogDrawer = (camp: SocialPromoCampaign, chId: SocialChannelId) => {
+  campaignDrawerOpen.value = false;
+  laborDrawerOpen.value = false;
   activePostCampaign.value = camp;
   activePostChannelId.value = chId;
   const existing = camp.posts[chId] || {
@@ -992,6 +998,8 @@ const copyFactSheet = async (camp: SocialPromoCampaign) => {
 };
 
 const openLaborDrawer = (camp: SocialPromoCampaign) => {
+  campaignDrawerOpen.value = false;
+  postLogDrawerOpen.value = false;
   laborTargetCampaign.value = camp;
   laborHoursInput.value = '1.0';
   const count = progressOf(camp).liveUrls.length;

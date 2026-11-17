@@ -103,6 +103,12 @@ export function buildInjectableBmlAuthRuntimeJs(origins: string[], primaryOrigin
     }
     var returnUrl = window.location.href.split('#')[0];
     var connectUrl = PRIMARY_ORIGIN + '/bml/connect?origin=' + encodeURIComponent(window.location.origin) + '&returnUrl=' + encodeURIComponent(returnUrl) + (shouldForce ? '&forceLogin=1' : '');
+    var ua = (typeof navigator !== 'undefined' && navigator.userAgent) || '';
+    var isMobileDevice = /iPhone|iPad|iPod|Android/i.test(ua) || (typeof navigator !== 'undefined' && Number(navigator.maxTouchPoints || 0) > 1 && /Macintosh/.test(ua));
+    if (isMobileDevice) {
+      window.location.href = connectUrl;
+      return;
+    }
     var w = 440, h = 600;
     var left = Math.max(0, Math.round(window.screenX + (window.outerWidth - w) / 2));
     var top = Math.max(0, Math.round(window.screenY + (window.outerHeight - h) / 2));

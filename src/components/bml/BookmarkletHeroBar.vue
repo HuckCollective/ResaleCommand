@@ -38,9 +38,9 @@
           type="button"
           class="btn btn-xs sm:btn-sm btn-outline font-bold gap-1"
           @click="copyBookmarkletHref"
-          :title="`Copy javascript: URL for Chrome Bookmarks Bar or mobile Chrome (Pixel 8 keyword: ${mobileKeyword})`"
+          :title="`Copy javascript: Script URL for desktop Bookmarks Bar or mobile browser (shortcut keyword: ${mobileKeyword})`"
         >
-          <span>📋 Copy JS URL</span>
+          <span>📋 Copy Script URL</span>
         </button>
 
         <button
@@ -150,12 +150,12 @@
           </div>
         </div>
 
-        <!-- Shared Manual Desktop & Mobile Chrome (Pixel 8) URL Paste Instructions -->
+        <!-- Shared Manual Desktop & Mobile Browser Shortcut Instructions -->
         <div class="bg-base-200/50 rounded-xl p-3 border border-base-300 text-xs space-y-1.5">
-          <div class="font-black">📋 Manual Bookmark Update &amp; Mobile Chrome (Pixel 8 / Android) Trick:</div>
+          <div class="font-black">📋 Desktop Bar &amp; Mobile Browser Shortcut Setup:</div>
           <p class="opacity-80">
-            <strong>Desktop Chrome (No Drag):</strong> Click <button type="button" class="link link-primary font-bold" @click="copyBookmarkletHref">📋 Copy JS URL</button>, right-click your Bookmarks Bar (<kbd class="kbd kbd-xs">Ctrl+Shift+B</kbd>) ➔ <strong>Add page...</strong> (or <strong>Edit...</strong> an existing bookmark), name it <code class="font-mono font-bold">{{ bookmarkletBarLabel }}</code>, and paste into the <strong>URL</strong> field.<br />
-            <strong>Mobile Chrome (Pixel 8):</strong> Tap <button type="button" class="link link-primary font-bold" @click="copyBookmarkletHref">📋 Copy JS URL</button>, bookmark any page, edit its name to <code class="font-mono font-bold">{{ mobileKeyword }}</code>, and paste into the URL field. On your {{ targetPortalDisplayName }} tab, type <code class="font-mono font-bold">{{ mobileKeyword }}</code> in the address bar and tap the starred suggestion!
+            <strong>Desktop (No Drag):</strong> Click <button type="button" class="link link-primary font-bold" @click="copyBookmarkletHref">📋 Copy Script URL</button>, right-click your Bookmarks Bar (<kbd class="kbd kbd-xs">Ctrl+Shift+B</kbd>) ➔ <strong>Add page...</strong>, name it <code class="font-mono font-bold">{{ bookmarkletBarLabel }}</code>, and paste into the <strong>URL</strong> field.<br />
+            <strong>Phone (Chrome / Brave / Edge &amp; Safari):</strong> Tap <button type="button" class="link link-primary font-bold" @click="copyBookmarkletHref">📋 Copy Script URL</button>, bookmark any page, edit its name to start with <code class="font-mono font-bold">{{ mobileKeyword }}</code>, and paste the script URL. On Safari tap from your Bookmarks menu; on Chrome/Brave/Edge type <code class="font-mono font-bold">{{ mobileKeyword }}</code> in the top address bar (do not press Enter) and tap the ★ starred suggestion!
           </p>
         </div>
 
@@ -340,7 +340,7 @@ const copyBookmarkletHref = async () => {
     await navigator.clipboard.writeText(bookmarkletHref.value);
     addToast({
       type: 'success',
-      message: `Copied ${bookmarkletBarLabel.value} JS URL! Paste into a bookmark URL field (keyword: ${mobileKeyword.value}).`,
+      message: `Copied ${bookmarkletBarLabel.value} Script URL! Paste into a bookmark URL field (shortcut keyword: ${mobileKeyword.value}).`,
     });
   } catch {
     addToast({

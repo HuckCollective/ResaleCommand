@@ -36,9 +36,14 @@ Every dashboard, hub, and workbench MUST order information by **human and financ
 
 ---
 
-## 3. Generalized Persona & IA Audit Checks (Required in `laws-of-ux` §4)
+## 3. Generalized Persona, IA & Krug "Trunk Test" Checks (Required in `laws-of-ux` §4)
 
 Whenever running a `laws-of-ux` audit on any route or component, always verify first:
 - **Persona Visibility & Role Isolation `[LINT]`:** Does the view respect `canSeeCollectiveFinancials` so Persona #6 (`Consignor`) and Persona #8 (`/demo`) never leak collective/live records, while Personas #1–#5 (`Founder`, `Curator`, `Promoter`, `Enabler`, `Builder`) share full open-book visibility?
 - **Posture-Matched Touch & Density `[LINT]`:** Do mobile/aisle postures (`<768px`) enforce `44×44px` (`h-11` / `btn-lg`) thumb targets and zero horizontal overflow, while desktop table postures (`md:`+) preserve high-density scanability?
 - **Tier 1–4 Signal Ordering `[LINT]`:** Are Tier-1 Human-to-Human signals (`Join Requests`, `Co-op Messages`, `Votes`) elevated above static cards and wired to 1-tap trays instead of dead-end links?
+- **Krug #5 — Street Signs & The "Trunk Test" (Wayfinding) `[LINT]`:** Dropping onto any `.astro`/`.vue` view cold (especially on a `375px–420px` mobile viewport), can a user instantly spot without hunting:
+  1. **What section/app pillar this is** (`aria-current="page"` / active pillar highlight within the `validate-templates.mjs` §17 nav budget; cross-linking Miller's Law in `03`),
+  2. **The exact `<h1>` page name** matching the link they tapped,
+  3. **Where they are in the workflow** (active filter/queue pill, step indicator, and honest dynamic **🏪 Selling Booth** vs. **📦 Backstock Storage** distinction via `src/lib/warehouses.ts`), and
+  4. **The primary action** (cross-linking Hick's Law in `01`)?

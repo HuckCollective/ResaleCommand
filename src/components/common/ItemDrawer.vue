@@ -15,38 +15,42 @@
           :editForm="editForm"
           :suggestedTitleStr="suggestedTitleStr"
           :suggestedTagTitleStr="suggestedTagTitleStr"
+          :activeTab="mainTab"
           @close="closeDrawer"
           @dismiss-shop-update="handleDismissShopUpdate"
           @flag-shop-update="handleFlagShopUpdate"
           @copy-title="copyToClipboard(editForm.title || item?.title)"
-          @open-cocuration="showCoCurationDrawer = true" />
+          @open-cocuration="mainTab = mainTab === 'online' ? 'details' : 'online'" />
 
-        <!-- 2. TABS (Details, Verify, Lot) -->
+        <!-- 2. TABS (Details, Verify, Lot, Online Bin) -->
         <div
           class="px-4 sm:px-6 pt-1 pb-0 bg-base-100 border-b border-base-200 flex-none z-20">
-          <div role="tablist" class="tabs tabs-bordered font-bold w-full">
-            <a
+          <div role="tablist" class="tabs tabs-bordered font-bold w-full overflow-x-auto scrollbar-none">
+            <button
+              type="button"
               role="tab"
-              class="tab flex-1 text-xs sm:text-sm py-2"
+              class="tab flex-1 h-11 md:h-auto text-xs sm:text-sm py-2 whitespace-nowrap"
               :class="{ 'tab-active text-primary': mainTab === 'details' }"
               @click="mainTab = 'details'">
               <Icon icon="solar:notes-linear" class="w-4 h-4 mr-1.5 inline" />
               Listing Details
-            </a>
-            <a
+            </button>
+            <button
+              type="button"
               role="tab"
-              class="tab flex-1 text-xs sm:text-sm py-2"
+              class="tab flex-1 h-11 md:h-auto text-xs sm:text-sm py-2 whitespace-nowrap"
               :class="{ 'tab-active text-primary': mainTab === 'verify' }"
               @click="mainTab = 'verify'">
               <Icon
                 icon="solar:checklist-minimalistic-linear"
                 class="w-4 h-4 mr-1.5 inline" />
               Checklist / Verify
-            </a>
-            <a
+            </button>
+            <button
               v-if="item"
+              type="button"
               role="tab"
-              class="tab flex-1 text-xs sm:text-sm py-2"
+              class="tab flex-1 h-11 md:h-auto text-xs sm:text-sm py-2 whitespace-nowrap"
               :class="{
                 'tab-active text-secondary font-bold': mainTab === 'lot',
               }"
@@ -57,15 +61,31 @@
               <span>Playbook</span>
               <span
                 v-if="lotChildren?.length > 0"
-                class="badge badge-2xs badge-secondary font-mono ml-1"
+                class="badge badge-2xs badge-secondary text-secondary-content font-mono ml-1"
                 >({{ lotChildren.length }})</span
               >
               <span
                 v-else-if="Number(editForm.quantity || item?.quantity || 1) > 1"
-                class="badge badge-2xs badge-neutral font-mono ml-1"
+                class="badge badge-2xs badge-neutral text-neutral-content font-mono ml-1"
                 >({{ editForm.quantity || item?.quantity }})</span
               >
-            </a>
+            </button>
+            <button
+              v-if="item?.$id && canShowOnlineBinTab"
+              type="button"
+              role="tab"
+              class="tab flex-1 h-11 md:h-auto text-xs sm:text-sm py-2 whitespace-nowrap"
+              :class="{
+                'tab-active text-info font-bold': mainTab === 'online',
+              }"
+              @click="mainTab = 'online'">
+              <span>🌐 Online Bin</span>
+              <span
+                v-if="isOnlineReadyActive"
+                class="badge badge-2xs badge-info text-info-content font-bold ml-1"
+                >Ready</span
+              >
+            </button>
             <div v-if="item" class="flex items-center pl-1 shrink-0">
               <AiFeedbackButton
                 :surface="mainTab === 'lot' ? 'playbook' : 'deep_scan'"
@@ -173,8 +193,16 @@
             @apply-single-play="handleApplySinglePlay" />
         </div>
 
-        <!-- 6. STICKY ACTION TOOLBAR FOOTER (Clean 2-Button Dock) -->
+        <!-- 6. ONLINE READY BIN & CO-CURATION TAB (Lazy-Mounted v-if; zero stacked drawers §16) -->
+        <ItemOnlineTab
+          v-if="item && mainTab === 'online'"
+          :item="item"
+          @saved="handleCoCurationSaved"
+          @back="mainTab = 'details'" />
+
+        <!-- 7. STICKY ACTION TOOLBAR FOOTER (Hidden on Online Tab so only 1 primary Save CTA renders) -->
         <ItemDrawerFooter
+          v-if="mainTab !== 'online'"
           :current-tab="mainTab"
           :item="item"
           :edit-form="editForm"
@@ -359,12 +387,6 @@
           <button type="button" @click="closeZoomPreview">close</button>
         </form>
       </dialog>
-
-      <!-- Online Ready Bin & Co-Curation Slide-Over Drawer -->
-      <OnlineCoCurationDrawer
-        v-model="showCoCurationDrawer"
-        :item="item"
-        @saved="handleCoCurationSaved" />
     </div>
   </Teleport>
 </template>
@@ -376,6 +398,8 @@ import { Icon } from '@iconify/vue';
 import PhotoGalleryManager from './PhotoGalleryManager.vue';
 import ScannerWidget from './ScannerWidget.vue';
 import { useLotSplitter } from '../../composables/useLotSplitter';
+import { useBodyScrollLock } from '../../composables/useBodyScrollLock';
+import { checkCoCurationEligibility, hasOnlineReadyTag } from '../../lib/onlineCoCuration';
 
 // Decomposed Subcomponents & Composables
 import ItemDrawerHeader from './drawer/ItemDrawerHeader.vue';
@@ -384,7 +408,7 @@ import ItemDetailsTab from './drawer/ItemDetailsTab.vue';
 import ItemVerifyTab from './drawer/ItemVerifyTab.vue';
 import ItemLotTab from './drawer/ItemLotTab.vue';
 import AiFeedbackButton from './AiFeedbackButton.vue';
-const OnlineCoCurationDrawer = defineAsyncComponent(() => import('../inventory/OnlineCoCurationDrawer.vue'));
+const ItemOnlineTab = defineAsyncComponent(() => import('./drawer/ItemOnlineTab.vue'));
 import { useItemDrawerForm, resolveMultiQtyCost, getDefaultStorageLocation, rememberStorageLocation } from '../../composables/useItemDrawerForm';
 import { useMediaAssetManager } from '../../composables/useMediaAssetManager';
 
@@ -448,18 +472,15 @@ const fetchLocations = async () => {
     }
 };
 
+useBodyScrollLock();
+
 onMounted(() => {
-    document.body.style.overflow = 'hidden';
     setTimeout(() => {
         fetchLocations();
     }, 50);
 });
 
 watch(currentTeam, (n) => { if(n) fetchLocations(); });
-
-onUnmounted(() => {
-    document.body.style.overflow = '';
-});
 
 const PROJECT = import.meta.env.PUBLIC_APPWRITE_PROJECT_ID;
 const ENDPOINT = import.meta.env.PUBLIC_APPWRITE_ENDPOINT;
@@ -523,7 +544,9 @@ const mainTab = ref('details');
 const descTab = ref('edit');
 const processing = ref(false);
 const showMdModal = ref(false);
-const showCoCurationDrawer = ref(false);
+
+const canShowOnlineBinTab = computed(() => checkCoCurationEligibility(props.item).eligible);
+const isOnlineReadyActive = computed(() => hasOnlineReadyTag(editForm) || hasOnlineReadyTag(props.item));
 
 const handleCoCurationSaved = (payload) => {
     const updated = payload?.item;

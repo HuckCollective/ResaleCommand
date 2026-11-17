@@ -1,37 +1,42 @@
 <template>
-  <div class="card bg-base-100 border border-base-200 shadow-sm rounded-3xl p-5 sm:p-6 space-y-5">
+  <div class="card bg-base-100 border border-base-200 shadow-sm rounded-3xl p-5 sm:p-6 space-y-5 sm:space-y-6">
     <!-- Header & 14-Day Member Session Status -->
     <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-      <div class="space-y-1">
+      <div class="space-y-1.5">
         <div class="flex items-center gap-2 flex-wrap">
-          <span class="badge badge-sm badge-primary text-primary-content font-extrabold whitespace-nowrap">
+          <span class="badge badge-sm badge-primary text-primary-content font-extrabold whitespace-nowrap shrink-0">
             🔐 Member-Gated Bookmarklets
           </span>
           <span
             v-if="localSession"
-            class="badge badge-sm badge-success text-success-content font-mono font-bold whitespace-nowrap"
+            class="badge badge-sm badge-success text-success-content font-mono font-bold whitespace-nowrap shrink-0"
           >
             ✅ Active: {{ localSession.name }} ({{ localSession.prefix }})
           </span>
           <span
             v-else
-            class="badge badge-sm badge-warning text-warning-content font-bold whitespace-nowrap"
+            class="badge badge-sm badge-warning text-warning-content font-bold whitespace-nowrap shrink-0"
           >
-            ⏳ Not Minted on This Browser Yet
+            ⏳ Pass Not Active on This Browser Yet
           </span>
         </div>
-        <h3 class="text-lg font-black text-base-content">
-          Bookmarklet Hub, Bar Customizer &amp; Pixel 8 Triggers
-        </h3>
-        <p class="text-xs text-base-content/70 max-w-2xl leading-relaxed">
-          Customize your Chrome Bookmarks Bar labels, icons, HUD titles, and Pixel 8 address-bar trigger keywords. All bookmarklet API routes enforce a signed 14-day member session (<code class="font-mono font-bold">/bml/connect</code>) so zero credentials ever touch third-party pages.
+        <component :is="headingTag" class="text-xl sm:text-2xl font-black tracking-tight text-base-content">
+          Bookmarklet Hub, Desktop Bar &amp; Mobile Shortcuts
+        </component>
+        <p class="text-xs sm:text-sm text-base-content/75 max-w-2xl leading-relaxed">
+          Customize your desktop Bookmarks Bar labels, icons, HUD titles, and mobile address-bar shortcut keywords. Every tool uses a signed 14-day member pass (<code class="font-mono font-bold">/bml/connect</code>) so zero passwords ever touch third-party pages.
         </p>
       </div>
 
       <div class="flex items-center gap-2 flex-wrap shrink-0">
         <button
           type="button"
-          class="btn btn-sm btn-primary text-primary-content font-black rounded-xl gap-1.5 shadow-xs"
+          class="btn btn-sm h-11 md:h-9 rounded-xl gap-1.5 shadow-xs"
+          :class="
+            !localSession
+              ? 'btn-primary text-primary-content font-black'
+              : 'btn-outline btn-primary font-bold'
+          "
           :disabled="minting"
           @click="mintLocalToken"
         >
@@ -43,10 +48,10 @@
           href="/bml/connect"
           target="_blank"
           rel="noopener"
-          class="btn btn-sm btn-outline rounded-xl font-bold gap-1.5"
+          class="btn btn-sm h-11 md:h-9 btn-outline rounded-xl font-bold gap-1.5"
         >
           <Icon icon="solar:square-top-down-bold" class="w-3.5 h-3.5 shrink-0" />
-          <span>Handshake Page</span>
+          <span>Open Sign-In Page</span>
         </a>
       </div>
     </div>
@@ -68,15 +73,15 @@
                 </span>
                 <span
                   v-if="registry.tools[toolId].status === 'active'"
-                  class="badge badge-xs badge-success text-success-content font-bold whitespace-nowrap"
+                  class="badge badge-xs badge-success text-success-content font-bold whitespace-nowrap shrink-0"
                 >
                   Live Active
                 </span>
                 <span
                   v-else
-                  class="badge badge-xs badge-info text-info-content font-bold whitespace-nowrap"
+                  class="badge badge-xs badge-info text-info-content font-bold whitespace-nowrap shrink-0"
                 >
-                  Phase 2 Ready
+                  Coming Soon
                 </span>
               </div>
               <div class="text-[11px] font-mono text-base-content/65">
@@ -91,9 +96,9 @@
                 @mousedown="stampFreshHref($event, toolId)"
                 @dragstart="stampFreshHref($event, toolId)"
                 @click.prevent="notifyDrag(toolId)"
-                class="btn btn-xs sm:btn-sm font-black shadow-xs cursor-grab active:cursor-grabbing gap-1.5"
-                :class="toolId === 'ricochet_sync' ? 'btn-warning text-warning-content border border-warning-content/20' : 'btn-primary text-primary-content border border-primary-content/20'"
-                :title="'⬆️ Drag me to your Desktop Chrome Bookmarks Bar (Ctrl+Shift+B)!'"
+                class="btn btn-xs sm:btn-sm h-11 md:h-8 font-black shadow-xs cursor-grab active:cursor-grabbing gap-1.5"
+                :class="toolId === 'ricochet_sync' ? 'btn-warning text-warning-content border border-warning-content/20' : 'btn-outline border-primary text-primary'"
+                :title="'⬆️ Drag me to your Desktop Bookmarks Bar (Ctrl+Shift+B)!'"
               >
                 <span>{{ getBarPreview(toolId) }}</span>
               </a>
@@ -103,8 +108,8 @@
             </div>
             <span
               v-else
-              class="badge badge-sm badge-ghost border border-base-300 font-bold whitespace-nowrap"
-              title="Bookmarklet bar preview for Phase 2 Auction Scout"
+              class="badge badge-sm badge-ghost border border-base-300 font-bold whitespace-nowrap shrink-0"
+              title="Bookmarklet bar preview"
             >
               {{ getBarPreview(toolId) }}
             </span>
@@ -114,34 +119,67 @@
             {{ registry.tools[toolId].summary }}
           </p>
 
-          <!-- Install Actions (Desktop Drag + Pixel 8 Address-Bar Keyword) -->
-          <div class="rounded-xl bg-base-100 border border-base-300 p-3 space-y-2">
+          <!-- Install Actions (Desktop Drag + Device-Agnostic Mobile Shortcut & Progressive Disclosure) -->
+          <div class="rounded-xl bg-base-100 border border-base-300 p-3.5 space-y-2.5">
             <div class="flex items-center justify-between gap-2 flex-wrap text-xs">
-              <span class="font-extrabold text-base-content">📱 Pixel 8 Chrome Trigger Name:</span>
+              <span class="font-extrabold text-base-content">📱 Mobile Browser Shortcut:</span>
               <code class="font-mono font-black text-primary bg-primary/10 px-2 py-0.5 rounded-lg">
                 {{ getMobileBookmarkName(toolId) }}
               </code>
             </div>
-            <div class="text-[11px] text-base-content/65">
-              On Android Chrome, save any bookmark with this name, paste the copied JS URL as its address, then type
-              <kbd class="kbd kbd-xs font-mono">{{ getKeywordPreview(toolId) }}</kbd> in the address bar on target pages.
-            </div>
-            <div v-if="registry.tools[toolId].status === 'active'" class="flex items-center gap-2 flex-wrap pt-1">
+
+            <!-- Default Visible Compact Trigger Guide -->
+            <ul class="text-[11px] text-base-content/80 space-y-1.5 leading-snug list-disc pl-4">
+              <li>
+                <strong>Chrome / Brave / Edge (Android &amp; iOS):</strong> On target pages, tap the top address bar, type
+                <kbd class="kbd kbd-xs font-mono">{{ getKeywordPreview(toolId) }}</kbd> <em>(do not press Enter)</em>, and tap the
+                <strong>★ Starred suggestion</strong> in the dropdown.
+                <span class="opacity-75">(Note: Tapping from the Chrome Bookmarks menu will not run scripts).</span>
+              </li>
+              <li>
+                <strong>Safari (iPhone / iPad):</strong> Tap the saved bookmark directly from your <strong>Bookmarks menu</strong> on the target page.
+              </li>
+              <li>
+                <strong>Firefox Mobile:</strong> Not supported (blocks <code>javascript:</code> bookmarklets).
+              </li>
+            </ul>
+
+            <div v-if="registry.tools[toolId].status === 'active'" class="flex items-center gap-2 flex-wrap pt-0.5">
               <button
                 type="button"
-                class="btn btn-xs btn-outline font-bold gap-1"
+                class="btn btn-xs h-11 md:h-8 px-3 btn-outline font-bold gap-1.5 rounded-lg"
                 @click="copyJsUrl(toolId)"
               >
-                <span>📋 Copy JS URL</span>
+                <span>📋 Copy Script URL</span>
               </button>
               <button
                 type="button"
-                class="btn btn-xs btn-ghost border border-base-300 font-bold gap-1"
+                class="btn btn-xs h-11 md:h-8 px-3 btn-ghost border border-base-300 font-bold gap-1.5 rounded-lg"
                 @click="copyMobileTitle(toolId)"
               >
-                <span>📱 Copy Pixel 8 Name</span>
+                <span>📱 Copy Mobile Name</span>
               </button>
             </div>
+
+            <!-- Collapsible First-Time Phone Setup (Progressive Disclosure — Krug #3) -->
+            <details class="group rounded-xl border border-base-300 bg-base-200/50 px-3 py-2 text-[11px]">
+              <summary class="cursor-pointer font-extrabold text-base-content flex items-center justify-between gap-2 select-none min-h-9 list-none">
+                <span>📲 First-time phone setup</span>
+                <span class="text-xs opacity-60 group-open:rotate-180 transition-transform">▾</span>
+              </summary>
+              <ol class="mt-2 pt-2 border-t border-base-300/70 space-y-1.5 list-decimal pl-4 text-base-content/80 leading-relaxed">
+                <li>
+                  <strong>Authenticate:</strong> Tap <strong>{{ localSession ? 'Refresh 14-Day Token' : 'Activate 14-Day Token' }}</strong> at the top of this page on your phone.
+                  <span class="opacity-80">On each target site's first run, tap <strong>⚡ Connect Works@TheHC</strong> once. Your saved sign-in on a site can expire after about a week of not visiting it—just tap Connect again.</span>
+                </li>
+                <li>
+                  <strong>Install (Desktop Sync — Easiest):</strong> Drag the pill above to your desktop Bookmarks Bar, click <strong>Copy Mobile Name</strong>, and rename that desktop bookmark so it syncs to your phone automatically.
+                </li>
+                <li>
+                  <strong>Install (Phone Only):</strong> Bookmark any page on your phone, tap <strong>Edit</strong>, paste <strong>Copy Mobile Name</strong> as the name and <strong>Copy Script URL</strong> as the URL <em>(keep the <code>javascript:</code> prefix intact)</em>.
+                </li>
+              </ol>
+            </details>
           </div>
 
           <!-- Customizer Controls -->
@@ -155,9 +193,9 @@
                   :key="ic"
                   type="button"
                   :disabled="!canEdit"
-                  class="btn btn-xs h-7 w-7 min-h-0 rounded-lg font-normal"
-                  :class="registry.tools[toolId].icon === ic ? 'btn-primary text-primary-content' : 'btn-ghost border border-base-300'"
-                  @click="registry.tools[toolId].icon = ic"
+                  class="btn btn-xs h-11 w-11 md:h-7 md:w-7 min-h-0 rounded-lg font-normal"
+                  :class="registry.tools[toolId].icon === ic ? 'btn-secondary text-secondary-content' : 'btn-ghost border border-base-300'"
+                  @click="markDirtyAndSetIcon(toolId, ic)"
                 >
                   {{ ic }}
                 </button>
@@ -169,9 +207,9 @@
                   :key="m.id"
                   type="button"
                   :disabled="!canEdit"
-                  class="btn btn-xs join-item font-bold"
+                  class="btn btn-xs h-11 md:h-7 join-item font-bold"
                   :class="registry.tools[toolId].displayMode === m.id ? 'btn-secondary text-secondary-content' : 'btn-ghost border border-base-300'"
-                  @click="registry.tools[toolId].displayMode = m.id"
+                  @click="markDirtyAndSetMode(toolId, m.id)"
                 >
                   {{ m.label }}
                 </button>
@@ -179,31 +217,35 @@
             </div>
 
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-              <div class="form-control">
-                <label class="label py-0.5">
-                  <span class="label-text text-[11px] font-bold text-base-content/75">Bookmarks Bar Title</span>
+              <div class="flex flex-col gap-1">
+                <label :for="`bml-bar-title-${toolId}`" class="text-[11px] font-bold text-base-content/75">
+                  Bookmarks Bar Title
                 </label>
                 <input
+                  :id="`bml-bar-title-${toolId}`"
                   v-model="registry.tools[toolId].barTitle"
                   type="text"
                   maxlength="32"
                   :disabled="!canEdit"
-                  class="input input-bordered input-xs rounded-lg w-full bg-base-100 font-semibold"
+                  class="input input-bordered input-xs h-11 md:h-8 rounded-lg w-full bg-base-100 font-semibold"
+                  @input="isDirty = true"
                 />
               </div>
 
-              <div class="form-control">
-                <label class="label py-0.5">
-                  <span class="label-text text-[11px] font-bold text-base-content/75">Compact Title &amp; Pixel Keyword</span>
+              <div class="flex flex-col gap-1">
+                <label :for="`bml-compact-title-${toolId}`" class="text-[11px] font-bold text-base-content/75">
+                  Compact Title &amp; Shortcut Keyword
                 </label>
                 <div class="flex items-center gap-1.5">
                   <input
+                    :id="`bml-compact-title-${toolId}`"
                     v-model="registry.tools[toolId].compactTitle"
                     type="text"
                     maxlength="16"
                     :disabled="!canEdit"
                     placeholder="MD Sync"
-                    class="input input-bordered input-xs rounded-lg flex-1 min-w-0 bg-base-100 font-semibold"
+                    class="input input-bordered input-xs h-11 md:h-8 rounded-lg flex-1 min-w-0 bg-base-100 font-semibold"
+                    @input="isDirty = true"
                   />
                   <input
                     v-model="registry.tools[toolId].mobileKeyword"
@@ -211,23 +253,27 @@
                     maxlength="8"
                     :disabled="!canEdit"
                     placeholder="md"
-                    title="Short Pixel 8 Chrome address-bar keyword"
-                    class="input input-bordered input-xs rounded-lg w-16 bg-base-100 font-mono font-bold lowercase text-center"
+                    aria-label="Mobile address-bar shortcut keyword"
+                    title="Short mobile address-bar shortcut keyword"
+                    class="input input-bordered input-xs h-11 md:h-8 rounded-lg w-20 bg-base-100 font-mono font-bold lowercase text-center"
+                    @input="isDirty = true"
                   />
                 </div>
               </div>
             </div>
 
-            <div class="form-control">
-              <label class="label py-0.5">
-                <span class="label-text text-[11px] font-bold text-base-content/75">In-Page HUD Header Title</span>
+            <div class="flex flex-col gap-1">
+              <label :for="`bml-hud-title-${toolId}`" class="text-[11px] font-bold text-base-content/75">
+                In-Page HUD Header Title
               </label>
               <input
+                :id="`bml-hud-title-${toolId}`"
                 v-model="registry.tools[toolId].hudTitle"
                 type="text"
                 maxlength="56"
                 :disabled="!canEdit"
-                class="input input-bordered input-xs rounded-lg w-full bg-base-100 font-semibold"
+                class="input input-bordered input-xs h-11 md:h-8 rounded-lg w-full bg-base-100 font-semibold"
+                @input="isDirty = true"
               />
             </div>
           </div>
@@ -235,20 +281,20 @@
       </div>
     </div>
 
-    <!-- Phase 0 Diagnostic Tester Card (🧪 BML Test) -->
+    <!-- Diagnostic Tester Card (🧪 BML Test) -->
     <div class="rounded-2xl border border-info/40 bg-info/10 p-4 sm:p-5 space-y-3">
       <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div class="space-y-1">
           <div class="flex items-center gap-2 flex-wrap">
-            <span class="badge badge-xs badge-info text-info-content font-black uppercase tracking-wider">
-              Phase 0 Diagnostic
+            <span class="badge badge-xs badge-info text-info-content font-black uppercase tracking-wider whitespace-nowrap shrink-0">
+              Diagnostic
             </span>
             <h4 class="font-black text-sm text-base-content">
-              🧪 BML Test — Cross-Site CSP, Ping &amp; DOM Inspector
+              🧪 BML Test — Cross-Site Connection &amp; Page Inspector
             </h4>
           </div>
           <p class="text-xs text-base-content/75 leading-relaxed max-w-2xl">
-            1) Drag <strong class="font-bold">🧪 BML Test</strong> to your Chrome Bookmarks Bar. 2) Open any ShopGoodwill page and click it. 3) Click <strong class="font-bold">📋 Copy Report</strong> on the bottom-right pill and paste the 5-line report back into chat! (Zero third-party cookies or tokens are ever read.)
+            Drag <strong class="font-bold">🧪 BML Test</strong> to your Bookmarks Bar, click it on any auction page, and tap <strong class="font-bold">📋 Copy Report</strong> to share connection diagnostics.
           </p>
         </div>
 
@@ -258,14 +304,14 @@
             @mousedown="stampFreshHref($event, 'bml_test')"
             @dragstart="stampFreshHref($event, 'bml_test')"
             @click.prevent="notifyTestDrag"
-            class="btn btn-xs sm:btn-sm btn-info text-info-content font-black shadow-xs border border-info-content/20 cursor-grab active:cursor-grabbing gap-1.5"
-            title="⬆️ Drag me to your Desktop Chrome Bookmarks Bar (Ctrl+Shift+B)!"
+            class="btn btn-xs sm:btn-sm h-11 md:h-8 btn-info text-info-content font-black shadow-xs border border-info-content/20 cursor-grab active:cursor-grabbing gap-1.5"
+            title="⬆️ Drag me to your Desktop Bookmarks Bar (Ctrl+Shift+B)!"
           >
             <span>🧪 BML Test</span>
           </a>
           <button
             type="button"
-            class="btn btn-xs sm:btn-sm btn-outline font-bold gap-1"
+            class="btn btn-xs sm:btn-sm h-11 md:h-8 btn-outline font-bold gap-1"
             @click="copyTestJsUrl"
           >
             <span>📋 Copy Tester URL</span>
@@ -279,7 +325,7 @@
           href="https://shopgoodwill.com/shopgoodwill/inprogress-auctions"
           target="_blank"
           rel="noopener noreferrer"
-          class="badge badge-sm badge-outline hover:badge-info font-mono font-bold gap-1"
+          class="btn btn-2xs h-9 md:h-6 btn-outline font-mono font-bold gap-1 rounded-lg"
         >
           <span>1. inprogress-auctions ↗</span>
         </a>
@@ -287,7 +333,7 @@
           href="https://shopgoodwill.com/shopgoodwill/closed-auctions"
           target="_blank"
           rel="noopener noreferrer"
-          class="badge badge-sm badge-outline hover:badge-info font-mono font-bold gap-1"
+          class="btn btn-2xs h-9 md:h-6 btn-outline font-mono font-bold gap-1 rounded-lg"
         >
           <span>2. closed-auctions ↗</span>
         </a>
@@ -295,7 +341,7 @@
           href="https://shopgoodwill.com/shopgoodwill/shipped-orders"
           target="_blank"
           rel="noopener noreferrer"
-          class="badge badge-sm badge-outline hover:badge-info font-mono font-bold gap-1"
+          class="btn btn-2xs h-9 md:h-6 btn-outline font-mono font-bold gap-1 rounded-lg"
         >
           <span>3. shipped-orders ↗</span>
         </a>
@@ -303,16 +349,21 @@
     </div>
 
     <!-- Save / Reset Action Footer -->
-    <div class="flex items-center justify-between gap-3 flex-wrap pt-1 border-t border-base-200">
-      <div class="text-xs text-base-content/65">
+    <div class="flex items-center justify-between gap-3 flex-wrap pt-2 border-t border-base-200">
+      <div class="text-xs text-base-content/70 flex items-center gap-2 flex-wrap">
         <span v-if="savedMsg" class="text-success font-bold">{{ savedMsg }}</span>
-        <span v-else-if="errMsg" class="text-error font-bold">{{ errMsg }}</span>
-        <span v-else>Changes update both the draggable Bookmarks Bar pills and the live in-page HUD header immediately.</span>
+        <template v-else-if="errMsg">
+          <span class="text-error font-bold">{{ errMsg }}</span>
+          <button type="button" class="btn btn-xs h-9 md:h-7 btn-outline rounded-lg font-bold" @click="saveRegistry">
+            Retry Save
+          </button>
+        </template>
+        <span v-else>Changes update both draggable Bookmarks Bar pills and the live in-page HUD header immediately.</span>
       </div>
       <div class="flex items-center gap-2">
         <button
           type="button"
-          class="btn btn-xs sm:btn-sm btn-ghost border border-base-300 rounded-xl font-bold"
+          class="btn btn-xs sm:btn-sm h-11 md:h-9 btn-ghost border border-base-300 rounded-xl font-bold"
           :disabled="!canEdit || saving"
           @click="resetDefaults"
         >
@@ -320,12 +371,17 @@
         </button>
         <button
           type="button"
-          class="btn btn-xs sm:btn-sm btn-primary text-primary-content rounded-xl font-black gap-1.5"
+          class="btn btn-xs sm:btn-sm h-11 md:h-9 rounded-xl gap-1.5"
+          :class="
+            localSession || isDirty
+              ? 'btn-primary text-primary-content font-black shadow-xs'
+              : 'btn-outline btn-primary font-bold'
+          "
           :disabled="!canEdit || saving"
           @click="saveRegistry"
         >
           <span v-if="saving" class="loading loading-spinner loading-xs"></span>
-          <span>💾 Save Bookmarklet Registry</span>
+          <span>💾 Save Shortcut Labels</span>
         </button>
       </div>
     </div>
@@ -337,6 +393,7 @@ import { computed, onMounted, ref } from 'vue';
 import { Icon } from '@iconify/vue';
 import { account } from '../../lib/appwrite';
 import { useAuth } from '../../composables/useAuth';
+import { toUserMessage } from '../../lib/userFacingErrors';
 import { addToast } from '../../stores/toast';
 import { buildRicochetBookmarkletHref } from '../../lib/warehouses';
 import {
@@ -359,11 +416,13 @@ const props = withDefaults(
     canEdit?: boolean;
     defaultLocationCode?: string;
     defaultLocationShortName?: string;
+    headingTag?: 'h1' | 'h2' | 'h3';
   }>(),
   {
     canEdit: true,
     defaultLocationCode: 'MD',
     defaultLocationShortName: 'Memory Den',
+    headingTag: 'h3',
   }
 );
 
@@ -378,11 +437,11 @@ const displayModes: { id: BookmarkletDisplayMode; label: string }[] = [
 const registry = ref<BookmarkletRegistryConfig>(getCachedBmlRegistryConfig());
 const saving = ref(false);
 const minting = ref(false);
+const isDirty = ref(false);
 const savedMsg = ref('');
 const errMsg = ref('');
 const localSession = ref<{ name: string; prefix: string } | null>(null);
-// SSR-hydration lock: MUST start empty on BOTH server and client so onMounted() produces a real reactive change
-// (initializing with window.location.origin made the onMounted assignment a no-op and left the SSR `main` href in the DOM).
+// SSR-hydration lock: MUST start empty on BOTH server and client so onMounted() produces a real reactive change.
 const browserOrigin = ref<string>('');
 
 const ricochetHref = computed(() =>
@@ -436,6 +495,16 @@ const getMobileBookmarkName = (id: BookmarkletToolId) =>
 const getKeywordPreview = (id: BookmarkletToolId) =>
   (registry.value.tools[id].mobileKeyword || (id === 'ricochet_sync' ? 'md' : 'sgw')).toLowerCase();
 
+const markDirtyAndSetIcon = (id: BookmarkletToolId, icon: string) => {
+  registry.value.tools[id].icon = icon;
+  isDirty.value = true;
+};
+
+const markDirtyAndSetMode = (id: BookmarkletToolId, mode: BookmarkletDisplayMode) => {
+  registry.value.tools[id].displayMode = mode;
+  isDirty.value = true;
+};
+
 const readBrowserBmlSession = () => {
   if (typeof window === 'undefined') return;
   try {
@@ -470,7 +539,7 @@ const mintLocalToken = async () => {
     });
     const data = await res.json();
     if (!res.ok || !data?.ok || !data?.token) {
-      throw new Error(data?.error || 'Could not mint bookmarklet token.');
+      throw new Error(data?.error || 'Could not activate 14-day bookmarklet pass.');
     }
     const memberInfo = {
       name: data.member?.name || user.value?.name || 'Member',
@@ -486,9 +555,9 @@ const mintLocalToken = async () => {
       })
     );
     localSession.value = memberInfo;
-    addToast({ type: 'success', message: `14-day Bookmarklet Token active for ${memberInfo.name}!` });
+    addToast({ type: 'success', message: `✅ 14-day Bookmarklet Token active for ${memberInfo.name}!` });
   } catch (e: any) {
-    errMsg.value = e?.message || 'Failed to mint bookmarklet token.';
+    errMsg.value = toUserMessage(e, "Couldn't activate your 14-day pass — please try again.");
   } finally {
     minting.value = false;
   }
@@ -497,32 +566,32 @@ const mintLocalToken = async () => {
 const notifyDrag = (id: BookmarkletToolId) => {
   addToast({
     type: 'info',
-    message: `Drag "${getBarPreview(id)}" up to your Chrome Bookmarks Bar (Ctrl+Shift+B), then click it on your target tab!`,
+    message: `Drag "${getBarPreview(id)}" up to your desktop Bookmarks Bar (Ctrl+Shift+B), then click it on your target tab!`,
   });
 };
 
 const copyJsUrl = async (id: BookmarkletToolId) => {
   try {
     await navigator.clipboard.writeText(getToolHref(id));
-    addToast({ type: 'success', message: 'Copied Bookmarklet JavaScript URL to clipboard!' });
+    addToast({ type: 'success', message: 'Copied Bookmarklet Script URL to clipboard!' });
   } catch {
-    addToast({ type: 'error', message: 'Could not copy bookmarklet URL.' });
+    addToast({ type: 'error', message: 'Could not copy bookmarklet script URL.' });
   }
 };
 
 const notifyTestDrag = () => {
   addToast({
     type: 'info',
-    message: 'Drag "🧪 BML Test" up to your Chrome Bookmarks Bar (Ctrl+Shift+B), then click it on any ShopGoodwill tab!',
+    message: 'Drag "🧪 BML Test" up to your desktop Bookmarks Bar (Ctrl+Shift+B), then click it on any auction tab!',
   });
 };
 
 const copyTestJsUrl = async () => {
   try {
     await navigator.clipboard.writeText(bmlTestHref.value);
-    addToast({ type: 'success', message: 'Copied 🧪 BML Test JavaScript URL to clipboard!' });
+    addToast({ type: 'success', message: 'Copied 🧪 BML Test Script URL to clipboard!' });
   } catch {
-    addToast({ type: 'error', message: 'Could not copy tester bookmarklet URL.' });
+    addToast({ type: 'error', message: 'Could not copy tester script URL.' });
   }
 };
 
@@ -530,14 +599,15 @@ const copyMobileTitle = async (id: BookmarkletToolId) => {
   try {
     const label = getMobileBookmarkName(id);
     await navigator.clipboard.writeText(label);
-    addToast({ type: 'success', message: `Copied Pixel 8 bookmark name: "${label}"` });
+    addToast({ type: 'success', message: `Copied mobile shortcut name: "${label}"` });
   } catch {
-    addToast({ type: 'error', message: 'Could not copy mobile bookmark name.' });
+    addToast({ type: 'error', message: 'Could not copy mobile shortcut name.' });
   }
 };
 
 const resetDefaults = () => {
   registry.value = normalizeBmlRegistryConfig(DEFAULT_BML_REGISTRY_CONFIG);
+  isDirty.value = true;
 };
 
 const saveRegistry = async () => {
@@ -552,15 +622,16 @@ const saveRegistry = async () => {
       user.value?.name || user.value?.email || 'Member'
     );
     registry.value = updated;
+    isDirty.value = false;
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('rc-bml-registry-updated', { detail: updated }));
     }
-    savedMsg.value = '✅ Bookmarklet registry saved & synced to cloud!';
+    savedMsg.value = '✅ Saved — shortcut labels updated across devices!';
     setTimeout(() => {
       savedMsg.value = '';
     }, 3500);
   } catch (e: any) {
-    errMsg.value = e?.message || 'Failed to save bookmarklet registry.';
+    errMsg.value = toUserMessage(e, "Couldn't save shortcut settings — tap Retry Save.");
   } finally {
     saving.value = false;
   }

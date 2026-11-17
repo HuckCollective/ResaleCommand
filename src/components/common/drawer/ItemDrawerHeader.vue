@@ -97,16 +97,16 @@
 
             <!-- Right: Actions & Badges -->
             <div class="flex items-center gap-2 shrink-0">
-                <!-- Online Ready Bin & Co-Curation Trigger -->
+                <!-- Online Ready Bin & Co-Curation Tab Trigger -->
                 <button
                     v-if="item?.$id && canOpenOnlineBin"
                     type="button"
-                    class="btn btn-xs rounded-lg font-bold text-[10px] h-7 min-h-0 px-2.5 gap-1 transition-all"
-                    :class="isItemOnlineReady
+                    class="btn btn-xs rounded-lg font-bold text-[10px] h-11 md:h-7 min-h-0 px-2.5 gap-1 transition-all"
+                    :class="activeTab === 'online' || isItemOnlineReady
                         ? 'btn-info text-info-content shadow-xs'
                         : 'btn-ghost border border-base-300 text-base-content/80 hover:border-info hover:text-info'"
                     @click.stop="emit('open-cocuration')"
-                    :title="isItemOnlineReady ? 'Manage Online Ready Bin & Co-Curation terms' : 'Stage in Online Ready Bin or claim for Co-Curation'"
+                    :title="isItemOnlineReady ? 'Open Online Ready Bin & Co-Curation tab' : 'Stage in Online Ready Bin or claim for Co-Curation'"
                 >
                     <span>🌐</span>
                     <span>{{ isItemOnlineReady ? 'Online Ready' : 'Online Bin' }}</span>
@@ -159,7 +159,7 @@
                 </div>
 
                 <!-- Close Drawer Button -->
-                <button class="btn btn-sm btn-circle btn-ghost" @click="emit('close')" aria-label="Close Drawer">✕</button>
+                <button class="btn btn-sm h-11 w-11 md:h-8 md:w-8 btn-circle btn-ghost" @click="emit('close')" aria-label="Close Drawer">✕</button>
             </div>
         </div>
 
@@ -380,6 +380,10 @@ const props = defineProps({
     suggestedTagTitleStr: {
         type: String,
         default: null
+    },
+    activeTab: {
+        type: String,
+        default: 'details'
     }
 });
 

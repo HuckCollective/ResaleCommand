@@ -4,7 +4,7 @@
             <!-- AI Button (⚡ Quick Scout for unacquired vs 🔍 Deep Scan for acquired) -->
             <button 
                 type="button"
-                class="btn btn-secondary text-secondary-content btn-sm shadow-xs gap-1.5 font-bold hover:scale-105 active:scale-95 transition-all" 
+                class="btn btn-outline btn-secondary h-11 md:h-8 btn-sm shadow-xs gap-1.5 font-bold active:scale-95 transition-all" 
                 @click="emit('analyze')" 
                 :disabled="analyzing || !canAnalyze"
                 :title="isAcquired ? 'Run full multimodal deep scan & lot exit playbook' : 'Run quick scout for rapid appraisal'"
@@ -12,7 +12,7 @@
                 <span v-if="analyzing" class="loading loading-spinner loading-xs"></span>
                 <Icon v-else :icon="isAcquired ? 'solar:magic-stick-3-bold' : 'solar:bolt-bold'" class="w-4 h-4" />
                 <span class="hidden sm:inline">
-                    {{ analyzing ? (analysisStatus || 'Analyzing...') : (isAcquired ? (hasScoutResult ? '🔍 Re-Scan' : '🔍 Deep Scan') : (hasScoutResult ? '⚡ Quick Scout' : '⚡ Quick Scout')) }}
+                    {{ analyzing ? (analysisStatus || 'Analyzing...') : (isAcquired ? (hasScoutResult ? '🔍 Re-Scan' : '🔍 Deep Scan') : '⚡ Quick Scout') }}
                 </span>
                 <span class="sm:hidden">{{ analyzing ? 'Scouting...' : (isAcquired ? (hasScoutResult ? '🔍 Re-Scan' : '🔍 Deep Scan') : '⚡ Quick Scout') }}</span>
             </button>
@@ -24,10 +24,10 @@
         </div>
 
         <div class="flex items-center gap-2">
-            <button type="button" class="btn btn-ghost btn-sm font-semibold" @click="emit('cancel')">Cancel</button>
+            <button type="button" class="btn btn-ghost h-11 md:h-8 btn-sm font-semibold" @click="emit('cancel')">Cancel</button>
             <button 
                 type="button" 
-                class="btn btn-primary text-primary-content btn-sm font-black px-6 shadow-md border border-primary-content/25 active:scale-95 transition-all" 
+                class="btn btn-primary text-primary-content h-11 md:h-8 btn-sm font-black px-6 shadow-md border border-primary-content/25 active:scale-95 transition-all" 
                 @click="emit('save')" 
                 :disabled="processing"
             >

@@ -70,9 +70,10 @@
 
 ---
 
-## 3.7 Paradox of the Active User `[LINT]` — Actionable Empty States Over Manuals
-*Users never read long inline instruction manuals; they start clicking immediately.*
+## 3.7 Paradox of the Active User `[LINT]` & Krug's 3rd Law *(Cut Copy by 50%, Then 50% Again)* `[LINT]`/`[REVIEW]`
+*Users never read long inline instruction manuals—they start clicking immediately (Paradox of the Active User), so omit needless words ruthlessly (Krug #3).*
 
 ### Concrete Checks
-- **Ban Inline Workflow Explainer Cards:** Never place multi-paragraph "How This Page Works" cards above operational tables (`validate-templates.mjs` §11 enforces this on `SalesImporter.vue`).
-- **Self-Evident Empty States:** Empty tables and photo dropzones (`PhotoGalleryManager.vue`, `InventoryTableView.vue`) must state what is empty in `<= 1` short line and offer an immediate 1-click action (`Reset Filters`, `📷 Add Photo with Camera`). Store deep policy/tax documentation in Astro Markdown Content Collections (`src/content/**`) surfaced via `<SlideOverDrawer>`.
+- **Ban "Happy Talk" & Inline Workflow Explainer Cards `[LINT]`/`[REVIEW]`:** Never place welcome blurbs or multi-sentence "How This Page Works" paragraphs above operational forms/tables (`validate-templates.mjs` §11 enforces this on `SalesImporter.vue`); tuck first-time device/phone setup steps inside a collapsible `<details>` disclosure (`"First-time phone setup"`) `[LINT]`.
+- **Layout Redesign Trigger `[REVIEW]`:** If a screen requires a paragraph of instructions to explain how it works, flag the **UI layout itself for redesign** rather than keeping the text.
+- **Self-Evident Empty States `[LINT]`:** Empty tables and photo dropzones (`PhotoGalleryManager.vue`, `InventoryTableView.vue`) must state what is empty in `<= 1` short line and offer an immediate 1-click action (`Reset Filters`, `📷 Add Photo with Camera`). Store deep policy/tax documentation in Astro Markdown Content Collections (`src/content/**`) surfaced via `<SlideOverDrawer>`.

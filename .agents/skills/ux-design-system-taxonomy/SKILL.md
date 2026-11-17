@@ -53,6 +53,10 @@ Watch out for these red flags in existing or new code, and refactor them to use 
    👉 *STRICT TABLE & LEDGER ARCHETYPE INVARIANT*:
    - Every primary table/ledger page (`/inventory`, `/purchases`, `/sales`, `/studios/appraisal`) MUST mount [`PaginationDock.vue`](file:///c:/Users/15034/Projects/ResaleCommand/src/components/common/PaginationDock.vue) (`v-model:currentPage`, `v-model:pageSize`, `:totalItems`, `:totalPages`) paired with `hideFooter={true}` on `<Layout>`.
    - Every item table row MUST render [`ItemThumbnail.vue`](file:///c:/Users/15034/Projects/ResaleCommand/src/components/common/ItemThumbnail.vue) (`size="sm" rounded="lg"`) beside the item title and clickable category/venue filter badges. Never invent a one-off `‹ Prev / Next ›` pager div!
+9. **Red Flag: Stacking a second right-edge `<SlideOverDrawer>` over `ItemDrawer.vue` or another `<SlideOverDrawer>` (`z-class="z-500"`)**
+   👉 *STRICT OVERLAY HIERARCHY INVARIANT (`validate-templates.mjs` §16)*:
+   - **Never stack right-edge on right-edge** (causes double scrims, double `Esc` traps, and body scroll-unlock races). Inside `ItemDrawer.vue`, mount focused workflows as a lazy `v-if` tab (`ItemOnlineTab.vue`, `ItemVerifyTab.vue`, `ItemLotTab.vue`); across sibling right-edge drawers, enforce mutual exclusivity (`openDrawerA` closes `drawerB`).
+   - **Bottom-Sheet Tray (`z-400`) under Right-Edge `ItemDrawer` (`z-450`) IS sanctioned** (Red Flag #6), and all overlays (`SlideOverDrawer`, `ItemDrawer`, Bottom-Sheet Trays) MUST share the ref-counted [`useBodyScrollLock.ts`](file:///c:/Users/15034/Projects/ResaleCommand/src/composables/useBodyScrollLock.ts) composable so closing `ItemDrawer` never prematurely unlocks `document.body` scroll while a Bottom-Sheet Tray remains open underneath.
 
 ---
 

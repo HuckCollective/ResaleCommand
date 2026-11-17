@@ -4,13 +4,14 @@
 
 ---
 
-## 1.1 Hick's Law `[LINT]` — Simultaneous Action Density
-*The time it takes to make a decision increases logarithmically with the number and complexity of simultaneous action choices.*
+## 1.1 Hick's Law `[LINT]` & Krug's 2nd Law *(Mindless, Unambiguous Clicks)* `[REVIEW]`
+*The time it takes to make a decision increases logarithmically with simultaneous action choices (Hick), and users don't count clicks as long as every click is painless and self-evident (Krug #2).*
 
 ### Concrete Vue 3.5 & DaisyUI v5 Checks
-- **One Filled CPA Per Surface Layer:** Each active surface layer (page `<BottomActionDock>` vs. stacked `<SlideOverDrawer>` `#footer`) MUST render at most **1** solid high-contrast Contextual Primary Action (`btn-primary text-primary-content font-black` or `btn-success text-success-content font-black`).
-- **Action Hierarchy Demotion:** Secondary actions use `btn-outline` or `btn-ghost border border-base-300`; destructive/rare utilities (`Delete`, `Unlink`, `Export Raw CSV`) move into overflow menus or contextual batch mode.
-- **Dynamic CPA Morphing:** In Catalog views, `+ Add` yields cleanly to `⚡ Actions (N)` when rows are checked (`ux-design-system-taxonomy` §5).
+- **One Filled CPA Per Surface Layer `[LINT]`:** Each active surface layer (page `<BottomActionDock>` vs. stacked `<SlideOverDrawer>` `#footer`) MUST render at most **1** solid high-contrast Contextual Primary Action (`btn-primary text-primary-content font-black` or `btn-success text-success-content font-black`).
+- **Action Hierarchy Demotion `[LINT]`:** Secondary actions use `btn-outline` or `btn-ghost border border-base-300`; destructive/rare utilities (`Delete`, `Unlink`, `Export Raw CSV`) move into overflow menus or contextual batch mode.
+- **Dynamic CPA Morphing `[LINT]`:** In Catalog views, `+ Add` yields cleanly to `⚡ Actions (N)` when rows are checked (`ux-design-system-taxonomy` §5).
+- **Krug #2 — Verb + Object Labels Over Mystery Meat `[REVIEW]`:** Flag vague links/buttons (`"Manage"`, `"Process"`, `"Submit"`, `"Execute"`, `"Go"`) where the user has to pause and guess what happens next; require unambiguous **Verb + Object** labels (`"Save Hours to Official Ledger"`, `"Copy Mobile Name"`, `"Open Ricochet POS Sync"`).
 
 ```html
 <!-- ❌ FAIL: 3 competing filled semantic buttons in one footer bar -->
@@ -74,12 +75,13 @@ In DaisyUI v5 (`--size-field: 0.25rem` in [`src/styles/theme.css`](file:///c:/Us
 
 ---
 
-## 1.5 Mental Model `[REVIEW]` — Physical Retail & Booth Empathy
-*Interfaces must mirror the physical reality of resellers holding barcode stickers, tote bins, and antique-mall payout sheets.*
+## 1.5 Mental Model `[LINT]` & Krug's 1st Law *(Eliminate "Question Marks": Self-Evident > Self-Explanatory)* `[LINT]`/`[REVIEW]`
+*Interfaces must mirror the physical reality of resellers holding barcode stickers, tote bins, and antique-mall payout sheets—never make the user stop and wonder what a label means or whether an element is clickable.*
 
 ### Concrete Checks
-- **Plain-English Vocabulary:** Always use canonical labels: `✂️ Split Lot`, `📦 Booth Bin (Multi-Qty)`, `➕ Restock Bin`, `↩️ Undo Combine`, `🔍 Deep Scan`, `⚡ Quick Scout`, `📦 Combine Similar`, `🎁 Build Bundle`, and `🏷️ Adopt Booth Tag`.
-- **Dynamic Venue Identity (Law 2):** Never hardcode venue names, commission rates, or rent strings in templates — render `{{ locationMeta.shortName }}` and `{{ locationMeta.feePct }}%` resolved from `src/lib/warehouses.ts`.
+- **Self-Evident Affordance & Plain Reseller Nouns:** Interactive controls must look unmistakably clickable vs. static `.badge` pills (cross-referencing Similarity in `02`) `[LINT]`; replace clever/internal labels (`Phase 2 Ready` ➔ `Coming Soon`, `Handshake Page` ➔ `Open Sign-In Page`) `[REVIEW]` and distinguish **🏪 Selling Booths** (`MD`, `DT`) honestly from **📦 Backstock Storage** (`HG`, `HH`).
+- **Plain-English Vocabulary (`validate-templates.mjs` §15 `[LINT]`):** Always use canonical labels: `✂️ Split Lot`, `📦 Booth Bin (Multi-Qty)`, `➕ Restock Bin`, `↩️ Undo Combine`, `🔍 Deep Scan`, `⚡ Quick Scout`, `📦 Combine Similar`, `🎁 Build Bundle`, and `🏷️ Adopt Booth Tag`.
+- **Dynamic Venue Identity (Law 2 `[LINT]`):** Never hardcode venue names, commission rates, or rent strings in templates — render `{{ locationMeta.shortName }}` and `{{ locationMeta.feePct }}%` resolved from `src/lib/warehouses.ts`.
 
 ---
 

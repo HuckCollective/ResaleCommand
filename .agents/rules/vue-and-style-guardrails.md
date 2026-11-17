@@ -30,8 +30,8 @@ description: "Vue 3.5 SFC, Astro SSR, Tailwind v4, DaisyUI v5, dock spacer, medi
      - `1s – 3s` (filters/drawer saves/initial hydration): Geometry-matched `.skeleton` blocks / local spinner (`setScopedLoading`).
      - `> 3s` (AI Deep Scan, batch sync/import, bulk split): Global `HuckleberryLoader.vue` (`showLoader` with `150ms` anti-strobe debounce & `5s` cancel safety wired to `AbortController`).
 
-6. **30 Laws of UX Design & Read-Only UI Audit Skill:**
-   - When designing, refactoring, or auditing layouts, spacing rhythm, forms, CTA focus, tap targets, or flows, load `.agents/skills/laws-of-ux/SKILL.md` (and only the relevant `references/01..05-*.md` bucket file).
+6. **30 Laws of UX + Steve Krug's 6 *Don't Make Me Think* Rules (`laws-of-ux` Skill + §16/§17):**
+   - Load `.agents/skills/laws-of-ux/SKILL.md` (+ relevant `references/00..05-*.md`) when designing, refactoring, or auditing UI: enforce concrete **Verb + Object** button labels (zero vague `"Manage"`/`"Process"`/`"Submit"`), zero happy talk or multi-sentence instruction blocks above forms/tables (tuck first-time setup into `<details>`, or redesign the layout), Krug Trunk Test wayfinding, zero stacked right-edge drawers (§16), and `<= 5` nav pillars / `<= 7` dropdown items (§17).
 
 7. **Collective Voice & Zero Infrastructure Jargon in UI (`validate-templates.mjs` §15):**
    - Applies **ONLY** to strings a member or shopper can read (templates, badges, toasts, loader steps, error messages)—code identifiers, file names (`lib/appwrite.ts`), comments, AI docs/rules, and `console.*` keep technical names.

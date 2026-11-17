@@ -1391,6 +1391,43 @@ for (const contract of transportContracts) {
     }
 }
 
+// 16. ZERO OVERLAPPING RIGHT-EDGE DRAWERS GUARD (laws-of-ux §3 Bucket 2 / ux-design-system-taxonomy Red Flag #9)
+{
+    const fail = (msg) => { console.error(`❌ [Overlay Hierarchy §16] ${msg}`); hasErrors = true; };
+
+    if (fs.existsSync('src/components/inventory/OnlineCoCurationDrawer.vue')) {
+        fail('src/components/inventory/OnlineCoCurationDrawer.vue must be removed — render Online Bin & Co-Curation inline via src/components/common/drawer/ItemOnlineTab.vue inside ItemDrawer.vue.');
+    }
+
+    const itemDrawerSrc = fs.existsSync('src/components/common/ItemDrawer.vue')
+        ? fs.readFileSync('src/components/common/ItemDrawer.vue', 'utf8')
+        : '';
+    if (/<(?:SlideOverDrawer|OnlineCoCurationDrawer)\b/.test(itemDrawerSrc)) {
+        fail('src/components/common/ItemDrawer.vue must NEVER mount a nested right-edge <SlideOverDrawer> on top of itself — use an inline lazy v-if tab instead.');
+    }
+
+    for (const fullPath of getFiles('src', ['.vue'])) {
+        const rel = path.relative(process.cwd(), fullPath).replace(/\\/g, '/');
+        const tpl = (fs.readFileSync(fullPath, 'utf8').split('<script')[0] || '').replace(/<!--[\s\S]*?-->/g, '');
+        if (/<SlideOverDrawer\b[^>]*\b(?:z-class|zClass)\s*=/.test(tpl)) {
+            fail(`${rel}: <SlideOverDrawer> must not pass z-class/zClass stacking overrides — enforce single active right-edge drawer mutual exclusivity.`);
+        }
+        let drawerDepth = 0;
+        for (const tok of tpl.matchAll(/<\/?SlideOverDrawer\b[^>]*>/g)) {
+            const tag = tok[0];
+            if (tag.startsWith('</')) {
+                drawerDepth = Math.max(0, drawerDepth - 1);
+            } else if (!/\/>\s*$/.test(tag)) {
+                if (drawerDepth > 0) {
+                    fail(`${rel}: Nested <SlideOverDrawer> inside another <SlideOverDrawer> is forbidden.`);
+                    break;
+                }
+                drawerDepth += 1;
+            }
+        }
+    }
+}
+
 if (!hasErrors) {
     console.log(`✅ Clean lint! All ${vueFiles.length} Vue SFCs, ${tsFiles.length} TS files, TDZ declaration order, scripts/ allowlist, Zero Hardcoded Locations, access-control guards, and price-parsing invariants passed with ZERO errors!`);
 } else {

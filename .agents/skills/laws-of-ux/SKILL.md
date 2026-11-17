@@ -1,11 +1,11 @@
 ---
 name: laws-of-ux
-description: Reusable UX design and read-only UI audit skill grounded in all 30 Laws of UX across 5 operational buckets, mapped to Tailwind CSS v4, DaisyUI v5, Astro SSR, and Vue 3.5 checks. Use when designing, refactoring, or auditing any layout, form, button, modal, drawer, tray, or loading/error flow.
+description: Reusable UX design and read-only UI audit skill grounded in all 30 Laws of UX + Steve Krug's 6 Don't Make Me Think usability rules across 5 operational buckets, mapped to Tailwind CSS v4, DaisyUI v5, Astro SSR, and Vue 3.5 checks. Use when designing, refactoring, or auditing any layout, navigation, form, button, modal, drawer, tray, or loading/error flow.
 ---
 
-# Laws of UX — 5-Bucket Design & Read-Only UI Audit Skill
+# Laws of UX & Krug Usability — 5-Bucket Design & Read-Only UI Audit Skill
 
-This skill translates all **30 Laws of UX** into concrete **Tailwind CSS v4**, **DaisyUI v5**, **Astro SSR**, and **Vue 3.5** engineering checks for **Works@TheHC** (`Resale Command`).
+This skill translates all **30 Laws of UX** and **Steve Krug's 6 *Don't Make Me Think* usability rules** into concrete **Tailwind CSS v4**, **DaisyUI v5**, **Astro SSR**, and **Vue 3.5** engineering checks for **Works@TheHC** (`Resale Command`) with zero duplicate checks.
 
 ---
 
@@ -16,43 +16,43 @@ To prevent conflicting instructions, each workspace customization owns one stric
 | Layer | Canonical File | Scope of Authority |
 | :--- | :--- | :--- |
 | **Immutable Architecture Laws** | [`GEMINI.md`](file:///c:/Users/15034/Projects/ResaleCommand/GEMINI.md) | Laws 1–7 (`4` locations only, zero hardcoding, `salesBucketing.ts`, Appwrite-first, Law 5 Enterprise UX/IA, Law 6 3-Tier Commit Idempotency, Law 7 calendar `sold_date`). |
-| **Auto-Injected SFC/CSS Guardrails** | [`.agents/rules/vue-and-style-guardrails.md`](file:///c:/Users/15034/Projects/ResaleCommand/.agents/rules/vue-and-style-guardrails.md) | Fragment/`<Teleport>` prop/emit safety, `client:only="vue"` overlays, `.rc-dock-spacer`, `@reference`, `line-clamp` separation, `/preview` ➔ `/view` fallback, `useLoader.ts` buckets. |
-| **UX Psychology & Heuristics (This Skill)** | [`.agents/skills/laws-of-ux/SKILL.md`](file:///c:/Users/15034/Projects/ResaleCommand/.agents/skills/laws-of-ux/SKILL.md) | *Why & Quantitative Heuristics*: 30 Laws of UX in 5 buckets (`[LINT]` vs. `[REVIEW]`) + On-Demand 5-Point UI Audit Runner. |
+| **Auto-Injected SFC/CSS Guardrails** | [`.agents/rules/vue-and-style-guardrails.md`](file:///c:/Users/15034/Projects/ResaleCommand/.agents/rules/vue-and-style-guardrails.md) | Fragment/`<Teleport>` prop/emit safety, `client:only="vue"` overlays, `.rc-dock-spacer`, `@reference`, `line-clamp` separation, `/preview` ➔ `/view` fallback, `useLoader.ts` buckets, §16/§17 drawer & nav caps. |
+| **UX Psychology & Krug Usability (This Skill)** | [`.agents/skills/laws-of-ux/SKILL.md`](file:///c:/Users/15034/Projects/ResaleCommand/.agents/skills/laws-of-ux/SKILL.md) | *Why & Quantitative Heuristics*: 30 Laws of UX + 6 Krug *Don't Make Me Think* rules in 5 buckets (`[LINT]` vs. `[REVIEW]`) + On-Demand 5-Point UI Audit Runner. |
 | **Domain Pattern Primitive Catalog** | [`.agents/skills/ux-design-system-taxonomy/SKILL.md`](file:///c:/Users/15034/Projects/ResaleCommand/.agents/skills/ux-design-system-taxonomy/SKILL.md) | *What to Mount*: `BottomActionDock`, `SlideOverDrawer`, `ItemDrawer`, `PaginationDock`, `PhotoGalleryManager`, `KpiStatGrid`, and the 4 View Archetypes. |
 | **Mobile Touch & Viewport Authority** | [`.agents/skills/mobile-ux-standards/SKILL.md`](file:///c:/Users/15034/Projects/ResaleCommand/.agents/skills/mobile-ux-standards/SKILL.md) | `375px–420px` viewport rules, `44×44px` mobile floor (`<768px`) + `md:` desktop dense-table carve-out (§4), badge nowrap, and contrast tokens. |
 | **CSS Tokens & Vue SFC Mechanics** | [`daisyui/SKILL.md`](file:///c:/Users/15034/Projects/ResaleCommand/.agents/skills/daisyui/SKILL.md) & [`vue-component-standards/SKILL.md`](file:///c:/Users/15034/Projects/ResaleCommand/.agents/skills/vue-component-standards/SKILL.md) | 29-token `huckleberry` theme spec (`--border: 1px`), `@layer utilities/components`, WebRTC camera lifecycle, and Rule-of-Two extraction. |
 
 ---
 
-## 2. Master 30-Law Index, 9-Persona Ecosystem & Progressive-Disclosure Router
+## 2. Master 30-Law + 6-Krug Index, 9-Persona Ecosystem & Progressive-Disclosure Router
 
-Every law is tagged **`[LINT]`** (deterministic DOM/class/AST check — eligible for `FAIL` or `WARN`) or **`[REVIEW]`** (contextual human-factors judgment — defaults to `WARN` unless breaking a core invariant). Open [`references/00-personas-and-ia-hierarchy.md`](./references/00-personas-and-ia-hierarchy.md) plus ONLY the bucket reference file(s) needed for your task:
+Every rule is tagged **`[LINT]`** (deterministic DOM/class/AST check — eligible for `FAIL` or `WARN`) or **`[REVIEW]`** (contextual human-factors judgment — defaults to `WARN` unless breaking a core invariant). Open [`references/00-personas-and-ia-hierarchy.md`](./references/00-personas-and-ia-hierarchy.md) plus ONLY the bucket reference file(s) needed for your task:
 
-0. **[`references/00-personas-and-ia-hierarchy.md`](./references/00-personas-and-ia-hierarchy.md) (`9 Personas + 4-Tier IA Signal Hierarchy`):**
-   - Personas #1–#9 (`👑 Founder`, `💎 Curator`, `📣 Promoter`, `🔥 Enabler`, `🛠️ Builder`, `🏷️ Consignor`, `🌱 Applicant`, `🧪 /demo Explorer`, `🛒 Shopper`) • Tier-1 Human-to-Human Signal Elevation (`Join Requests`, `Co-op Messages`, `Votes` `[LINT]`) • Role Visibility Isolation `[LINT]`
-1. **[`references/01-decision-and-choice.md`](./references/01-decision-and-choice.md) (`6 Laws`):**
-   - Hick's Law `[LINT]` • Choice Overload `[LINT]` • Fitts's Law `[LINT]` • Jakob's Law `[LINT]` • Mental Model `[LINT]` • Occam's Razor `[REVIEW]`
-2. **[`references/02-visual-grouping-and-layout.md`](./references/02-visual-grouping-and-layout.md) (`7 Laws`):**
-   - Law of Proximity `[LINT]` • Law of Common Region `[LINT]` • Law of Similarity `[LINT]` • Law of Uniform Connectedness `[LINT]` • Law of Prägnanz `[LINT]` • Von Restorff Effect `[LINT]` • Selective Attention `[REVIEW]`
-3. **[`references/03-memory-and-cognitive-load.md`](./references/03-memory-and-cognitive-load.md) (`7 Laws`):**
-   - Chunking `[LINT]` • Miller's Law `[LINT]` • Working Memory `[LINT]` • Cognitive Load `[REVIEW]` • Postel's Law `[LINT]` • Tesler's Law `[REVIEW]` • Paradox of the Active User `[LINT]`
+0. **[`references/00-personas-and-ia-hierarchy.md`](./references/00-personas-and-ia-hierarchy.md) (`9 Personas + 4-Tier IA + Krug #5 Trunk Test`):**
+   - Personas #1–#9 (`👑 Founder`, `💎 Curator`, `📣 Promoter`, `🔥 Enabler`, `🛠️ Builder`, `🏷️ Consignor`, `🌱 Applicant`, `🧪 /demo Explorer`, `🛒 Shopper`) • Tier-1 Human-to-Human Signal Elevation `[LINT]` • Role Visibility Isolation `[LINT]` • **Krug #5 Street Signs & "Trunk Test" Wayfinding** (`validate-templates.mjs` §17) `[LINT]`
+1. **[`references/01-decision-and-choice.md`](./references/01-decision-and-choice.md) (`6 Laws + Krug #1 & #2`):**
+   - Hick's Law `[LINT]` • **Krug #2 Mindless, Unambiguous Clicks (Verb+Object)** `[REVIEW]` • Choice Overload `[LINT]` • Fitts's Law `[LINT]` • Jakob's Law `[LINT]` • Mental Model & **Krug #1 Eliminate "Question Marks"** `[LINT]`/`[REVIEW]` • Occam's Razor `[REVIEW]`
+2. **[`references/02-visual-grouping-and-layout.md`](./references/02-visual-grouping-and-layout.md) (`7 Laws + Krug #4 Billboard`):**
+   - Law of Proximity `[LINT]` • Law of Common Region `[LINT]` • Law of Similarity `[LINT]` • Law of Uniform Connectedness `[LINT]` • Law of Prägnanz & §16 Zero Stacked Right-Edge Drawers `[LINT]` • **Krug #4 Billboard Design (Scan, Don't Read)** `[LINT]`/`[REVIEW]` • Von Restorff Effect `[LINT]` • Selective Attention `[REVIEW]`
+3. **[`references/03-memory-and-cognitive-load.md`](./references/03-memory-and-cognitive-load.md) (`7 Laws + Krug #3 Omit Needless Words`):**
+   - Chunking `[LINT]` • Miller's Law (§17 Nav Budget) `[LINT]` • Working Memory `[LINT]` • Cognitive Load `[REVIEW]` • Postel's Law `[LINT]` • Tesler's Law `[REVIEW]` • Paradox of the Active User & **Krug #3 Cut Copy by 50%, Then 50% Again** `[LINT]`/`[REVIEW]`
 4. **[`references/04-speed-momentum-and-focus.md`](./references/04-speed-momentum-and-focus.md) (`6 Laws`):**
    - Doherty Threshold (`<= 400ms`) `[LINT]` • Flow `[LINT]` • Goal-Gradient Effect `[REVIEW]` • Zeigarnik Effect `[REVIEW]` • Pareto Principle `[REVIEW]` • Parkinson's Law `[REVIEW]`
-5. **[`references/05-perception-and-emotional-impression.md`](./references/05-perception-and-emotional-impression.md) (`4 Laws`):**
-   - Aesthetic-Usability Effect `[LINT]` • Peak-End Rule `[LINT]` • Serial Position Effect `[LINT]` • Cognitive Bias `[REVIEW]`
+5. **[`references/05-perception-and-emotional-impression.md`](./references/05-perception-and-emotional-impression.md) (`4 Laws + Krug #6 Reservoir of Goodwill`):**
+   - Aesthetic-Usability Effect `[LINT]` • Peak-End Rule & **Krug #6 Reservoir of Goodwill** `[LINT]` • Serial Position Effect `[LINT]` • Cognitive Bias `[REVIEW]`
 
 ---
 
 ## 3. 5-Bucket Quick-Enforcement Matrix (Tailwind v4 / DaisyUI v5 / Vue 3.5)
 
 ### Bucket 1 — Decision & Choice
-- **Hick's Law `[LINT]` *(Simultaneous Actions)*:** Render `<= 1` filled Contextual Primary Action (`btn-primary` or `btn-success` with `text-*-content font-black`) **per active surface layer** (e.g., 1 CPA in `<BottomActionDock>`, 1 submit CPA inside an open `<SlideOverDrawer>` `#footer`). Demote secondary siblings to `btn-outline` or `btn-ghost`.
+- **Hick's Law `[LINT]` & Krug's 2nd Law *(Mindless, Unambiguous Clicks)* `[REVIEW]`:** Render `<= 1` filled Contextual Primary Action (`btn-primary` or `btn-success` with `text-*-content font-black`) **per active surface layer** (e.g., 1 CPA in `<BottomActionDock>`, 1 submit CPA inside an open `<SlideOverDrawer>` `#footer`), demoting secondary siblings to `btn-outline` or `btn-ghost`. Users don't count clicks when every click requires zero thought—flag vague mystery-meat labels (`"Manage"`, `"Process"`, `"Submit"`, `"Execute"`, `"Go"`) `[REVIEW]` and require concrete **Verb + Object** labels (`"Save Hours to Official Ledger"`, `"Copy Mobile Name"`, `"Open Ricochet POS Sync"`).
 - **Choice Overload `[LINT]` *(Option Sets & Chips)*:** Cap inline filter/role/niche chip groups at `<= 7` visible pills. Above `7`, switch to `<SingleSelectDropdown>` / `<MultiSelectDropdown>` with search or progressive disclosure (`Top 5–8` unclaimed match candidates; `Top 6` radar alerts).
 - **Fitts's Law `[LINT]` *(Exact DaisyUI v5 Sizing)*:** In DaisyUI v5 (`--size-field: 0.25rem`), `btn-lg` = `48px`, `btn-md` ≈ `40px`, `btn-sm` = `32px`, `btn-xs` = `24px`, and `.btn-2xs` = `22px` (`min-h-11` alone may not override DaisyUI's `height` calc). Deferring to `mobile-ux-standards` §4: mobile (`<768px`) & primary targets MUST use `btn-lg`, `h-11` (`44px`), or `h-11 md:h-auto`, with `>= 8px` (`gap-2`) clearance adjacent to destructive buttons.
-- **Jakob's Law `[LINT]`:** Create/edit forms open in `<SlideOverDrawer>` (`Esc` + backdrop close, body scroll lock, focus move). *Carve-outs*: `askConfirm()` (`ConfirmContainer.vue`) is sanctioned for destructive/email confirmations; `SalesImportTray.vue` is a Law 5 / `validate-templates.mjs` §11 sanctioned right-edge intake tray (`WARN`-only in audits; never rename).
-- **Mental Model `[LINT]` & Occam's Razor `[REVIEW]` *(Collective Voice Guide — Enforced by `validate-templates.mjs` §15)*:**
-  - *Scope:* Applies ONLY to strings a member or shopper can read (templates, badges, toasts, loader steps, API `{ error }` text); code identifiers, file names (`lib/appwrite.ts`), comments, AI docs/rules, and `console.*` keep technical names.
-  - *Never Render Infrastructure / Vendor Jargon:* Zero `Appwrite`, `Vercel`, `Astro`, `DaisyUI`, `Tailwind`, `Supabase`, `resale_db`, `coop_ledger`, `coop_proposals`, `JWT`, `localStorage`, or raw byte/KB storage caps in user-facing UI (legitimate SaaS vendor invoice examples opt out per-line via `data-vendor-ok` / `// rc-vendor-ok`).
+- **Jakob's Law `[LINT]`:** Create/edit forms open in `<SlideOverDrawer>` (`Esc` + backdrop close, ref-counted `useBodyScrollLock()`, focus move). *Carve-outs*: `askConfirm()` (`ConfirmContainer.vue`) is sanctioned for destructive/email confirmations; `SalesImportTray.vue` is a Law 5 / `validate-templates.mjs` §11 sanctioned right-edge intake tray (`WARN`-only in audits; never rename).
+- **Mental Model `[LINT]`, Krug's 1st Law *(Eliminate "Question Marks": Self-Evident > Self-Explanatory)* `[LINT]`/`[REVIEW]` & Occam's Razor `[REVIEW]`:**
+  - *Clarity Over Cleverness (`validate-templates.mjs` §15 `[LINT]` + `[REVIEW]`):* Applies ONLY to strings a member or shopper can read (templates, badges, toasts, loader steps, API `{ error }` text); code identifiers, file names (`lib/appwrite.ts`), comments, AI docs/rules, and `console.*` keep technical names. Replace clever/internal/dev labels (`Phase 2 Ready` ➔ `Coming Soon`, `Handshake Page` ➔ `Open Sign-In Page`) `[REVIEW]` and distinguish Selling Booths (`MD`, `DT`) honestly from Backstock Storage (`HG`, `HH`).
+  - *Never Render Infrastructure / Vendor Jargon (`[LINT]`):* Zero `Appwrite`, `Vercel`, `Astro`, `DaisyUI`, `Tailwind`, `Supabase`, `resale_db`, `coop_ledger`, `coop_proposals`, `JWT`, `localStorage`, or raw byte/KB storage caps in user-facing UI (legitimate SaaS vendor invoice examples opt out per-line via `data-vendor-ok` / `// rc-vendor-ok`).
   - *4 Locked-In Voice Standards:* (1) **Saving & Progress:** `"Saving sales to ledger…"`, `"Saving hours…"`, `"Recording invoices…"`; (2) **Status Pills:** `"✅ Saved"` / `"🔒 Official Ledger"` (`"📴 Saved on This Device"` if offline); (3) **Roles & Invites:** `"Member Hats & Access"`, `"🔒 Steward-Verified"`, `"Invite to the Collective"`, `"Account Steward"`; (4) **Errors:** reassuring retry copy via `toUserMessage(err, fallback)` (`src/lib/userFacingErrors.ts`), plus plain retail labels (`✂️ Split Lot`, `📦 Booth Bin (Multi-Qty)`, `➕ Restock Bin`, `🏷️ Adopt Booth Tag`) and dynamic `{{ locationMeta.shortName }}` lookups (Law 2).
 
 ### Bucket 2 — Visual Grouping & Layout
@@ -60,19 +60,19 @@ Every law is tagged **`[LINT]`** (deterministic DOM/class/AST check — eligible
   - Label ➔ Input / Hint coupling: `4–6px` (`gap-1` / `gap-1.5`).
   - Sibling fields inside one group: `10–16px` (`gap-2.5` to `space-y-4`).
   - Major sections / page shells: `>= 20px` floor on mobile (`space-y-5`, matching `.rc-page-shell`) and `>= 24px` at `sm:`+ (`sm:space-y-6`).
-- **Common Region `[LINT]` & Prägnanz `[LINT]`:** Contain groups via `bg-base-100` ➔ `bg-base-200/60 border border-base-300 rounded-2xl` ➔ `bg-base-300` (`<= 2` nested bordered wrappers). Never combine `line-clamp-*` + vertical padding (`p-*/py-*/pb-*`) on the same element (`validate-templates.mjs` §12B), and never use `truncate` or `line-clamp-*` inside `src/components/dashboard/**` (§14D — dashboard text wraps fully).
-- **Similarity `[LINT]` & Uniform Connectedness `[LINT]`:** Keep semantic color roles invariant across views; never style static `.badge` pills like clickable `.btn` controls; join coupled input+action bars with `.join` (`join-item`).
+- **Common Region `[LINT]`, Prägnanz `[LINT]` & Krug #4 *Billboard Design (Scan, Don't Read)* `[LINT]`/`[REVIEW]`:** Contain groups via `bg-base-100` ➔ `bg-base-200/60 border border-base-300 rounded-2xl` ➔ `bg-base-300` (`<= 2` nested bordered wrappers) with a 3-tier `60 mph` scannable hierarchy (bold `font-black`/`font-extrabold` headers ➔ scannable key-value pills/columns ➔ muted metadata) `[LINT]`; flag walls of unchunked prose (`> 2` consecutive prose lines in operational cards/tables) `[REVIEW]`. Never stack a second right-edge `<SlideOverDrawer>` or `z-class` override over `ItemDrawer.vue` (`validate-templates.mjs` §16 `[LINT]`), never combine `line-clamp-*` + vertical padding (`p-*/py-*/pb-*`) on the same element (§12B), and never use `truncate` or `line-clamp-*` inside `src/components/dashboard/**` (§14D).
+- **Similarity `[LINT]` & Uniform Connectedness `[LINT]` *(Krug #1 Interactive Affordance)*:** Keep semantic color roles invariant across views; interactive `.btn`/`.tab`/`cursor-pointer` controls must look unmistakably clickable vs. static `.badge` pills (never style static badges like buttons); join coupled input+action bars with `.join` (`join-item`).
 - **Von Restorff `[LINT]` & Selective Attention `[REVIEW]`:** Deduplicate status badges across adjacent zones, ban `<Icon>` + emoji doubling in headers, and auto-filter catalog grids when a selection tray is active (`ux-design-system-taxonomy` §8B).
 
 ### Bucket 3 — Memory & Cognitive Load
-- **Chunking `[LINT]` & Miller's Law (`7±2`) `[LINT]`:** Mount `<KpiStatGrid :columns="2 | 3 | 4" />` for summary strips, keep top nav pillars `<= 5`, format currency with `.toFixed(2)`, and format month labels via `monthKeyToLabel` (Law 7).
+- **Chunking `[LINT]` & Miller's Law (`7±2`) `[LINT]`:** Mount `<KpiStatGrid :columns="2 | 3 | 4" />` for summary strips, enforce `<= 5` top nav pillars and `<= 7` links per dropdown across desktop and mobile navigation (`validate-templates.mjs` §17), format currency with `.toFixed(2)`, and format month labels via `monthKeyToLabel` (Law 7).
 - **Working Memory `[LINT]` & Cognitive Load `[REVIEW]`:** Pin target-row context banners (thumbnail + title + SKU + price) inside match/edit drawers, show live `"Before ➔ After"` math previews before stock/money confirmation, collapse non-lead hat sections (`useCollapsibleSection`), and lazy-mount heavy drawer tabs with `v-if`.
-- **Postel's Law `[LINT]` *(Safe Input Lenience)*:**
+- **Postel's Law `[LINT]` *(Safe Input Lenience — Krug #6a Goodwill)*:**
   - Emails: normalize with `.trim().toLowerCase()` on submit + `type="email" autocomplete="email" autocapitalize="none"`.
   - Passwords: **NEVER** `.trim()` or mutate password strings (`autocomplete="current-password"` / `"new-password"`).
   - Prices/Currency: use `type="text" inputmode="decimal"` parsed via `parsePriceValue()` from `src/lib/lot-strategy.ts` (never `type="number"` scroll-wheel traps or raw regex stripping).
   - Handles/UPCs: accept `@handle` or full `https://` URLs and normalize scanned barcodes (`huck-1234` ➔ `HUCK-1234`).
-- **Tesler's Law `[REVIEW]` & Paradox of the Active User `[LINT]`:** Auto-resolve venue fees/rent from `src/lib/warehouses.ts` and CSV schemas in code; ban multi-paragraph workflow explainer cards on operational canvases in favor of self-evident `<PhotoGalleryManager>` / dropzone empty states.
+- **Tesler's Law `[REVIEW]`, Paradox of the Active User `[LINT]` & Krug's 3rd Law *(Cut Copy by 50%, Then 50% Again — Omit Needless Words)* `[LINT]`/`[REVIEW]`:** Auto-resolve venue fees/rent from `src/lib/warehouses.ts` and CSV schemas in code; tuck first-time setup guides inside collapsible `<details>` disclosures (`"First-time phone setup"`) `[LINT]`; ban "happy talk" (welcome blurbs) and multi-sentence instruction blocks above forms/tables `[REVIEW]`. **Layout Redesign Trigger `[REVIEW]`:** If a screen needs a paragraph of instructions to explain how it works, flag the **UI layout itself for redesign** rather than keeping the text.
 
 ### Bucket 4 — Speed, Momentum & Focus
 - **Doherty Threshold (`<= 400ms`) `[LINT]`:** Enforced as a **first-visible-feedback latency target (`<= 400ms`)** layered onto [`src/composables/useLoader.ts`](file:///c:/Users/15034/Projects/ResaleCommand/src/composables/useLoader.ts):
@@ -80,37 +80,37 @@ Every law is tagged **`[LINT]`** (deterministic DOM/class/AST check — eligible
   - Bucket 1 (`< 1s`): Optimistic UI **strictly for reversible, non-money UI toggles** (lens switch, filter chip, star cover photo). **Money- and stock-moving commits NEVER fake optimistic completion** — they strictly follow **Law 6** (button lock, chunked batch progress, exact Appwrite error toast). Note: `150ms` anti-strobe debounce applies strictly to global `showLoader()`.
   - Bucket 2 (`1s – 3s`): Geometry-matched DaisyUI `.skeleton` placeholders + `setScopedLoading(key, true)` instead of collapsing layout height into a bare spinner.
   - Bucket 3 (`> 3s`): `HuckleberryLoader.vue` with live step text, `%` progress, and `5s` safety cancel (`AbortController`).
-- **Flow `[LINT]`:** Zero `window.alert/confirm/prompt`; preserve scroll/filter state across drawer edits; enforce Selection Tray mutual exclusivity; flag (`WARN`) fixed bottom-right toasts if they risk colliding with `<BottomActionDock>` CTAs.
+- **Flow `[LINT]`:** Zero `window.alert/confirm/prompt`; preserve scroll/filter state across drawer edits; enforce single `activeSurface` mutual exclusivity + `useBodyScrollLock()`; flag (`WARN`) fixed bottom-right toasts or dock buttons if they risk colliding with `<BottomActionDock>` or toolbar overlays.
 - **Goal-Gradient `[REVIEW]`, Zeigarnik `[REVIEW]`, Pareto `[REVIEW]` & Parkinson's `[REVIEW]`:** Surface live batch/verify progress (`14 / 18`) and unfinished staging pills (`📦 Staged`), vanish cleanly on pause/completion, keep 80/20 daily tools on frame 0, and pre-fill smart defaults on quick-intake forms.
 
 ### Bucket 5 — Perception & Emotional Impression
 - **Aesthetic-Usability Effect `[LINT]`:** Enforce the 29-token `huckleberry` theme (`--border: 1px`), `whitespace-nowrap shrink-0` + explicit `*-content` contrast (never `p-0`/`px-0` on `.badge`), `/preview` ➔ `/view` `@error` fallback (`<ItemThumbnail>`), and zero-flash SSR session/theme scripts.
-- **Peak-End Rule `[LINT]`:** Render visible Pre-Flight Queue Previews + calm progress at the **Peak** of batch commits, and clear affirmative closure (`✅ Already Synced`) + human-readable retry cards at the **End**.
+- **Peak-End Rule `[LINT]` & Krug #6 *Reservoir of Goodwill* `[LINT]`:** Render visible Pre-Flight Queue Previews + calm progress at the **Peak** of batch commits, and clear affirmative closure (`✅ Already Synced`) at the **End**. Protect user goodwill from friction drains: never hide key decision/status data (item counts, `$` totals, venue codes `MD`/`DT`/`HG`/`HH`, `✅ Saved` / `🔒 Official Ledger` sync state) behind extra clicks, and ensure errors apologize plainly (`toUserMessage`) + offer a **1-click fix** (`Retry`, `Paste First Post Link ➔`, `Reconnect`) (input leniency enforced under Postel's Law in Bucket 3).
 - **Serial Position Effect `[LINT]`:** Place primary identity (`<ItemThumbnail>` + Title, or `#1 👑 Hero Anchor`) in the first slot and net payout / Contextual Primary Action in the final slot.
 - **Cognitive Bias `[REVIEW]`:** Prevent MSRP anchoring and pricing drift — lock Bidding Bar, Channel Comparison, and Target Resale to one `.toFixed(2)` numerical truth and pair `Why Buy (Catalyst)` with `Watch Out (Risks)` in a balanced 2-column grid.
 
 ---
 
-## 4. On-Demand 9-Persona + 5-Bucket Read-Only UI Audit Runner
+## 4. On-Demand 9-Persona + 5-Bucket + Krug Read-Only UI Audit Runner
 
 When asked to **audit** a `.vue` or `.astro` view with `laws-of-ux`:
 1. **Stay 100% Read-Only:** Inspect the target file(s) with `read_file` — never modify `.vue`/`.astro` files or run local `astro build` during an audit.
-2. **Identify Persona Posture & Check Tiers 1–4 + All 5 Buckets:** Verify the active Personas (`#1–#9`) and 4-Tier IA Signal Hierarchy ([`references/00-personas-and-ia-hierarchy.md`](./references/00-personas-and-ia-hierarchy.md)), then score each bucket `PASS`, `WARN`, or `FAIL` (`[LINT]` violations with user-facing friction = `FAIL`; documented exceptions like `SalesImportTray.vue` or `[REVIEW]` heuristics = `WARN`).
+2. **Identify Persona Posture, Krug Trunk Test & All 5 Buckets:** Verify the active Personas (`#1–#9`), 4-Tier IA Signal Hierarchy, and **Krug #5 Trunk Test** ([`references/00-personas-and-ia-hierarchy.md`](./references/00-personas-and-ia-hierarchy.md)), then score each bucket `PASS`, `WARN`, or `FAIL` (`[LINT]` violations with user-facing friction = `FAIL`; documented exceptions like `SalesImportTray.vue` or `[REVIEW]` heuristics = `WARN`).
 3. **Return Concise Findings (`<= 28` lines):**
 
 ```text
-UX AUDIT SUMMARY: <Component / Route> — Score: X/5 Buckets Passing
-Target Persona(s) & Posture: <e.g., #1 Founder (Desktop/Mobile Triage), #2–#5 Voting Hats, #6 Consignor (Isolated)>
-IA Signal Check (Tiers 1–4): PASS | WARN | FAIL — <1-line note on Tier-1 Human Signals vs Tier-2..4 ordering>
-1. Decision & Choice: PASS | WARN | FAIL
-2. Visual Grouping & Layout: PASS | WARN | FAIL
-3. Memory & Cognitive Load: PASS | WARN | FAIL
-4. Speed, Momentum & Focus: PASS | WARN | FAIL
-5. Perception & Emotional Impression: PASS | WARN | FAIL
+UX & KRUG USABILITY AUDIT: <Component / Route> — Score: X/5 Buckets Passing
+Target Persona(s) & Posture: <e.g., #2 Curator (Mobile 390px / Desktop Triage)>
+IA Signals & Krug Trunk Test: PASS | WARN | FAIL — <(a) Section, (b) Page Name, (c) Workflow Spot, (d) Primary Action + Tier-1 Signals>
+1. Decision & Choice (Hick, Fitts, Jakob + Krug #1 Question Marks & #2 Unambiguous Verbs): PASS | WARN | FAIL
+2. Visual Grouping & Layout (Proximity, Region + Krug #4 Billboard Scanning & §16 Zero Drawer Stack): PASS | WARN | FAIL
+3. Memory & Cognitive Load (Chunking, Postel + Krug #3 Omit Needless Words / Layout Redesign Check): PASS | WARN | FAIL
+4. Speed, Momentum & Focus (Doherty <=400ms, Flow, Goal-Gradient, Zeigarnik): PASS | WARN | FAIL
+5. Perception & Goodwill (Aesthetic, Peak-End, Serial Position + Krug #6 Reservoir of Goodwill): PASS | WARN | FAIL
 
 FINDINGS:
-- [FAIL | IA Tier 1 · Human Signal [LINT]] src/components/.../Example.vue:18 — Pending Join Requests / Messages buried below fold; elevate to Tier-1 warning alert + 1-tap tray.
-- [FAIL | Bucket 1 · Fitts's Law [LINT]] src/components/.../Example.vue:42 — Mobile pill uses `btn-xs` (24px < 44px floor); use `h-11 md:h-auto` or `btn-lg md:btn-xs`.
-- [WARN | Bucket 2 · Proximity [LINT]] src/components/.../Example.vue:68 — Outer section stack (`space-y-3` = 12px) is < 2x field gap (`gap-2.5` = 10px); widen sections to `space-y-5 sm:space-y-6`.
-- [FAIL | Bucket 3 · Postel's Law [LINT]] src/components/.../Example.vue:111 — Email submitted un-normalized; apply `.trim().toLowerCase()` (never trim password).
+- [FAIL | IA · Krug #5 Trunk Test [LINT]] src/components/.../Example.vue:18 — Missing clear `<h1>` page identity / active pillar highlight on mobile cold arrival.
+- [WARN | Bucket 1 · Krug #2 Unambiguous Clicks [REVIEW]] src/components/.../Example.vue:42 — Vague `"Manage"` button forces user to guess next step; rename to `"Open Ricochet POS Sync"`.
+- [FAIL | Bucket 2 · Prägnanz §16 [LINT]] src/components/.../Example.vue:68 — Nested `<SlideOverDrawer>` over `ItemDrawer`; convert to inline lazy `v-if` tab.
+- [WARN | Bucket 3 · Krug #3 Omit Needless Words [REVIEW]] src/components/.../Example.vue:94 — 4-sentence instruction paragraph above table signals layout confusion; collapse first-time setup into `<details>`.
 ```

@@ -1,7 +1,9 @@
 import { databases } from '../appwrite';
 import { Permission, Role } from 'appwrite';
 import { getDatabaseId } from '../appwriteEnv';
-import { ALPHA_SITE_URL, siteConfig, SYNC_FALLBACK_ORIGINS } from '../../site-config';
+import { DEFAULT_SOURCING_DOMAIN_PROFILES } from '../sourcingDomains';
+import { KNOWN_FACILITIES } from '../warehouses';
+import { ALPHA_SITE_URL, siteConfig, SYNC_FALLBACK_ORIGINS, TENANT_ROOT_DOMAIN } from '../../site-config';
 
 export type BookmarkletToolId = 'ricochet_sync' | 'auction_scout';
 export type BookmarkletDisplayMode = 'full' | 'compact' | 'icon_only';
@@ -115,10 +117,101 @@ export function formatBmlBarLabel(tool: BookmarkletToolConfig, locationShortName
   return `${icon} ${tool.barTitle}`.trim();
 }
 
-/** Formats the recommended Android / Pixel 8 Chrome bookmark name starting with the short address-bar trigger keyword. */
+/** Formats the recommended mobile browser shortcut bookmark name starting with the short address-bar keyword. */
 export function formatBmlMobileBookmarkName(tool: BookmarkletToolConfig, locationCode?: string): string {
   const kw = (locationCode ? locationCode.toLowerCase() : tool.mobileKeyword || 'hc').trim();
   return `${kw} — ${tool.icon} ${tool.compactTitle || tool.barTitle}`;
+}
+
+/**
+ * Validates that a `/bml/connect` `origin` or `returnUrl` parameter points to an `https:` Collective host,
+ * configured booth POS portal, or registered sourcing/bookmarklet target site (prevents open-redirect token exfil).
+ */
+export function validateAllowedBmlTargetUrl(
+  rawUrl: string,
+  currentAppOrigin?: string,
+  customRegistry?: BookmarkletRegistryConfig | null
+): URL | null {
+  if (!rawUrl || typeof rawUrl !== 'string') return null;
+  let parsed: URL;
+  try {
+    parsed = new URL(rawUrl.trim());
+  } catch {
+    return null;
+  }
+
+  const isLocalDev =
+    Boolean(currentAppOrigin && /^http:\/\/(?:localhost|127\.0\.0\.1)(?::\d+)?$/i.test(currentAppOrigin)) &&
+    (parsed.hostname === 'localhost' || parsed.hostname === '127.0.0.1');
+
+  if (parsed.protocol !== 'https:' && !isLocalDev) {
+    return null;
+  }
+
+  const allowedSuffixes = new Set<string>();
+  const addHostOrUrl = (entry?: string | null) => {
+    if (!entry) return;
+    const clean = entry.trim().toLowerCase();
+    if (!clean) return;
+    if (/^https?:\/\//.test(clean)) {
+      try {
+        const h = new URL(clean).hostname.toLowerCase();
+        if (h) allowedSuffixes.add(h);
+      } catch {}
+      return;
+    }
+    const hostOnly = clean.split('/')[0]?.replace(/^\.+/, '').trim();
+    if (hostOnly && hostOnly.includes('.')) {
+      allowedSuffixes.add(hostOnly);
+    }
+  };
+
+  [
+    currentAppOrigin,
+    ALPHA_SITE_URL,
+    TENANT_ROOT_DOMAIN,
+    siteConfig.siteUrl,
+    siteConfig.parentSiteUrl,
+    siteConfig.futureCoopSiteUrl,
+    ...SYNC_FALLBACK_ORIGINS,
+  ].forEach(addHostOrUrl);
+
+  for (const fac of KNOWN_FACILITIES) {
+    if (fac.posPortalUrl) {
+      addHostOrUrl(fac.posPortalUrl);
+      try {
+        const parts = new URL(fac.posPortalUrl).hostname.toLowerCase().split('.');
+        if (parts.length >= 2) {
+          allowedSuffixes.add(parts.slice(-2).join('.'));
+        }
+      } catch {}
+    }
+  }
+
+  for (const profile of Object.values(DEFAULT_SOURCING_DOMAIN_PROFILES)) {
+    for (const hp of profile.hostPatterns) {
+      addHostOrUrl(hp);
+    }
+  }
+
+  const regConfigs = [DEFAULT_BML_REGISTRY_CONFIG, customRegistry].filter(Boolean) as BookmarkletRegistryConfig[];
+  for (const cfg of regConfigs) {
+    for (const tool of Object.values(cfg.tools)) {
+      tool.targetSites
+        .split(/[\s,]+/)
+        .filter(Boolean)
+        .forEach(addHostOrUrl);
+    }
+  }
+
+  const host = parsed.hostname.toLowerCase();
+  for (const suffix of allowedSuffixes) {
+    if (host === suffix || host.endsWith(`.${suffix}`)) {
+      return parsed;
+    }
+  }
+
+  return null;
 }
 
 export function buildEvergreenBookmarkletHref(scriptPathAndQuery: string, preferredOrigin?: string): string {

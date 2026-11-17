@@ -1,7 +1,7 @@
 <template>
   <Teleport v-if="mounted" to="body">
     <Transition name="rc-drawer">
-      <div v-if="modelValue" class="fixed inset-0" :class="zClass" role="dialog" aria-modal="true" :aria-label="title">
+      <div v-if="modelValue" class="fixed inset-0 z-400" role="dialog" aria-modal="true" :aria-label="title">
         <!-- Backdrop (solid, no blur — avoids GPU scroll lag) -->
         <div class="absolute inset-0 bg-black/60" @click="close"></div>
 
@@ -17,7 +17,7 @@
               <h3 class="text-lg font-black tracking-tight truncate">{{ title }}</h3>
               <p v-if="subtitle" class="text-xs text-base-content/70">{{ subtitle }}</p>
             </div>
-            <button type="button" class="btn btn-ghost btn-sm btn-circle shrink-0" aria-label="Close" @click="close">✕</button>
+            <button type="button" class="btn btn-ghost btn-sm h-11 w-11 md:h-8 md:w-8 btn-circle shrink-0" aria-label="Close" @click="close">✕</button>
           </header>
 
           <div class="flex-1 min-h-0 overflow-y-auto px-4 sm:px-6 py-4">
@@ -36,10 +36,10 @@
 <script setup lang="ts">
 /**
  * Canonical right-side Slide-Over Drawer (UX taxonomy: "Slide-Over Drawer").
- * Use for focused create/edit forms that should keep page context visible (e.g. Connect With Us,
- * Edit My Application). Esc and backdrop click close it; focus moves into the panel when it opens.
+ * Single right-edge overlay layer (`z-400`); stacking a second right-edge drawer is forbidden (§16).
  */
 import { nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { useBodyScrollLock } from '../../composables/useBodyScrollLock';
 
 // Teleport targets don't exist during SSR; mount it client-side only to avoid hydration mismatches.
 const mounted = ref(false);
@@ -53,14 +53,14 @@ const props = withDefaults(
     title: string;
     subtitle?: string;
     size?: 'md' | 'lg' | 'xl';
-    zClass?: string;
   }>(),
   {
     size: 'md',
-    zClass: 'z-400',
   }
 );
 const emit = defineEmits<{ (e: 'update:modelValue', value: boolean): void; (e: 'close'): void }>();
+
+useBodyScrollLock(() => props.modelValue);
 
 const panelRef = ref<HTMLElement | null>(null);
 
@@ -79,12 +79,10 @@ watch(
     if (typeof document === 'undefined') return;
     if (open) {
       document.addEventListener('keydown', onKey);
-      document.body.style.overflow = 'hidden';
       await nextTick();
       panelRef.value?.focus();
     } else {
       document.removeEventListener('keydown', onKey);
-      document.body.style.overflow = '';
     }
   },
   { immediate: true }
@@ -93,7 +91,6 @@ watch(
 onBeforeUnmount(() => {
   if (typeof document === 'undefined') return;
   document.removeEventListener('keydown', onKey);
-  document.body.style.overflow = '';
 });
 </script>
 
@@ -115,4 +112,3 @@ onBeforeUnmount(() => {
   transform: translateX(100%);
 }
 </style>
-

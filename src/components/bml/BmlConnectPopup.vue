@@ -2,7 +2,7 @@
   <div class="max-w-md mx-auto">
     <div class="card bg-base-100 border border-primary/30 shadow-xl rounded-3xl p-5 sm:p-6 space-y-4">
       <div class="text-center space-y-1">
-        <div class="inline-flex items-center gap-1.5 badge badge-primary text-primary-content font-bold text-xs px-3 py-1 whitespace-nowrap">
+        <div class="inline-flex items-center gap-1.5 badge badge-primary text-primary-content font-bold text-xs px-3 py-1 whitespace-nowrap shrink-0">
           <Icon icon="solar:shield-check-bold" class="w-3.5 h-3.5 shrink-0" />
           <span>👑 Founder &amp; 💎 Curator Access</span>
         </div>
@@ -10,14 +10,22 @@
           Connect {{ siteConfig.shortTitle }}
         </h1>
         <p class="text-xs text-base-content/70 leading-relaxed">
-          Your credentials stay strictly on <code class="font-mono font-bold">{{ hostLabel }}</code>—never inside a third-party site.
+          Your sign-in stays strictly on <code class="font-mono font-bold">{{ hostLabel }}</code>—never inside a third-party site.
         </p>
       </div>
 
-      <div v-if="auth.loading.value || minting" class="py-8 text-center space-y-2.5">
+      <div v-if="rejectedTargetMsg" role="alert" class="p-4 rounded-2xl bg-error/10 border border-error/40 space-y-2 text-left">
+        <div class="font-black text-sm text-error">Blocked Untrusted Return Link</div>
+        <p class="text-xs text-base-content/85 leading-relaxed">{{ rejectedTargetMsg }}</p>
+        <a href="/settings?tab=bookmarklets" class="btn btn-sm h-11 btn-outline w-full rounded-xl font-bold">
+          Open Bookmarklet Hub
+        </a>
+      </div>
+
+      <div v-else-if="auth.loading.value || minting" class="py-8 text-center space-y-2.5">
         <span class="loading loading-spinner loading-lg text-primary"></span>
         <div class="text-xs font-bold text-base-content/75">
-          {{ minting ? 'Verifying Founder / Curator hat & minting 14-day token...' : 'Checking your Works@TheHC session...' }}
+          {{ minting ? 'Verifying Founder / Curator hat & activating 14-day pass…' : 'Checking your Works@TheHC sign-in…' }}
         </div>
       </div>
 
@@ -33,7 +41,7 @@
 
         <button
           type="button"
-          class="btn btn-primary text-primary-content w-full rounded-xl font-black gap-1.5"
+          class="btn h-11 btn-primary text-primary-content w-full rounded-xl font-black gap-1.5"
           @click="handleSwitchAccount"
         >
           <span>🚪 Sign Out &amp; Switch Account</span>
@@ -52,62 +60,66 @@
         <a
           v-if="mobileReturnHref"
           :href="mobileReturnHref"
-          class="btn btn-primary text-primary-content w-full rounded-2xl font-black gap-2 shadow-md"
+          class="btn h-11 btn-primary text-primary-content w-full rounded-2xl font-black gap-2 shadow-md"
         >
           <Icon icon="solar:arrow-left-bold" class="w-4 h-4 shrink-0" />
-          <span>Return to Tab &amp; Activate Bookmarklet</span>
+          <span>Return &amp; tap your bookmarklet again</span>
         </a>
 
         <div class="flex gap-2">
           <button
             type="button"
-            class="btn btn-sm btn-ghost border border-base-300 flex-1 rounded-xl font-bold"
+            class="btn h-11 btn-ghost border border-base-300 flex-1 rounded-xl font-bold text-xs sm:text-sm"
             @click="handleSwitchAccount"
           >
             🚪 Switch Account
           </button>
           <button
             type="button"
-            class="btn btn-sm btn-outline flex-1 rounded-xl font-bold"
+            class="btn h-11 btn-outline flex-1 rounded-xl font-bold text-xs sm:text-sm"
             @click="closeOrReturn"
           >
-            Close Window
+            {{ mobileReturnHref ? 'Return to Page' : 'Close Window' }}
           </button>
         </div>
       </div>
 
       <form v-else class="space-y-3.5" @submit.prevent="handleLoginAndConnect">
-        <div class="form-control">
-          <label class="label py-1"><span class="label-text text-xs font-bold">Founder / Curator Email</span></label>
+        <div class="flex flex-col gap-1">
+          <label for="bml-connect-email" class="text-xs font-bold text-base-content/85">Founder / Curator Email</label>
           <input
+            id="bml-connect-email"
             v-model="email"
             type="email"
             required
             autocomplete="email"
+            autocapitalize="none"
+            spellcheck="false"
             placeholder="you@thehc.llc"
-            class="input input-bordered input-sm rounded-xl w-full"
+            class="input input-bordered h-11 rounded-xl w-full text-sm"
           />
         </div>
 
-        <div class="form-control">
-          <label class="label py-1"><span class="label-text text-xs font-bold">Password</span></label>
+        <div class="flex flex-col gap-1">
+          <label for="bml-connect-password" class="text-xs font-bold text-base-content/85">Password</label>
           <input
+            id="bml-connect-password"
             v-model="password"
             type="password"
             required
             autocomplete="current-password"
             placeholder="••••••••"
-            class="input input-bordered input-sm rounded-xl w-full"
+            class="input input-bordered h-11 rounded-xl w-full text-sm"
           />
         </div>
 
-        <div v-if="errorMsg" class="alert alert-error py-2 px-3 text-xs rounded-xl">
+        <div v-if="errorMsg" role="alert" class="alert alert-error py-2 px-3 text-xs rounded-xl">
           <span>{{ errorMsg }}</span>
         </div>
 
         <button
           type="submit"
-          class="btn btn-primary text-primary-content w-full rounded-xl font-black gap-1.5"
+          class="btn h-11 btn-primary text-primary-content w-full rounded-xl font-black gap-1.5"
           :disabled="submitting"
         >
           <span v-if="submitting" class="loading loading-spinner loading-xs"></span>
@@ -122,9 +134,14 @@ import { computed, onMounted, ref, watch } from 'vue';
 import { Icon } from '@iconify/vue';
 import { account } from '../../lib/appwrite';
 import { auth as rawAuth } from '../../lib/auth';
+import { getCachedBmlRegistryConfig, validateAllowedBmlTargetUrl } from '../../lib/bml/registry';
 import { authStore } from '../../lib/store';
+import { toUserMessage } from '../../lib/userFacingErrors';
 import { useAuth } from '../../composables/useAuth';
 import { siteConfig } from '../../site-config';
+
+const UNTRUSTED_LINK_MSG =
+  "This link isn't from a Collective tool—open the bookmarklet from the page you're on.";
 
 const auth = useAuth();
 const email = ref('');
@@ -133,27 +150,18 @@ const submitting = ref(false);
 const minting = ref(false);
 const errorMsg = ref('');
 const roleRestrictedMsg = ref('');
+const rejectedTargetMsg = ref('');
 const mintedToken = ref('');
 const mintedMember = ref<{ name: string; prefix: string; role: string; roleBadge: string } | null>(null);
-const targetOrigin = ref('*');
+const targetOrigin = ref('');
 const returnUrl = ref('');
 const hostLabel = ref('works.thehc.llc');
 const forceLoginRequested = ref(false);
 
-const sanitizeHttpUrl = (raw: string): URL | null => {
-  if (!raw) return null;
-  try {
-    const u = new URL(raw);
-    if (u.protocol !== 'https:' && u.protocol !== 'http:') return null;
-    return u;
-  } catch {
-    return null;
-  }
-};
-
 const mobileReturnHref = computed(() => {
-  if (!returnUrl.value || !mintedToken.value) return '';
-  const u = sanitizeHttpUrl(returnUrl.value);
+  if (!returnUrl.value || !mintedToken.value || rejectedTargetMsg.value) return '';
+  const appOrigin = typeof window !== 'undefined' ? window.location.origin : siteConfig.siteUrl;
+  const u = validateAllowedBmlTargetUrl(returnUrl.value, appOrigin, getCachedBmlRegistryConfig());
   if (!u) return '';
   const name = encodeURIComponent(mintedMember.value?.name || 'Member');
   const prefix = encodeURIComponent(mintedMember.value?.prefix || 'HUCK-');
@@ -163,7 +171,7 @@ const mobileReturnHref = computed(() => {
 });
 
 const exchangeJwtForBmlToken = async () => {
-  if (minting.value || mintedToken.value) return;
+  if (minting.value || mintedToken.value || rejectedTargetMsg.value) return;
   minting.value = true;
   errorMsg.value = '';
   roleRestrictedMsg.value = '';
@@ -184,7 +192,7 @@ const exchangeJwtForBmlToken = async () => {
       return;
     }
     if (!res.ok || !data?.ok || !data?.token) {
-      throw new Error(data?.message || data?.error || 'Could not mint bookmarklet token.');
+      throw new Error(data?.message || data?.error || 'Could not activate 14-day bookmarklet pass.');
     }
     mintedToken.value = data.token;
     const role = data.member?.role === 'curator' ? 'curator' : 'founder';
@@ -209,17 +217,26 @@ const exchangeJwtForBmlToken = async () => {
       );
     } catch {}
 
-    if (typeof window !== 'undefined' && window.opener && !window.opener.closed) {
+    // Desktop popup handshake: only postMessage when targetOrigin passed strict https allowlist validation (never '*')
+    if (typeof window !== 'undefined' && window.opener && !window.opener.closed && targetOrigin.value) {
       window.opener.postMessage(
         {
           type: 'RC_BML_AUTH_SUCCESS',
           token: data.token,
           member: data.member,
         },
-        targetOrigin.value || '*'
+        targetOrigin.value
       );
       setTimeout(() => {
         window.close();
+        // iOS/WebKit ignores window.close() on tabs it treats as user-opened: fall back to mobileReturnHref ~700ms after postMessage
+        if (mobileReturnHref.value) {
+          setTimeout(() => {
+            if (!window.closed) {
+              window.location.replace(mobileReturnHref.value);
+            }
+          }, 350);
+        }
       }, 350);
       return;
     }
@@ -230,7 +247,7 @@ const exchangeJwtForBmlToken = async () => {
       }, 450);
     }
   } catch (err: any) {
-    errorMsg.value = err?.message || 'Could not verify session.';
+    errorMsg.value = toUserMessage(err, 'Could not verify your sign-in — please try again.');
   } finally {
     minting.value = false;
   }
@@ -267,10 +284,10 @@ const handleLoginAndConnect = async () => {
   roleRestrictedMsg.value = '';
   forceLoginRequested.value = false;
   try {
-    await auth.login(email.value, password.value);
+    await auth.login(email.value.trim().toLowerCase(), password.value);
     await exchangeJwtForBmlToken();
   } catch (err: any) {
-    errorMsg.value = err?.message || 'Sign-in failed. Check your email and password.';
+    errorMsg.value = toUserMessage(err, 'Sign-in failed. Check your email and password.');
   } finally {
     submitting.value = false;
   }
@@ -287,7 +304,7 @@ const closeOrReturn = () => {
 watch(
   () => auth.isAuthenticated.value,
   (signedIn) => {
-    if (signedIn && !mintedToken.value && !forceLoginRequested.value) {
+    if (signedIn && !mintedToken.value && !forceLoginRequested.value && !rejectedTargetMsg.value) {
       void exchangeJwtForBmlToken();
     }
   }
@@ -296,18 +313,38 @@ watch(
 onMounted(async () => {
   if (typeof window !== 'undefined') {
     hostLabel.value = window.location.host;
+    const appOrigin = window.location.origin;
+    const regCfg = getCachedBmlRegistryConfig();
     const params = new URLSearchParams(window.location.search);
-    const parsedOrigin = sanitizeHttpUrl(params.get('origin') || '');
-    if (parsedOrigin) targetOrigin.value = parsedOrigin.origin;
-    const parsedReturn = sanitizeHttpUrl(params.get('returnUrl') || '');
-    if (parsedReturn) returnUrl.value = parsedReturn.toString();
+
+    const rawOriginParam = (params.get('origin') || '').trim();
+    const rawReturnParam = (params.get('returnUrl') || '').trim();
+
+    if (rawOriginParam) {
+      const validOrigin = validateAllowedBmlTargetUrl(rawOriginParam, appOrigin, regCfg);
+      if (!validOrigin) {
+        rejectedTargetMsg.value = UNTRUSTED_LINK_MSG;
+        return;
+      }
+      targetOrigin.value = validOrigin.origin;
+    }
+
+    if (rawReturnParam) {
+      const validReturn = validateAllowedBmlTargetUrl(rawReturnParam, appOrigin, regCfg);
+      if (!validReturn || (targetOrigin.value && validReturn.origin !== targetOrigin.value)) {
+        rejectedTargetMsg.value = UNTRUSTED_LINK_MSG;
+        return;
+      }
+      returnUrl.value = validReturn.toString();
+    }
+
     if (params.get('forceLogin') === '1') {
       forceLoginRequested.value = true;
       await handleSwitchAccount();
       return;
     }
   }
-  if (auth.isAuthenticated.value && !forceLoginRequested.value) {
+  if (auth.isAuthenticated.value && !forceLoginRequested.value && !rejectedTargetMsg.value) {
     void exchangeJwtForBmlToken();
   }
 });

@@ -73,13 +73,15 @@ Enforce **inter-section gap `>= 2×` intra-group field gap** so form labels bind
 
 ---
 
-## 2.5 Law of Prägnanz `[LINT]` — Clean Geometry & Zero Clipping Traps
-*People interpret ambiguous or complex visuals in the simplest, cleanest form possible — ragged clipping and misaligned boxes fracture comprehension.*
+## 2.5 Law of Prägnanz `[LINT]` & Krug #4 *Billboard Design (Scan, Don't Read)* `[LINT]`/`[REVIEW]`
+*People interpret ambiguous visuals in the simplest form possible (Prägnanz), and real users scan pages at `60 mph` looking to "satisfice" rather than reading prose line-by-line (Krug #4).*
 
-### Concrete Checks (Enforced by `validate-templates.mjs` §12 & §14D)
-- **Line-Clamp + Padding Separation (§12B):** **NEVER** place `line-clamp-*` and vertical padding (`p-*`, `py-*`, `pb-*`) on the same HTML element (bottom padding exposes the sliced top half of line `N+1`). Put padding/border/bg on an outer `<div>` and `line-clamp-*` on an inner unpadded `<p>`/`<span>`.
-- **Dashboard Full-Wrap Invariant (§14D):** **NEVER** use `truncate` or `line-clamp-*` in any component under `src/components/dashboard/**` — dashboard alert and metric text must wrap naturally in full.
-- **Self-Clearing Dock Spacer (§12D):** Pages mounting `<BottomActionDock>` or `<PaginationDock>` pass `hideFooter={true}` to `<Layout>` inside `.rc-page-shell` and rely on `.rc-dock-spacer` (`useDockClearance.ts`) — **never** add manual `pb-28..pb-48` or arbitrary pixel shells (`h-[72px]`, `max-w-[1600px]`).
+### Concrete Checks (Enforced by `validate-templates.mjs` §12, §14D & §16)
+- **3-Tier Billboard Hierarchy `[LINT]`:** Bold `font-black`/`font-extrabold` headings ➔ scannable key-value pills/columns ➔ subdued `text-base-content/70` metadata; flag walls of unchunked prose (`> 2` consecutive prose lines in operational cards/tables) `[REVIEW]`.
+- **Zero Stacked Right-Edge Drawers (§16) `[LINT]`:** Never render a second `<SlideOverDrawer>` or `z-class` override on top of `ItemDrawer.vue` or another right-edge `<SlideOverDrawer>`; use inline lazy `v-if` drawer tabs or mutually exclusive sibling drawers instead.
+- **Line-Clamp + Padding Separation (§12B) `[LINT]`:** **NEVER** place `line-clamp-*` and vertical padding (`p-*`, `py-*`, `pb-*`) on the same HTML element (bottom padding exposes the sliced top half of line `N+1`). Put padding/border/bg on an outer `<div>` and `line-clamp-*` on an inner unpadded `<p>`/`<span>`.
+- **Dashboard Full-Wrap Invariant (§14D) `[LINT]`:** **NEVER** use `truncate` or `line-clamp-*` in any component under `src/components/dashboard/**` — dashboard alert and metric text must wrap naturally in full.
+- **Self-Clearing Dock Spacer (§12D) `[LINT]`:** Pages mounting `<BottomActionDock>` or `<PaginationDock>` pass `hideFooter={true}` to `<Layout>` inside `.rc-page-shell` and rely on `.rc-dock-spacer` (`useDockClearance.ts`) — **never** add manual `pb-28..pb-48` or arbitrary pixel shells (`h-[72px]`, `max-w-[1600px]`).
 
 ---
 

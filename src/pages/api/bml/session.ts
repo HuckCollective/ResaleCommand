@@ -49,7 +49,7 @@ export const GET: APIRoute = async ({ request }) => {
 
 /**
  * POST /api/bml/session — Exchanges an active Appwrite JWT (`X-Appwrite-JWT`) from `/bml/connect`
- * for a 3-day HMAC-SHA256 signed Bookmarklet Member Token (restricted to Founders 👑 and Curators 💎).
+ * for a 14-day HMAC-SHA256 signed Bookmarklet Member Token (restricted to Founders 👑 and Curators 💎).
  */
 export const POST: APIRoute = async ({ request }) => {
   const jwt = request.headers.get('X-Appwrite-JWT') || '';
