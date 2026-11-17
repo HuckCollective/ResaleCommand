@@ -110,7 +110,7 @@
                             </span>
                             <span>ID: {{ item.$id }}</span>
                             <span v-if="item.sellingLocations && item.sellingLocations.length > 0" class="flex gap-1 items-center">
-                                <span v-for="chan in item.sellingLocations" :key="chan" class="badge badge-sm badge-secondary font-bold">{{ chan }}</span>
+                                <span v-for="chan in item.sellingLocations" :key="chan" class="badge badge-sm badge-secondary font-bold">{{ formatSellingLocationBadge(chan) }}</span>
                             </span>
                         </div>
                     </div>
@@ -629,6 +629,7 @@ const error = ref(null);
 
 import MediaViewerCarousel from '../common/MediaViewerCarousel.vue';
 import { BUCKET_ID, REPORTS_BUCKET_ID, getAssetUrl, formatScoutReportMarkdown, isLiveAuctionActive, isItemAcquired, normalizeInventoryStatus, getCollectionId, DB_ID } from '../../lib/inventory';
+import { formatSellingLocationBadge } from '../../lib/onlineCoCuration';
 const BUCKET = BUCKET_ID;
 const REPORTS_BUCKET = REPORTS_BUCKET_ID;
 const ENDPOINT = import.meta.env.PUBLIC_APPWRITE_ENDPOINT || 'https://cloud.appwrite.io/v1';

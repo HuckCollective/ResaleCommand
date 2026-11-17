@@ -144,6 +144,34 @@ export function subtractCalendarDaysYmd(ymd: string, days: number): string {
 }
 
 /**
+ * Pure calendar `YYYY-MM-DD` day addition without `Date#getMonth()` or timezone conversion (Law 7).
+ */
+export function addCalendarDaysYmd(ymd: string, days: number): string {
+  const m = /^(\d{4})-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/.exec(String(ymd || '').trim());
+  if (!m) return '';
+  let year = Number(m[1]);
+  let month = Number(m[2]);
+  let day = Number(m[3]) + Math.max(0, Math.floor(days));
+
+  const isLeap = (y: number) => (y % 4 === 0 && y % 100 !== 0) || y % 400 === 0;
+  const daysInMonth = (y: number, mo: number) => {
+    if (mo === 2) return isLeap(y) ? 29 : 28;
+    return [4, 6, 9, 11].includes(mo) ? 30 : 31;
+  };
+
+  while (day > daysInMonth(year, month)) {
+    day -= daysInMonth(year, month);
+    month += 1;
+    if (month > 12) {
+      month = 1;
+      year += 1;
+    }
+  }
+
+  return `${String(year).padStart(4, '0')}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+}
+
+/**
  * Includes `live`, `upcoming`, AND recently ended (`past` within `lookbackDays`, default 14) events
  * so members logging weekend market sales on Monday/Tuesday still get 1-tap Event Chips (Law 7 string compare).
  */

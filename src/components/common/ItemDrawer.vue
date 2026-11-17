@@ -18,7 +18,8 @@
           @close="closeDrawer"
           @dismiss-shop-update="handleDismissShopUpdate"
           @flag-shop-update="handleFlagShopUpdate"
-          @copy-title="copyToClipboard(editForm.title || item?.title)" />
+          @copy-title="copyToClipboard(editForm.title || item?.title)"
+          @open-cocuration="showCoCurationDrawer = true" />
 
         <!-- 2. TABS (Details, Verify, Lot) -->
         <div
@@ -358,12 +359,18 @@
           <button type="button" @click="closeZoomPreview">close</button>
         </form>
       </dialog>
+
+      <!-- Online Ready Bin & Co-Curation Slide-Over Drawer -->
+      <OnlineCoCurationDrawer
+        v-model="showCoCurationDrawer"
+        :item="item"
+        @saved="handleCoCurationSaved" />
     </div>
   </Teleport>
 </template>
 
 <script setup>
-import { ref, shallowRef, reactive, watch, computed, onMounted, onUnmounted } from 'vue';
+import { ref, shallowRef, reactive, watch, computed, onMounted, onUnmounted, defineAsyncComponent } from 'vue';
 import { marked } from 'marked';
 import { Icon } from '@iconify/vue';
 import PhotoGalleryManager from './PhotoGalleryManager.vue';
@@ -377,6 +384,7 @@ import ItemDetailsTab from './drawer/ItemDetailsTab.vue';
 import ItemVerifyTab from './drawer/ItemVerifyTab.vue';
 import ItemLotTab from './drawer/ItemLotTab.vue';
 import AiFeedbackButton from './AiFeedbackButton.vue';
+const OnlineCoCurationDrawer = defineAsyncComponent(() => import('../inventory/OnlineCoCurationDrawer.vue'));
 import { useItemDrawerForm, resolveMultiQtyCost, getDefaultStorageLocation, rememberStorageLocation } from '../../composables/useItemDrawerForm';
 import { useMediaAssetManager } from '../../composables/useMediaAssetManager';
 
@@ -515,6 +523,24 @@ const mainTab = ref('details');
 const descTab = ref('edit');
 const processing = ref(false);
 const showMdModal = ref(false);
+const showCoCurationDrawer = ref(false);
+
+const handleCoCurationSaved = (payload) => {
+    const updated = payload?.item;
+    if (updated) {
+        if (updated.storageLocation) {
+            editForm.storageLocation = updated.storageLocation;
+        }
+        if (Array.isArray(updated.sellingLocations)) {
+            editForm.sellingLocations = [...updated.sellingLocations];
+        }
+        if (props.item && typeof props.item === 'object') {
+            if (updated.storageLocation) props.item.storageLocation = updated.storageLocation;
+            if (Array.isArray(updated.sellingLocations)) props.item.sellingLocations = [...updated.sellingLocations];
+        }
+    }
+    emit('refresh');
+};
 
 const { openLotSplitter } = useLotSplitter();
 

@@ -3,26 +3,26 @@
     <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
       <div class="space-y-0.5">
         <div class="flex items-center gap-2 flex-wrap">
-          <span class="badge badge-primary badge-xs font-black">Appwrite Team Roles</span>
-          <span class="badge badge-outline badge-xs font-mono font-bold">Server-Verified JWT Authority</span>
+          <span class="badge badge-primary text-primary-content badge-xs font-black">Member Hats &amp; Access</span>
+          <span class="badge badge-outline badge-xs font-mono font-bold">🔒 Steward-Verified</span>
           <span
             v-if="isOwner"
-            class="badge badge-success badge-xs font-bold"
+            class="badge badge-success text-success-content badge-xs font-bold"
           >
-            👑 Owner Session Active
+            👑 Account Steward Active
           </span>
           <span
             v-else
             class="badge badge-ghost badge-xs font-semibold"
           >
-            👁️ Read-Only (Team Owner Edits Roles)
+            👁️ Read-Only (Account Steward Edits Hats)
           </span>
         </div>
         <h4 class="text-base font-black text-base-content">
-          Co-op Security Roles &amp; Account Linking
+          Member Hats &amp; Account Linking
         </h4>
         <p class="text-xs text-base-content/70">
-          Assign Appwrite Team roles (<code>founder</code>, <code>curator</code>, <code>promoter</code>, <code>enabler</code>, <code>builder</code>, <code>consignor</code>) for real server enforcement on labor approvals &amp; month locks, and link each account to a Roster profile.
+          Assign Collective Hats (<code>founder</code>, <code>curator</code>, <code>promoter</code>, <code>enabler</code>, <code>builder</code>, <code>consignor</code>) for verified permissions on labor approvals &amp; month locks, and link each account to a Roster profile.
         </p>
       </div>
 
@@ -45,7 +45,7 @@
     >
       <div class="text-xs font-black text-base-content flex items-center gap-1.5">
         <Icon icon="solar:user-plus-bold-duotone" class="w-4 h-4 text-primary" />
-        <span>Invite Co-op Partner or Sweat-Equity Enabler to Appwrite Team</span>
+        <span>Invite to the Collective</span>
       </div>
       <div class="grid grid-cols-1 sm:grid-cols-12 gap-2.5 items-end">
         <div class="sm:col-span-4 form-control">
@@ -122,10 +122,10 @@
                 <span>{{ m.userName || 'Invited Member' }}</span>
                 <span
                   v-if="hasBuiltInOwner(m)"
-                  class="badge badge-warning badge-xs font-black"
-                  title="Built-in Appwrite Team Owner — protected against lockout"
+                  class="badge badge-warning text-warning-content badge-xs font-black"
+                  title="Account Steward — protected against accidental lockout"
                 >
-                  👑 Owner ({{ ownerCount === 1 ? 'Sole Owner' : 'Protected' }})
+                  👑 Account Steward ({{ ownerCount === 1 ? 'Protected' : 'Active' }})
                 </span>
               </div>
               <div class="text-[11px] font-mono text-base-content/60">{{ m.userEmail || m.userId }}</div>
@@ -216,6 +216,7 @@ import {
   type CoopMemberProfile,
   type MemberHat,
 } from '../../lib/coopGovernance';
+import { toUserMessage } from '../../lib/userFacingErrors';
 
 const props = defineProps<{
   members: CoopMemberProfile[];
@@ -296,8 +297,11 @@ async function loadMemberships() {
     const res = await teams.listMemberships(resolvedTeamId.value);
     memberships.value = res.memberships || [];
   } catch (err: any) {
-    errorMessage.value =
-      err?.message || 'Sign in as a confirmed team member to inspect Appwrite Team roles.';
+    console.warn('[CoopRolesPanel] Failed to load memberships:', err);
+    errorMessage.value = toUserMessage(
+      err,
+      'Sign in as a confirmed Collective member to view Member Hats & Access.'
+    );
   } finally {
     loadingMemberships.value = false;
   }
@@ -307,7 +311,7 @@ async function toggleCustomRole(membership: any, roleId: CustomRoleId) {
   if (!isOwner.value || !resolvedTeamId.value) {
     addToast({
       type: 'warning',
-      message: 'Only an Appwrite Team Owner can modify membership roles.',
+      message: 'Only an Account Steward can update Member Hats.',
     });
     return;
   }
@@ -373,9 +377,10 @@ async function toggleCustomRole(membership: any, roleId: CustomRoleId) {
       message: `Updated roles for ${membership.userName || membership.userEmail}.`,
     });
   } catch (err: any) {
+    console.warn('[CoopRolesPanel] Role update failed:', err);
     addToast({
       type: 'error',
-      message: err?.message || 'Appwrite rejected membership role update.',
+      message: toUserMessage(err, "Couldn't update Member Hats — please try again."),
     });
   } finally {
     savingMembershipId.value = '';
@@ -492,12 +497,13 @@ async function handleInviteMember() {
     inviteForm.value = { name: '', email: '', initialRole: 'enabler' };
     addToast({
       type: 'success',
-      message: `Sent Appwrite team invite to ${email} (${pairedCustomRoles.join(' + ')}) & synced Roster.`,
+      message: `Sent Collective invite to ${email} (${pairedCustomRoles.join(' + ')}) & added to Roster.`,
     });
   } catch (err: any) {
+    console.warn('[CoopRolesPanel] Invite failed:', err);
     addToast({
       type: 'error',
-      message: err?.message || 'Failed to send team invitation.',
+      message: toUserMessage(err, "Couldn't send invitation — please try again."),
     });
   } finally {
     inviting.value = false;

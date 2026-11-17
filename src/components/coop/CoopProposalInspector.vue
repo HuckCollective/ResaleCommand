@@ -311,7 +311,7 @@
             <span>Active Waterfall Policy Bound to Settlement Ledger</span>
           </div>
           <p class="text-[11px] text-base-content/65">
-            Updates the live Co-op Settlement &amp; Waterfall calculator in Appwrite Cloud across all partners.
+            Updates the Official Settlement &amp; Waterfall calculator for all members.
           </p>
         </div>
         <div class="join border border-base-300 rounded-xl bg-base-100 p-0.5 shrink-0">

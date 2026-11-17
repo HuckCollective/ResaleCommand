@@ -16,7 +16,7 @@
             class="badge badge-xs sm:badge-sm font-mono font-bold"
             :class="isCloudSynced ? 'badge-primary badge-outline' : 'badge-ghost'"
           >
-            {{ isLoadingLedger ? 'Syncing coop_ledger…' : isCloudSynced ? '🔒 Server coop_ledger' : 'Sign In Required' }}
+            {{ isLoadingLedger ? 'Loading ledger…' : isCloudSynced ? '🔒 Official Ledger' : 'Sign In Required' }}
           </span>
         </div>
         <h1 class="text-3xl sm:text-4xl font-black text-base-content tracking-tight flex items-center gap-3">
@@ -59,7 +59,7 @@
       <div class="flex items-center gap-2">
         <Icon icon="solar:database-bold-duotone" class="w-5 h-5 shrink-0" />
         <span>
-          <strong>{{ legacyPendingMigrationCount }} legacy labor log(s)</strong> found in the old governance manifest. Import them into the server-enforced <code>coop_ledger</code> (marked <strong>Pending</strong> until you approve).
+          <strong>{{ legacyPendingMigrationCount }} earlier labor log(s)</strong> found in older records. Import them into the <strong>Official Labor Ledger</strong> (marked <strong>Pending</strong> until you approve).
         </span>
       </div>
       <button
@@ -341,7 +341,7 @@
                 isFormDateLocked
                   ? '🔒 Selected Month is Locked'
                   : isSaving
-                    ? 'Saving to coop_ledger…'
+                    ? 'Saving hours…'
                     : 'Commit Labor Hours'
               }}
             </span>
@@ -698,6 +698,7 @@ import { ref, computed, onMounted, watch } from 'vue';
 import { Icon } from '@iconify/vue';
 import SlideOverDrawer from '../common/SlideOverDrawer.vue';
 import { addToast } from '../../stores/toast';
+import { toUserMessage } from '../../lib/userFacingErrors';
 import { useAuth } from '../../composables/useAuth';
 import { useCoopFounderGate } from '../../composables/useCoopFounderGate';
 import { fetchCoopLaborLedger, mutateCoopLabor } from '../../lib/coopLedgerClient';
@@ -776,8 +777,8 @@ const drawerTitle = computed(() => {
 });
 
 const drawerSubtitle = computed(() => {
-  if (drawerMode.value === 'bulkApprove') return 'Server-audited Founder approval into coop_ledger';
-  if (drawerMode.value === 'edit') return 'Server-enforced month lock & approval reset rules';
+  if (drawerMode.value === 'bulkApprove') return 'Founder approval into the Official Labor Ledger';
+  if (drawerMode.value === 'edit') return 'Month lock & approval reset rules';
   return 'Written note is stored permanently in the audit trail';
 });
 
@@ -1188,10 +1189,11 @@ const handleMigrateLegacy = async () => {
     await refreshServerLaborLedger();
     addToast({
       type: 'success',
-      message: `Migrated ${res.migratedCount || 0} legacy labor log(s) into coop_ledger as Pending.`,
+      message: `Imported ${res.migratedCount || 0} earlier labor log(s) into the Official Labor Ledger as Pending.`,
     });
   } catch (err: any) {
-    addToast({ type: 'error', message: err?.message || 'Legacy migration failed.' });
+    console.warn('[CoopLaborView] Legacy migration failed:', err);
+    addToast({ type: 'error', message: toUserMessage(err, "Couldn't import earlier labor logs — please try again.") });
   } finally {
     isSaving.value = false;
   }

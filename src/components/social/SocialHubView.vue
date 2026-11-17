@@ -873,7 +873,7 @@
             <div class="flex items-center justify-between">
               <span class="text-xs font-bold text-base-content/80 flex items-center gap-1.5">
                 <Icon icon="solar:album-bold" class="w-3.5 h-3.5 text-primary" />
-                <span>Item Photos in Appwrite:</span>
+                <span>Saved Item Photos:</span>
               </span>
               <span class="text-[10px] font-mono opacity-60">
                 Tap photo to zoom • Toggle to add/remove from Cast Reel
@@ -882,7 +882,7 @@
 
             <!-- Zero Photos Case -->
             <div v-if="getItemImageUrls(item).length === 0" class="text-xs opacity-60 italic py-2">
-              No Appwrite photos attached to this item yet. (Take a booth snap or upload in catalog).
+              No saved photos attached to this item yet. (Take a photo or upload in catalog).
             </div>
 
             <!-- Photos Grid -->

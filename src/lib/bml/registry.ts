@@ -55,7 +55,7 @@ export const DEFAULT_BML_REGISTRY_CONFIG: BookmarkletRegistryConfig = {
       mobileKeyword: 'rcscout',
       displayMode: 'full',
       targetSites: 'shopgoodwill.com, ebay.com, facebook.com/marketplace, hibid.com, ctbids.com, liveauctioneers.com, estatesales.net, poshmark.com, mercari.com',
-      summary: 'Universal Online Scout & ShopGoodwill Sync: 12-photo AI Speed Scout, Buyer\'s Premium & Local Cash math, 1-click Appwrite Photo Archival to /scout/trackers, plus 4-Page ShopGoodwill CSV/Order Sync.',
+      summary: 'Universal Online Scout & ShopGoodwill Sync: 12-photo AI Speed Scout, Buyer\'s Premium & Local Cash math, 1-click Photo Archival to /scout/trackers, plus 4-Page ShopGoodwill CSV/Order Sync.',
       status: 'active',
     },
   },

@@ -112,7 +112,7 @@ export function getCoopServerContext(): CoopServerContext {
   if (!endpoint || !project || !apiKey) {
     throw new CoopHttpError(
       500,
-      'Appwrite server credentials are not configured.',
+      'Service temporarily unavailable — please try again.',
       'SERVER_CONFIG_ERROR'
     );
   }
@@ -239,7 +239,7 @@ export async function resolveVerifiedCoopCaller(
   } catch {
     throw new CoopHttpError(
       401,
-      'Invalid or expired Appwrite session JWT.',
+      'Your sign-in expired — please sign in again.',
       'INVALID_JWT'
     );
   }

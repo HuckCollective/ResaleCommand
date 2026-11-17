@@ -586,7 +586,7 @@
         />
 
         <!-- DROPCAST STAGING TRAY -->
-        <DropcastStagingTray />
+        <DropcastStagingTray v-if="isLegacyDropcastStudio" />
 
         <!-- CAMERA BARCODE & MINI QR SCANNER -->
         <BarcodeScannerModal 
@@ -1368,6 +1368,9 @@ const {
 } = useManifest();
 
 const { activeCast, stageItemsForCast } = useDropcasts();
+const isLegacyDropcastStudio = ref(
+    typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('legacyStudio') === '1'
+);
 
 const stageSelectedItemsToManifest = async () => {
     if (selectedItems.value.length === 0) return;
@@ -1412,7 +1415,7 @@ watch(selectedItems, async (newVal, oldVal) => {
     }
 
     // B. Dropcast auto-staging
-    if (activeCast.value && activeCast.value.status === 'draft') {
+    if (isLegacyDropcastStudio.value && activeCast.value && activeCast.value.status === 'draft') {
         const currentCastIds = new Set((activeCast.value.items || []).map(i => String(i.$id || i.id)));
         const addedIds = newVal.filter(id => !currentCastIds.has(String(id)));
 

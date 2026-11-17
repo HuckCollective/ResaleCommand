@@ -15,8 +15,8 @@ export const POST: APIRoute = async ({ request }) => {
     try {
         if (!API_KEY || !ENDPOINT || !PROJECT_ID) {
             return new Response(JSON.stringify({ 
-                error: 'Server configuration missing', 
-                details: 'Appwrite API Key, Endpoint, or Project ID is not configured on server.' 
+                error: 'Service temporarily unavailable — please try again.', 
+                details: 'Catalog connection is not configured.' 
             }), { status: 503, headers: { 'Content-Type': 'application/json' } });
         }
 

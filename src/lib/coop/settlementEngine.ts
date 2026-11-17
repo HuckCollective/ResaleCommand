@@ -208,11 +208,11 @@ export function runCoopSettlement(
     // Gate 3: Co-op Partner or Marketing & Social Enabler (SWEAT-)
     const frontedCents = Math.max(0, toCents(partner.frontedReimbursement));
     const hasPreAggregatedItemSplits =
-      Array.isArray(partner.items) &&
-      partner.items.length > 0 &&
       partner.netMargin !== undefined &&
       Number.isFinite(partner.baseProfit70) &&
-      Number.isFinite(partner.commons30);
+      Number.isFinite(partner.commons30) &&
+      ((Array.isArray(partner.items) && partner.items.length > 0) ||
+        Number(partner.baseProfit70) > 0);
 
     let effectiveCostRecoupCents: number;
     let unrecoupedCostCents: number;

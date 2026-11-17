@@ -527,7 +527,7 @@
           <div class="space-y-1 max-w-md mx-auto">
             <h3 class="font-black text-lg">Ready to Generate Crated SKUs!</h3>
             <p class="text-xs text-base-content/70">
-              This will create <b>{{ totalGeneratedListingCount }} new inventory documents</b> in Appwrite, link component photos, assign cost basis, and prepare tags for Memory Den POS.
+              This will create <b>{{ totalGeneratedListingCount }} new catalog items</b>, link component photos, assign cost basis, and prepare tags for booth or online sale.
             </p>
           </div>
 

@@ -2109,6 +2109,7 @@ import { Icon } from '@iconify/vue';
 import KpiStatGrid, { type KpiStatItem } from '../common/KpiStatGrid.vue';
 import SlideOverDrawer from '../common/SlideOverDrawer.vue';
 import { siteConfig, SYNC_FALLBACK_ORIGINS } from '../../site-config';
+import { toUserMessage } from '../../lib/userFacingErrors';
 import { useAuth } from '../../composables/useAuth';
 import { useDockClearance } from '../../composables/useDockClearance';
 import { useInventory } from '../../composables/useInventory';
@@ -3727,7 +3728,7 @@ const linkAndSaveItemToSpecificRow = async (row: any, item: any, closeDrawerOnSu
     console.error('[LocationSyncView] Failed to link & save item to MD:', err);
     addToast({
       type: 'error',
-      message: `Failed to save link to Appwrite: ${err?.message || 'Unknown error'}`,
+      message: toUserMessage(err, "Couldn't save item link — please try again."),
     });
   } finally {
     isSavingDrawerLink.value = null;
@@ -5417,7 +5418,7 @@ onMounted(() => {
                 if (isNewer) {
                   addToast({
                     type: 'success',
-                    message: `📡 Live Appwrite Realtime: ${activeCanonicalLocationMeta.value.shortName} Verification Report updated (${parsed.summary.verifiedMatch || 0} Verified)!`,
+                    message: `✅ Live Update: ${activeCanonicalLocationMeta.value.shortName} Verification Report refreshed (${parsed.summary.verifiedMatch || 0} Verified)!`,
                   });
                 }
               }

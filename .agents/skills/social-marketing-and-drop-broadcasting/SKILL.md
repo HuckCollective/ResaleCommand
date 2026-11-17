@@ -9,18 +9,18 @@ This standard codifies the business heuristics, IP/trademark boundaries, literar
 
 ---
 
-## 1. Core Philosophy: Fast-Packaging Over Pure Automation
+## 1. Core Philosophy: Cross-Posting, Link Tracking & Plain Facts First (Slide Builder Parked)
 
-Resale marketing operates on momentum, authenticity, and visual speed. 
+Resale marketing operates on momentum, authenticity, and native mobile video.
 
-### The "Packaging Station" Principle
-* Resale Command does **NOT** rely on fragile, black-box third-party social API auto-post bots that require complex OAuth renewals, break frequently, or get accounts flagged.
-* Instead, the system operates as a **High-Speed Creative Packaging Engine**:
-  1. Pulls or stages photos using our canonical camera & drag-drop patterns.
-  2. Synthesizes rich, subculture-authentic copy using our AI Persona Engine.
-  3. Previews the complete post in an interactive **Live Phone Simulator**.
-  4. Provides **1-Click "Copy Caption"** and **1-Click "Download Photos (.zip)"**.
-  5. The curator opens Instagram, TikTok, Facebook, or Threads and publishes natively in **under 15 seconds**.
+### Primary `/social` Mode (`SocialCrossPostView.vue` + `src/lib/socialTracker.ts`)
+* Real Reels, TikToks, and live streams are filmed and edited natively in **TikTok, Instagram, CapCut, and Whatnot**.
+* Instead of forcing Promoters through a heavy browser slide-builder, primary `/social` operates as the cloud-synced **Social Cross-Post & Promo Tracker** (`manifests/coop_social_tracker_v1` via `/api/coop/social-tracker`, version-checked with `[Permission.read(Role.team(COOP_TEAM_ID))]`):
+  1. **1-Tap Event & Drop Seeding**: Pulls scheduled Pop-Ups, Partner Markets, and Live Streams directly from `/coop/cms` (`/api/public/flagship-content`) or online listings (`?seedTitle=...&seedSku=...`).
+  2. **Plain-Fact Spec Sheet (`buildPlainFactSheet`)**: Instant 1-click copy of factual item/event specs (Title, `$Price`, `HUCK-`/`PDXGL-` SKU, Event Date/City, and `https://` link) with zero cheesy AI prose.
+  3. **8-Channel Cross-Posting Matrix**: Tracks `pending | posted | skipped` status, live `https://` post URLs, and quick view/DM notes across `Instagram`, `TikTok`, `Facebook`, `YouTube Shorts`, `Whatnot`, `Depop`, `District`, and `eBay`.
+  4. **Verified Sweat-Equity Bridge**: Once `>= 1` live `https://` post URL is saved, 1-click `Log Promo Hours` writes the verified URLs into `deliverableRef` on `/api/coop/labor` (`Social & Marketing`) and locks `laborLoggedEntryId` against double-logging.
+* **Parked Legacy Slide Studio (`?legacyStudio=1`)**: The legacy phone-carousel/canvas `SocialHubView.vue` and `<DropcastStagingTray />` remain safely parked behind `/social?legacyStudio=1` (hidden on `/inventory` unless `legacyStudio=1` is active).
 
 ---
 

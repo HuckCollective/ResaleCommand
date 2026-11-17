@@ -32,3 +32,7 @@ description: "Vue 3.5 SFC, Astro SSR, Tailwind v4, DaisyUI v5, dock spacer, medi
 
 6. **30 Laws of UX Design & Read-Only UI Audit Skill:**
    - When designing, refactoring, or auditing layouts, spacing rhythm, forms, CTA focus, tap targets, or flows, load `.agents/skills/laws-of-ux/SKILL.md` (and only the relevant `references/01..05-*.md` bucket file).
+
+7. **Collective Voice & Zero Infrastructure Jargon in UI (`validate-templates.mjs` §15):**
+   - Applies **ONLY** to strings a member or shopper can read (templates, badges, toasts, loader steps, error messages)—code identifiers, file names (`lib/appwrite.ts`), comments, AI docs/rules, and `console.*` keep technical names.
+   - Use plain Collective language: `"Saving sales to ledger…"`, `"Saving hours…"`, `"✅ Saved"`, `"🔒 Official Ledger"`, `"Member Hats & Access"`, `"Invite to the Collective"`, `"Account Steward"`, and `toUserMessage(err, fallback)` (`src/lib/userFacingErrors.ts`). Never render `Appwrite`, `Vercel`, `Astro`, `DaisyUI`, `Tailwind`, `resale_db`, `coop_ledger`, `coop_proposals`, `JWT`, or `localStorage` in user-facing UI (mark legitimate SaaS vendor receipt examples with `data-vendor-ok` / `// rc-vendor-ok`).

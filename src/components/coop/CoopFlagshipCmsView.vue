@@ -12,7 +12,7 @@
               class="badge badge-sm font-mono font-bold whitespace-nowrap shrink-0"
               :class="hasUnsavedChanges ? 'badge-warning text-warning-content' : 'badge-success text-success-content'"
             >
-              {{ hasUnsavedChanges ? 'Unsaved Edits' : 'Synced with Flagship Feed' }}
+              {{ hasUnsavedChanges ? 'Unsaved Edits' : '✅ Saved' }}
             </span>
             <span v-if="!canPublish && !loading" class="badge badge-sm badge-neutral text-neutral-content whitespace-nowrap shrink-0">
               Read-Only View (Founder, Promoter &amp; Builder Publish)
@@ -840,6 +840,7 @@ import {
 } from '../../lib/flagshipContent';
 import { confirmDialog } from '../../stores/confirm';
 import { addToast } from '../../stores/toast';
+import { toUserMessage } from '../../lib/userFacingErrors';
 
 const cloneCms = (src: FlagshipCmsContent): FlagshipCmsContent =>
   normalizeFlagshipCmsContent(JSON.parse(JSON.stringify(src)));
@@ -936,17 +937,19 @@ const kpiStats = computed<KpiStatItem[]>(() => [
   },
   {
     label: 'thehc.llc/#works Feed',
-    value: savedSnapshot.value.updatedAt ? 'Live CMS' : 'Ready',
-    hint: '60s edge cache + offline siteConfig fallback',
+    value: savedSnapshot.value.updatedAt ? '✅ Live' : 'Ready',
+    hint: 'Updates public flagship page & sale chips',
     icon: 'solar:globus-bold-duotone',
     tone: 'text-info',
   },
   {
-    label: 'Payload Footprint',
-    value: `${(JSON.stringify(draft.value).length / 1000).toFixed(1)} KB`,
-    hint: 'Under 60 KB Appwrite manifest cap',
-    icon: 'solar:database-bold-duotone',
-    tone: 'text-secondary',
+    label: 'Status',
+    value: hasUnsavedChanges.value ? 'Draft Edits' : '✅ Saved',
+    hint: savedSnapshot.value.updatedAt
+      ? `Published ${savedSnapshot.value.updatedAt.slice(0, 10)}`
+      : 'Default multi-channel copy active',
+    icon: 'solar:check-circle-bold',
+    tone: hasUnsavedChanges.value ? 'text-warning' : 'text-success',
   },
 ]);
 
@@ -986,7 +989,8 @@ const loadCmsState = async () => {
     savedSnapshot.value = cloneCms(normalized);
     draft.value = cloneCms(normalized);
   } catch (err: any) {
-    loadError.value = err?.message || 'Unable to load Flagship CMS state.';
+    console.warn('[CoopFlagshipCmsView] Load failed:', err);
+    loadError.value = toUserMessage(err, "Couldn't load the Flagship & Events Studio — tap Retry.");
   } finally {
     loading.value = false;
   }
@@ -1136,9 +1140,10 @@ const publishCmsChanges = async () => {
     const saved = normalizeFlagshipCmsContent(body?.content);
     savedSnapshot.value = cloneCms(saved);
     draft.value = cloneCms(saved);
-    addToast('✅ Published live to Flagship Feed & Record Sale Event Chips', 'success');
+    addToast('✅ Saved & published live', 'success');
   } catch (err: any) {
-    addToast(err?.message || 'Failed to publish Flagship CMS changes.', 'error');
+    console.warn('[CoopFlagshipCmsView] Publish failed:', err);
+    addToast(toUserMessage(err, "Couldn't publish your edits — please try again."), 'error');
   } finally {
     saving.value = false;
   }
@@ -1172,7 +1177,8 @@ const handleResetDefaults = async () => {
     draft.value = cloneCms(saved);
     addToast('↺ Restored sales-first multi-channel defaults', 'success');
   } catch (err: any) {
-    addToast(err?.message || 'Failed to reset Flagship CMS.', 'error');
+    console.warn('[CoopFlagshipCmsView] Reset failed:', err);
+    addToast(toUserMessage(err, "Couldn't reset defaults — please try again."), 'error');
   } finally {
     saving.value = false;
   }

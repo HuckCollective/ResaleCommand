@@ -218,7 +218,7 @@
                                                 class="btn btn-xs btn-outline btn-accent shadow-sm whitespace-nowrap" 
                                                 :disabled="processingUpdates"
                                                 @click="createNewFromCsv(row, idx)"
-                                                title="Create a brand new Appwrite item from this CSV row"
+                                                title="Create a new catalog item from this CSV row"
                                             >
                                                 + Create New
                                             </button>

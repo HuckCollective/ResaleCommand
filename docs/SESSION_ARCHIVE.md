@@ -4,6 +4,12 @@
 
 ---
 
+## ✅ UNIVERSAL CURATOR, 1-CLICK ROLE ONBOARDING (`JOIN REQUESTS` ➔ `APPWRITE TEAM` + `ROSTER`), `🛠️ BUILDER` ROLE, TIER-1 DASHBOARD SIGNALS & MODULAR `laws-of-ux` SKILL (`main` & `alpha-1` — Nov 16, 2026)
+- **1-Click Server Auto-Provisioning, `🛠️ Builder` Role & Tier-1 Dashboard Signals (`src/lib/memberHats.ts`, `src/lib/joinRequestsServer.ts`, `src/pages/api/join-request.ts`, `src/components/auth/SignupView.vue`, `src/components/coop/CoopRolesPanel.vue`, `src/lib/dashboardAlerts.ts`, `src/components/dashboard/DashboardShell.vue`)**:
+  - Added `'builder'` (`🛠️ Builder`, `canVote: true`), `ensureCuratorBaseRoles`, 1-click `action: 'accept'` auto-provisioning into `COOP_TEAM_ID` + `manifests/coop_governance_proposals_v1`, Tier-1 `join_requests` + `coop_messages` alerts on `/dashboard`, and the 9-Persona + 4-Tier IA Signal Hierarchy in `laws-of-ux`.
+- **Modular 30-Law UX Design & Audit Skill & `5/5` Remediation (`.agents/skills/laws-of-ux/`, `scripts/validate-templates.mjs`, `scripts/sync-ai-context.mjs`, `src/components/dashboard/*.vue`, `src/components/sales/CoopSettlementView.vue`)**:
+  - Built progressive-disclosure `laws-of-ux` skill covering all `30` Laws of UX (`6+7+7+6+4`), fixed Linux/Vercel `TS2304` type-hoisting in `CoopRolesPanel.vue`, expanded `validate-templates.mjs` (`TS2554/TS2555/TS2559`), and brought `/dashboard` and `/coop/settlements` to `5/5` compliance.
+
 ## ✅ CO-OP SWEAT-EQUITY (`SWEAT-`), GATE 4B WATERFALL, SERVER-ENFORCED LABOR APPROVAL, POST-PAYOUT MONTH LOCK & APPWRITE TEAM ROLES (`alpha-1` & `main` — Nov 16, 2026)
 - **Additive Server-Only `coop_ledger` Collection, Pure Integer-Cent 4-Gate Engine & Official PDFs (`src/lib/coopLedgerServer.ts`, `src/lib/coop/settlementEngine.ts`, `src/components/coop/CoopRolesPanel.vue`, `src/components/coop/CoopMonthLockBar.vue`, `src/components/sales/CoopSettlementView.vue`, `src/lib/coopSettlementPdf.ts`)**:
   - Provisioned `resale_db.coop_ledger` with live `COOP_TEAM_ID` role enforcement, Founder labor approval, SHA-256 `coop_lock_YYYY-MM` post-payout Month Locks, `BigInt` largest-remainder `allocateCents`, individual `SWEAT-` worker rows, and Mondragon Cash vs. ICA comparison drawers & PDFs.

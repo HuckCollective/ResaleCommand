@@ -315,11 +315,12 @@
 
                             <!-- Location -->
                             <td>
-                                <div v-if="item.storageLocation || (item.sellingLocations && item.sellingLocations.length > 0)" class="flex items-center gap-1 truncate max-w-32">
+                                <div v-if="item.storageLocation || (item.sellingLocations && item.sellingLocations.length > 0)" class="flex items-center gap-1.5 truncate max-w-40">
                                     <Icon icon="solar:map-point-linear" class="w-3 h-3 text-primary shrink-0" />
                                     <span class="font-bold text-[11px] truncate">
-                                        {{ item.storageLocation || item.sellingLocations[0] }}
+                                        {{ item.storageLocation || formatSellingLocationBadge(item.sellingLocations[0]) }}
                                     </span>
+                                    <span v-if="hasOnlineReadyTag(item)" class="badge badge-xs badge-info font-bold shrink-0">🌐</span>
                                 </div>
                                 <span v-else class="text-[10px] opacity-40 italic">Unassigned</span>
                             </td>
@@ -427,8 +428,8 @@
             @open-actions="openActionTray"
         />
 
-        <!-- 8. ACTIVE DROPCAST STAGING TRAY -->
-        <DropcastStagingTray />
+        <!-- 8. ACTIVE DROPCAST STAGING TRAY (Legacy Studio opt-in only) -->
+        <DropcastStagingTray v-if="isLegacyDropcastStudio" />
     </div>
 </template>
 
@@ -440,6 +441,7 @@ import { useInventorySelection } from '../../composables/useInventorySelection';
 import { useInventoryFilters } from '../../composables/useInventoryFilters';
 import { useInventoryBulkActions } from '../../composables/useInventoryBulkActions';
 import { updateInventoryItem, deleteInventoryItem, saveItemToInventory } from '../../lib/inventory';
+import { formatSellingLocationBadge, hasOnlineReadyTag } from '../../lib/onlineCoCuration';
 import { useAuth } from '../../composables/useAuth';
 import { addToast } from '../../stores/toast';
 import { confirmDialog } from '../../stores/confirm';
@@ -580,6 +582,9 @@ const {
 } = useManifest();
 
 const { activeCast, stageItemsForCast } = useDropcasts();
+const isLegacyDropcastStudio = ref(
+    typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('legacyStudio') === '1'
+);
 
 const handleStageManifest = async () => {
     if (selectedItems.value.length === 0) return;
@@ -610,8 +615,8 @@ watch(selectedItems, async (newVal) => {
         }
     }
 
-    // B. Dropcast auto-staging
-    if (activeCast.value && activeCast.value.status === 'draft') {
+    // B. Dropcast auto-staging (Legacy Studio opt-in only)
+    if (isLegacyDropcastStudio.value && activeCast.value && activeCast.value.status === 'draft') {
         const currentCastIds = new Set((activeCast.value.items || []).map(i => String(i.$id || i.id)));
         const addedIds = newVal.filter(id => !currentCastIds.has(String(id)));
 

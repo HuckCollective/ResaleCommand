@@ -27,8 +27,10 @@ import {
 import { databases, Query } from '../../lib/appwrite';
 import { getDatabaseId, resolveCollectionId } from '../../lib/appwriteEnv';
 import { coopExpensesApi } from '../../lib/coopExpenses';
+import { getCoopJwtHeaders } from '../../lib/coopLedgerClient';
 import { manifestsApi } from '../../lib/manifests';
 import { getSavedDropcasts } from '../../lib/dropcastModel';
+import { mapSocialCampaignsToDashboardDrops, normalizeSocialCampaign } from '../../lib/socialTracker';
 import { effectiveStatus, loadVaultNotes } from '../../lib/founderVault';
 import { joinApi } from '../../lib/joinRequestsClient';
 import {
@@ -226,14 +228,22 @@ export function useLiveDashboardSource(): DashboardSource {
       }));
   };
 
-  const loadDrops = () => {
-    drops.value = getSavedDropcasts()
-      .filter((c) => c.status === 'ready' || c.status === 'broadcasted')
-      .map((c) => ({
-        id: c.id,
-        title: c.title,
-        status: c.status === 'ready' ? ('ready' as const) : ('announced' as const),
-      }));
+  const loadDrops = async () => {
+    try {
+      const headers = await getCoopJwtHeaders();
+      const res = await fetch('/api/coop/social-tracker', { method: 'GET', headers });
+      if (res.ok) {
+        const body = await res.json();
+        if (Array.isArray(body?.campaigns)) {
+          const normalized = body.campaigns.map((c: any, idx: number) => normalizeSocialCampaign(c, idx));
+          drops.value = mapSocialCampaignsToDashboardDrops(normalized);
+          return;
+        }
+      }
+    } catch {
+      // Non-fatal fallback: never block /dashboard hydration
+    }
+    drops.value = [];
   };
 
   const profile = computed(() => {
@@ -351,8 +361,7 @@ export function useLiveDashboardSource(): DashboardSource {
           laborEntries.value = state.laborEntries || [];
         })
       );
-      loadDrops();
-      tasks.push(loadLastSync(), loadExpenses(), loadJoinRequests(), loadCoopMessages());
+      tasks.push(loadDrops(), loadLastSync(), loadExpenses(), loadJoinRequests(), loadCoopMessages());
       await Promise.allSettled(tasks);
       // Sales need inventory loaded first so each sale can be tied to its owner
       await loadSales().catch((e) => console.warn('[Dashboard] Sales load failed:', e));

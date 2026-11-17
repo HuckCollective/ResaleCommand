@@ -657,7 +657,7 @@
         </div>
         <pre class="bg-base-200/80 border border-base-300 rounded-xl p-3 text-[11px] font-mono whitespace-pre-wrap break-words text-base-content/85">{{ promptPreviewText }}</pre>
         <p class="text-[11px] text-base-content/60">
-          ⏱️ Server memory cache TTL is 5 minutes across Vercel isolates. Saving bumps <code>rules.version</code> and applies to all scans within 5 minutes.
+          ⏱️ ✅ Saved rules apply across all new scans within 5 minutes.
         </p>
       </div>
 

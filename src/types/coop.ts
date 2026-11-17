@@ -51,6 +51,8 @@ export interface SettlementSaleItem {
   netSurplus: number;
   curatorTake: number;
   unrecoupedCost?: number;
+  coCurationLabel?: string;
+  coCurationTransferOut?: number;
   rawSale?: any;
 }
 

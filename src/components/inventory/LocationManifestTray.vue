@@ -252,6 +252,9 @@
                 <span v-if="item.quantity > 1" class="badge badge-xs badge-outline badge-primary font-bold">
                   Qty: {{ item.quantity }}
                 </span>
+                <span v-if="hasOnlineReadyTag(item)" class="badge badge-xs badge-info font-bold" title="Staged in Online Ready Bin — release before booth placement">
+                  🌐 Online Ready
+                </span>
                 <h4 class="font-bold text-xs text-base-content truncate group-hover:text-primary transition-colors" :class="{'line-through opacity-70': isLocked && verifiedItemIds.has(item.$id)}">
                   {{ cleanTitle(item.title) }}
                 </h4>
@@ -809,6 +812,7 @@ import { Icon } from '@iconify/vue';
 import { useManifest } from '../../composables/useManifest';
 import { manifestsApi } from '../../lib/manifests';
 import { BUCKET_ID, getAssetUrl, updateInventoryItem } from '../../lib/inventory';
+import { hasOnlineReadyTag } from '../../lib/onlineCoCuration';
 import { addToast } from '../../stores/toast';
 
 const ItemDrawer = defineAsyncComponent(() => import('../common/ItemDrawer.vue'));

@@ -25,3 +25,6 @@ description: "Appwrite schema limits, anti-truncation pagination, price parsing,
 4. **Zero Hardcoded Locations & Strict World 1 vs. World 2 AI Separation:**
    - Resolve `commissionRate`, `monthlyRent`, `usesRicochet`, `salesIntakeMode`, and manifest doc IDs dynamically from `src/lib/warehouses.ts` + `src/lib/locationSettingsServer.ts` (Laws 1–4). Delegate all SKU/UPC/ticket matching to `src/lib/salesBucketing.ts`.
    - **World 1 (`src/lib/gemini.ts`)**: App runtime AI uses the official `@google/genai` SDK (`GoogleGenAI`) billed to Huckleberry Collective Cloud credits (`gemini-2.5-flash` / `gemini-2.5-pro`). Never mix World 2 IDE model IDs (`src/lib/devAiRouting.ts`) into runtime API calls, and keep `calibrationBlock` strictly separate from `authoritativeUserNotes` in `/api/identify-item.ts`.
+
+5. **Plain-English User-Facing Errors & Loader Text (`validate-templates.mjs` §15):**
+   - Applies **ONLY** to strings a member can read (`{ error }` JSON responses, `CoopHttpError`, `addToast`, `showLoader` `step:`, `toUserMessage` in `src/lib/userFacingErrors.ts`). Code identifiers, file names (`lib/appwrite.ts`), comments, AI docs/rules, and `console.*` keep technical names. Never expose `Appwrite`, `Vercel`, `resale_db`, `coop_ledger`, `JWT`, or `localStorage` in user-facing error or status strings.

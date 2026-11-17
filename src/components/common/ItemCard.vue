@@ -287,6 +287,7 @@ const effectiveLocationSku = computed(() => {
 const ENDPOINT = import.meta.env.PUBLIC_APPWRITE_ENDPOINT;
 const PROJECT = import.meta.env.PUBLIC_APPWRITE_PROJECT_ID;
 import { BUCKET_ID } from '../../lib/inventory';
+import { formatSellingLocationBadge } from '../../lib/onlineCoCuration';
 const BUCKET = BUCKET_ID;
 
 // --- COMPUTED STYLES ---
@@ -302,7 +303,9 @@ const tags = computed(() => {
     const list = Array.isArray(raw) ? raw : (raw ? [raw] : []);
     const currentLoc = (locationText.value || '').trim().toLowerCase();
     // Filter out tags that duplicate the single item location
-    return list.filter(t => t && String(t).trim().toLowerCase() !== currentLoc);
+    return list
+        .filter(t => t && String(t).trim().toLowerCase() !== currentLoc)
+        .map(t => formatSellingLocationBadge(String(t)));
 });
 
 const auctionStatus = computed(() => {

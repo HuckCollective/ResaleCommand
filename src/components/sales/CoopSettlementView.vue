@@ -838,6 +838,12 @@
                     </button>
                     <span v-else class="truncate font-medium">{{ it.title }}</span>
                     <span
+                      v-if="it.coCurationLabel"
+                      class="badge badge-xs badge-info text-info-content font-semibold"
+                    >
+                      {{ it.coCurationLabel }}
+                    </span>
+                    <span
                       v-if="isUnlinkedRow(it)"
                       class="badge badge-xs badge-warning font-black"
                     >
@@ -978,7 +984,7 @@
               <div class="text-lg font-black font-mono text-primary">
                 ${{ settlementSummary.techOps.toFixed(2) }}
               </div>
-              <p class="text-[11px] text-base-content/50">Appwrite DB, Gemini AI credits, hosting</p>
+              <p class="text-[11px] text-base-content/50">Shared software, AI scouting tools &amp; web hosting</p>
             </div>
 
             <div class="p-3 rounded-xl bg-base-200/50 border border-base-200 space-y-1">
@@ -1262,6 +1268,8 @@ import {
   getLocationSettingMeta,
   resolveCanonicalLocationCode,
 } from '../../lib/warehouses';
+import { getCoopJwtHeaders } from '../../lib/coopLedgerClient';
+import type { CoCurationRecord } from '../../lib/onlineCoCuration';
 import type { CoopMonthLockSnapshot } from '../../types/coop';
 
 interface SaleItem {
@@ -1322,6 +1330,7 @@ const surplusSplitBasis = ref<SurplusSplitBasis>('volume');
 const policyConfig = ref<CoopPolicyConfig>({ ...DEFAULT_COOP_POLICY_CONFIG });
 const laborEntries = ref<CoopLaborEntry[]>([]);
 const locksByMonth = ref<Record<string, CoopMonthLockSnapshot>>({});
+const coCurationRecords = ref<CoCurationRecord[]>([]);
 const isLockSubmitting = ref(false);
 
 const rosterRef = computed(() => policyConfig.value.members);
@@ -1459,6 +1468,18 @@ const refreshServerLedgerAndLocks = async () => {
     locksByMonth.value = lockRes.locksByMonth || {};
   } catch {
     // Non-members / logged-out sessions fall back cleanly to empty labor/lock maps
+  }
+  try {
+    const headers = await getCoopJwtHeaders();
+    const res = await fetch('/api/coop/co-curation', { method: 'GET', headers });
+    if (res.ok) {
+      const body = await res.json().catch(() => null);
+      if (Array.isArray(body?.records)) {
+        coCurationRecords.value = body.records;
+      }
+    }
+  } catch {
+    // Non-fatal fallback to empty co-curation list
   }
 };
 
@@ -1639,6 +1660,7 @@ const settlementBundle = computed(() =>
     defaultUpcPrefix: (currentTeam.value?.prefs as any)?.upcPrefix || 'HUCK-',
     currentPacificMonth: currentPacificMonth.value,
     lockedSnapshotsByMonth: locksByMonth.value,
+    coCurationRecords: coCurationRecords.value,
   })
 );
 
@@ -1659,6 +1681,7 @@ const liveComparisonBundle = computed(() =>
     defaultUpcPrefix: (currentTeam.value?.prefs as any)?.upcPrefix || 'HUCK-',
     currentPacificMonth: currentPacificMonth.value,
     lockedSnapshotsByMonth: {},
+    coCurationRecords: coCurationRecords.value,
   })
 );
 

@@ -1,12 +1,28 @@
 ---
 import Layout from '../layouts/Layout.astro';
+import SocialCrossPostView from '../components/social/SocialCrossPostView.vue';
 import SocialHubView from '../components/social/SocialHubView.vue';
 
+export const prerender = false;
+
 const initialCastId = Astro.url.searchParams.get('cast') || Astro.url.searchParams.get('id') || '';
+const useLegacyStudio =
+  Astro.url.searchParams.get('legacyStudio') === '1' || Boolean(initialCastId);
 ---
 
-<Layout title="Dropcast Hub & Social Studio" hideFooter={true}>
-  <div class="pt-3 sm:pt-4 pb-0 min-h-full">
-    <SocialHubView client:only="vue" initialCastId={initialCastId} />
-  </div>
+<Layout
+  title={useLegacyStudio ? 'Parked Slide Studio | Works@TheHC' : 'Social Cross-Post & Promo Tracker | Works@TheHC'}
+  hideFooter={true}
+>
+  {
+    useLegacyStudio ? (
+      <div class="pt-3 sm:pt-4 pb-0 min-h-full">
+        <SocialHubView client:only="vue" initialCastId={initialCastId} />
+      </div>
+    ) : (
+      <div class="rc-page-shell">
+        <SocialCrossPostView client:only="vue" />
+      </div>
+    )
+  }
 </Layout>

@@ -952,7 +952,7 @@
           saveBtn.classList.add("btn-disabled");
         } catch (err) {
           console.error(err);
-          addToast({ type: 'error', message: `Save Failed: ${err.message}. \n\nCheck if you created the Database/Collection in Appwrite and added IDs to .env` });
+          addToast({ type: 'error', message: "Couldn't save item right now — please check your connection and try again." });
           const saveBtn = btnEl || this.$el;
           saveBtn.innerText = "Save to Inventory";
           saveBtn.disabled = false;

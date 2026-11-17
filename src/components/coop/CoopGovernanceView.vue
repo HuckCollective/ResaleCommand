@@ -11,10 +11,10 @@
           <span
             class="badge badge-xs sm:badge-sm font-mono font-bold gap-1"
             :class="isCloudSynced ? 'badge-success badge-outline' : 'badge-ghost'"
-            :title="isCloudSynced ? 'Synced live to resale_db.coop_proposals' : 'Local browser fallback'"
+            :title="isCloudSynced ? 'Saved to Official Ledger' : 'Saved on this device'"
           >
-            <Icon :icon="isCloudSynced ? 'solar:cloud-check-bold' : 'solar:cloud-storage-linear'" class="w-3.5 h-3.5" />
-            <span>{{ isSavingCloud ? 'Syncing…' : isCloudSynced ? 'coop_proposals Live' : 'Local Cache' }}</span>
+            <Icon :icon="isCloudSynced ? 'solar:check-circle-bold' : 'solar:diskette-linear'" class="w-3.5 h-3.5" />
+            <span>{{ isSavingCloud ? 'Saving…' : isCloudSynced ? '✅ Saved' : '📴 Saved on This Device' }}</span>
           </span>
         </div>
         <h1 class="text-2xl sm:text-3xl font-extrabold tracking-tight text-base-content flex items-center gap-2.5">
@@ -361,7 +361,7 @@
       <div class="card bg-base-100 border border-base-300 rounded-3xl p-5 sm:p-7 space-y-5 shadow-xs">
         <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-base-200 pb-4">
           <div>
-            <span class="badge badge-info badge-sm font-black">Astro 6 Content Collection</span>
+            <span class="badge badge-info badge-sm font-black">📚 Collective Playbooks</span>
             <h3 class="text-xl font-black text-base-content mt-1">
               Co-op Charter &amp; Strategy Markdown Library
             </h3>
@@ -428,7 +428,7 @@
         <div>
           <div class="flex items-center gap-2">
             <span class="badge badge-primary font-bold text-xs">5 Democratic Dials</span>
-            <span class="badge badge-outline font-mono text-xs">Appwrite Cloud Policy Engine</span>
+            <span class="badge badge-outline font-mono text-xs">🔒 Official Ledger</span>
           </div>
           <h3 class="text-xl sm:text-2xl font-black text-base-content mt-1">
             Configurable 4-Gate WSDE Waterfall &amp; Excess Surplus Sliders
@@ -1427,7 +1427,7 @@ const enactConsensusProposal = async (proposal: CoopProposal) => {
   await savePolicyAndManifestState();
   addToast({
     type: 'success',
-    message: `Enacted "${cleanEscapedCurrency(proposal.title)}" in Appwrite Cloud!`,
+    message: `Enacted "${cleanEscapedCurrency(proposal.title)}" across the Collective!`,
   });
 };
 

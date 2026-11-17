@@ -97,6 +97,21 @@
 
             <!-- Right: Actions & Badges -->
             <div class="flex items-center gap-2 shrink-0">
+                <!-- Online Ready Bin & Co-Curation Trigger -->
+                <button
+                    v-if="item?.$id && canOpenOnlineBin"
+                    type="button"
+                    class="btn btn-xs rounded-lg font-bold text-[10px] h-7 min-h-0 px-2.5 gap-1 transition-all"
+                    :class="isItemOnlineReady
+                        ? 'btn-info text-info-content shadow-xs'
+                        : 'btn-ghost border border-base-300 text-base-content/80 hover:border-info hover:text-info'"
+                    @click.stop="emit('open-cocuration')"
+                    :title="isItemOnlineReady ? 'Manage Online Ready Bin & Co-Curation terms' : 'Stage in Online Ready Bin or claim for Co-Curation'"
+                >
+                    <span>🌐</span>
+                    <span>{{ isItemOnlineReady ? 'Online Ready' : 'Online Bin' }}</span>
+                </button>
+
                 <!-- Copy Title Button -->
                 <button 
                     type="button" 
@@ -346,6 +361,7 @@ import { ref, computed } from 'vue';
 import { Icon } from '@iconify/vue';
 import { condenseTitleForTag, cleanTagTitle } from '../../../lib/exportUtils';
 import { generateSmartTagTitleSuggestions } from '../../../lib/lotTitleGenerator';
+import { checkCoCurationEligibility, hasOnlineReadyTag } from '../../../lib/onlineCoCuration';
 import { addToast } from '../../../stores/toast';
 
 const props = defineProps({
@@ -367,7 +383,10 @@ const props = defineProps({
     }
 });
 
-const emit = defineEmits(['close', 'dismiss-shop-update', 'flag-shop-update', 'copy-title']);
+const emit = defineEmits(['close', 'dismiss-shop-update', 'flag-shop-update', 'copy-title', 'open-cocuration']);
+
+const canOpenOnlineBin = computed(() => checkCoCurationEligibility(props.item).eligible);
+const isItemOnlineReady = computed(() => hasOnlineReadyTag(props.editForm) || hasOnlineReadyTag(props.item));
 
 // Collapsible state (collapsed by default so header stays slim)
 const isNamingOpen = ref(false);

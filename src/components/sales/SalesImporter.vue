@@ -2030,6 +2030,7 @@ import { Icon } from '@iconify/vue';
 import { useInventory } from '../../composables/useInventory';
 import { useAuth } from '../../composables/useAuth';
 import { useLoader } from '../../composables/useLoader';
+import { toUserMessage } from '../../lib/userFacingErrors';
 import { databases, ID } from '../../lib/appwrite';
 import { addToast } from '../../stores/toast';
 import { getCollectionId, DB_ID, normalizeOrgPrefix, getAssetUrl, updateInventoryItem } from '../../lib/inventory';
@@ -3084,7 +3085,7 @@ const linkAndSaveItemToActiveRow = async (item: any) => {
     closeMatcherDrawer();
   } catch (err: any) {
     console.error('[SalesImporter] Failed to link & save item to MD:', err);
-    addToast({ type: 'error', message: `Failed to save link to Appwrite: ${err?.message || 'Unknown error'}` });
+    addToast({ type: 'error', message: toUserMessage(err, "Couldn't save item link — please try again.") });
   } finally {
     isSavingDrawerLink.value = null;
   }
@@ -4469,8 +4470,8 @@ const executeImport = async () => {
   }
   
   isImporting.value = true;
-  showLoader("Committing Matched Sales to Inventory...", {
-    step: `Recording ${rowsToImport.length} sales into Appwrite database...`,
+  showLoader("Saving Matched Sales to Ledger…", {
+    step: `Saving ${rowsToImport.length} sales to ledger…`,
     progress: 5,
     cancelable: false
   });

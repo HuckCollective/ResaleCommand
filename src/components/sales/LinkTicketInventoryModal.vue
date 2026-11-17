@@ -301,6 +301,7 @@ import { ref, computed, watch, onMounted } from 'vue';
 import { Icon } from '@iconify/vue';
 import SlideOverDrawer from '../common/SlideOverDrawer.vue';
 import { addToast } from '../../stores/toast';
+import { toUserMessage } from '../../lib/userFacingErrors';
 import { salesApi } from '../../lib/sales';
 import { updateInventoryItem, DB_ID } from '../../lib/inventory';
 import { databases } from '../../lib/appwrite';
@@ -589,7 +590,7 @@ const handleConfirmLinkOrReassign = async () => {
     console.error('[LinkTicketInventoryModal] Failed to link/reassign sale:', err);
     addToast({
       type: 'error',
-      message: err?.message || 'Failed to update sale record in Appwrite.',
+      message: toUserMessage(err, "Couldn't update this sale — please try again."),
     });
   } finally {
     isSubmitting.value = false;

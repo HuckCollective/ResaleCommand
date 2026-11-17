@@ -125,7 +125,7 @@ export const POST: APIRoute = async ({ request }) => {
   }
 
   const ctx = getJoinServerContext();
-  if (!ctx || !ctx.dbId) return json({ error: 'Appwrite is not configured.' }, 500);
+  if (!ctx || !ctx.dbId) return json({ error: 'Service temporarily unavailable — please try again.' }, 500);
 
   const action = String(body?.action || '');
   const reqOrigin = new URL(request.url).origin;

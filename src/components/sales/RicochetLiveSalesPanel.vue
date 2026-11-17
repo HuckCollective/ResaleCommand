@@ -525,7 +525,7 @@
         <div class="flex items-center gap-3 w-full max-w-3xl">
           <span class="loading loading-spinner loading-xs text-success"></span>
           <span class="font-black font-mono text-xs">
-            Committing to Appwrite... {{ commitProgress.done }} / {{ commitProgress.total }}
+            Saving sales to ledger… {{ commitProgress.done }} / {{ commitProgress.total }}
           </span>
           <progress
             class="progress progress-success flex-1 h-2"

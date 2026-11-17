@@ -34,6 +34,7 @@ import type {
   SettlementSaleItem,
 } from '../../types/coop';
 import { fromCents, runCoopSettlement, toCents } from './settlementEngine';
+import { computeCoCurationSplitCents, type CoCurationRecord } from '../onlineCoCuration';
 
 export interface UnassignedReimbursementNotice {
   owner: string;
@@ -142,6 +143,16 @@ export interface BuildMonthlySettlementInputs {
   defaultUpcPrefix?: string;
   currentPacificMonth?: string;
   lockedSnapshotsByMonth?: Record<string, CoopMonthLockSnapshot>;
+  coCurationRecords?: ReadonlyArray<CoCurationRecord>;
+}
+
+function extractSaleCalendarYmd(rawDate: unknown): string {
+  const s = String(rawDate ?? '').trim();
+  const iso = /^(\d{4})-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])/.exec(s);
+  if (iso) return `${iso[1]}-${iso[2]}-${iso[3]}`;
+  const us = /^(0?[1-9]|1[0-2])[/-](0?[1-9]|[12]\d|3[01])[/-](\d{4})/.exec(s);
+  if (us) return `${us[3]}-${us[1].padStart(2, '0')}-${us[2].padStart(2, '0')}`;
+  return '';
 }
 
 export function resolveSaleLocationCode(sale: any, warehouses?: any[]): string {
@@ -635,6 +646,21 @@ function buildSingleMonthSettlement(
   const curatorRatio = Number(policyConfig.curatorSharePct) / 100;
   const commonsRatio = Number(policyConfig.commonsSharePct) / 100;
 
+  // Index active Co-Curation records (unlocked months only — buildFromLockedSnapshot handles locked months)
+  const coCurationByUpc = new Map<string, CoCurationRecord>();
+  const coCurationByItemId = new Map<string, CoCurationRecord>();
+  const coCurationBySoldSaleId = new Map<string, CoCurationRecord>();
+  if (!isVenueScopedPreview && Array.isArray(inputs.coCurationRecords)) {
+    for (const rec of inputs.coCurationRecords) {
+      if (!rec || rec.mode === 'self_listed') continue;
+      if (rec.status !== 'listed' && rec.status !== 'sold') continue;
+      if (rec.upc) coCurationByUpc.set(rec.upc.trim().toUpperCase(), rec);
+      if (rec.itemId) coCurationByItemId.set(rec.itemId.trim(), rec);
+      if (rec.soldSaleId) coCurationBySoldSaleId.set(rec.soldSaleId.trim(), rec);
+    }
+  }
+  const sweatCoCuratedProfitCents = new Map<string, { displayName: string; cents: number }>();
+
   interface MutableOrgGroup {
     prefix: string;
     name: string;
@@ -695,6 +721,9 @@ function buildSingleMonthSettlement(
     let baseProfitCents = 0;
     let commonsTakeCents = 0;
     let curatorTakeCents = 0;
+    let coCurationLabel: string | undefined;
+    let coCurationTransferOut: number | undefined;
+    let pendingListerTransfer: { rec: CoCurationRecord; cents: number } | null = null;
     const shippingCents =
       grp.isConsignor || grp.isCommonsPool ? 0 : Math.max(0, toCents(sale.shippingCost || 0));
 
@@ -708,21 +737,74 @@ function buildSingleMonthSettlement(
       commonsTakeCents = 0;
     } else {
       const itemCostCents = Math.max(0, toCents(sale.cost || 0));
-      const rawCostCents = itemCostCents + shippingCents;
-      if (netDepositCents < rawCostCents) {
-        effectiveRecoupCents = Math.max(0, netDepositCents);
-        unrecoupedCents = rawCostCents - effectiveRecoupCents;
-        netSurplusCents = 0;
-        commonsTakeCents = 0;
-        baseProfitCents = 0;
-        curatorTakeCents = effectiveRecoupCents;
+      const saleUpcUpper = String(sale.upc || sale.sku || '').trim().toUpperCase();
+      const saleItemId = String(sale.itemId || '').trim();
+      const saleIdStr = String(sale.id || sale.$id || '').trim();
+      const saleYmd = extractSaleCalendarYmd(sale.date);
+
+      const candidateCoCur =
+        (saleIdStr && coCurationBySoldSaleId.get(saleIdStr)) ||
+        (saleItemId && coCurationByItemId.get(saleItemId)) ||
+        (saleUpcUpper && coCurationByUpc.get(saleUpcUpper)) ||
+        null;
+
+      const activeCoCur =
+        candidateCoCur &&
+        saleYmd &&
+        candidateCoCur.claimedAt &&
+        candidateCoCur.claimedAt <= saleYmd
+          ? candidateCoCur
+          : null;
+
+      if (activeCoCur) {
+        const splitRes = computeCoCurationSplitCents({
+          netDepositCents,
+          itemCostCents,
+          shippingCents,
+          commonsRatio,
+          mode: activeCoCur.mode,
+          transferFloorCents: Math.round(Number(activeCoCur.transferFloorPrice || 0) * 100),
+        });
+        effectiveRecoupCents = splitRes.effectiveRecoupCents;
+        unrecoupedCents = splitRes.unrecoupedCents;
+        netSurplusCents = splitRes.netSurplusCents;
+        commonsTakeCents = splitRes.commonsTakeCents;
+
+        const normListerPrefix = normalizeOrgPrefix(activeCoCur.listerPrefix);
+        if (normListerPrefix === grp.prefix) {
+          // Same-org pair: net-zero within org bucket; attach memo-only attribution
+          baseProfitCents = splitRes.ogBaseProfitCents + splitRes.listerTransferCents;
+          curatorTakeCents = effectiveRecoupCents + baseProfitCents;
+          coCurationLabel = `🤝 Co-curated w/ ${activeCoCur.listerName} ($${fromCents(splitRes.listerTransferCents).toFixed(2)} internal share)`;
+        } else {
+          baseProfitCents = splitRes.ogBaseProfitCents;
+          curatorTakeCents = effectiveRecoupCents + baseProfitCents;
+          coCurationTransferOut = fromCents(splitRes.listerTransferCents);
+          coCurationLabel = `🤝 Co-curated by ${activeCoCur.listerName} (${normListerPrefix} +$${fromCents(splitRes.listerTransferCents).toFixed(2)})`;
+          if (splitRes.listerTransferCents > 0) {
+            pendingListerTransfer = {
+              rec: activeCoCur,
+              cents: splitRes.listerTransferCents,
+            };
+          }
+        }
       } else {
-        effectiveRecoupCents = rawCostCents;
-        unrecoupedCents = 0;
-        netSurplusCents = netDepositCents - rawCostCents;
-        commonsTakeCents = Math.round(netSurplusCents * commonsRatio);
-        baseProfitCents = netSurplusCents - commonsTakeCents;
-        curatorTakeCents = effectiveRecoupCents + baseProfitCents;
+        const rawCostCents = itemCostCents + shippingCents;
+        if (netDepositCents < rawCostCents) {
+          effectiveRecoupCents = Math.max(0, netDepositCents);
+          unrecoupedCents = rawCostCents - effectiveRecoupCents;
+          netSurplusCents = 0;
+          commonsTakeCents = 0;
+          baseProfitCents = 0;
+          curatorTakeCents = effectiveRecoupCents;
+        } else {
+          effectiveRecoupCents = rawCostCents;
+          unrecoupedCents = 0;
+          netSurplusCents = netDepositCents - rawCostCents;
+          commonsTakeCents = Math.round(netSurplusCents * commonsRatio);
+          baseProfitCents = netSurplusCents - commonsTakeCents;
+          curatorTakeCents = effectiveRecoupCents + baseProfitCents;
+        }
       }
     }
 
@@ -738,6 +820,8 @@ function buildSingleMonthSettlement(
       netSurplus: fromCents(netSurplusCents),
       curatorTake: fromCents(curatorTakeCents),
       unrecoupedCost: unrecoupedCents > 0 ? fromCents(unrecoupedCents) : undefined,
+      coCurationLabel,
+      coCurationTransferOut,
       rawSale: sale,
     });
 
@@ -748,6 +832,28 @@ function buildSingleMonthSettlement(
     grp.netMarginCents += netSurplusCents;
     grp.baseProfitCents += baseProfitCents;
     grp.commonsTakeCents += commonsTakeCents;
+
+    if (pendingListerTransfer) {
+      const listerPref = normalizeOrgPrefix(pendingListerTransfer.rec.listerPrefix);
+      if (listerPref === 'SWEAT-') {
+        const rawName = String(pendingListerTransfer.rec.listerName || 'Sweat-Equity Member').trim();
+        const rosterMatch = policyConfig.members.find(
+          (m) => m.name.trim().toLowerCase() === rawName.toLowerCase()
+        );
+        const canonicalName = rosterMatch?.name || rawName;
+        const lowerKey = canonicalName.toLowerCase();
+        const prev = sweatCoCuratedProfitCents.get(lowerKey);
+        sweatCoCuratedProfitCents.set(lowerKey, {
+          displayName: canonicalName,
+          cents: (prev?.cents || 0) + pendingListerTransfer.cents,
+        });
+      } else if (listerPref) {
+        const listerGrp = ensureOrgGroup(listerPref);
+        if (!listerGrp.isConsignor && !listerGrp.isCommonsPool) {
+          listerGrp.baseProfitCents += pendingListerTransfer.cents;
+        }
+      }
+    }
   }
 
   // Inject 0-sale org rows when they have approved/pending labor or shared reimbursements (All Venues only)
@@ -935,16 +1041,22 @@ function buildSingleMonthSettlement(
     for (const k of sweatReimbursementCents.keys()) {
       sweatWorkerKeys.add(k);
     }
+    for (const k of sweatCoCuratedProfitCents.keys()) {
+      sweatWorkerKeys.add(k);
+    }
 
     for (const lowerName of sweatWorkerKeys) {
       const share = sweatShareByLower.get(lowerName);
       const reimbEntry = sweatReimbursementCents.get(lowerName);
-      const displayName = share?.member || reimbEntry?.displayName || 'Sweat-Equity Worker';
+      const coCurEntry = sweatCoCuratedProfitCents.get(lowerName);
+      const displayName =
+        share?.member || reimbEntry?.displayName || coCurEntry?.displayName || 'Sweat-Equity Worker';
       const approvedHrs = share?.approvedHours || 0;
       const pendingHrs = share?.pendingHours || 0;
       const reimbCents = reimbEntry?.cents || 0;
+      const coCurProfitCents = coCurEntry?.cents || 0;
 
-      if (approvedHrs <= 0 && pendingHrs <= 0 && reimbCents <= 0) continue;
+      if (approvedHrs <= 0 && pendingHrs <= 0 && reimbCents <= 0 && coCurProfitCents <= 0) continue;
 
       const rowKey = `SWEAT::${displayName}`;
       rowMetaMap.set(rowKey, {
@@ -966,7 +1078,7 @@ function buildSingleMonthSettlement(
         costRecoup: 0,
         unrecoupedCost: 0,
         netMargin: 0,
-        baseProfit70: 0,
+        baseProfit70: fromCents(coCurProfitCents),
         commons30: 0,
         frontedReimbursement: fromCents(reimbCents),
         laborHoursLogged: approvedHrs,
@@ -975,7 +1087,7 @@ function buildSingleMonthSettlement(
         laborBountyWeight: approvedHrs,
         laborLogs: share?.entries || [],
         items: [],
-        finalPayoutCheck: fromCents(reimbCents),
+        finalPayoutCheck: fromCents(reimbCents + coCurProfitCents),
       });
     }
   }

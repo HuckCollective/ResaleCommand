@@ -22,7 +22,7 @@ export const GET: APIRoute = async ({ request }) => {
   }
 
   const ctx = getJoinServerContext();
-  if (!ctx) return json({ error: 'Appwrite is not configured.' }, 500);
+  if (!ctx) return json({ error: 'Service temporarily unavailable — please try again.' }, 500);
 
   const res = await ctx.databases.listDocuments(ctx.dbId, ctx.collectionId, [
     Query.equal('status', JOIN_REQUEST_STATUS.pending),

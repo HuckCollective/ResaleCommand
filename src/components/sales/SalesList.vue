@@ -758,7 +758,7 @@
         v-model="isRicochetConfirmDrawerOpen"
         size="lg"
         :title="`Confirm Staged ${activeRicochetVenueMeta.shortName} Sales`"
-        :subtitle="`${ricochetConfirmTargetMonthLabel} • Verified against live resale_db.sales (deterministic ticket-line deduplication)`"
+        :subtitle="`${ricochetConfirmTargetMonthLabel} • Checked against the Official Sales Ledger (duplicates skipped)`"
       >
         <div class="space-y-4">
           <!-- 4-Card Summary Strip -->
@@ -913,7 +913,7 @@
             <span class="text-xs font-semibold text-base-content leading-snug">
               <strong class="font-black text-warning">⚠️ Large / Multi-Month Batch Check:</strong>
               This batch contains <strong>{{ ricochetNewBreakdown.count }} rows</strong> across
-              <strong>{{ ricochetNewBreakdown.monthKeys.join(', ') }}</strong>. I verified these ticket lines are genuinely new before writing to <code>resale_db.sales</code>.
+              <strong>{{ ricochetNewBreakdown.monthKeys.join(', ') }}</strong>. I verified these ticket lines are genuinely new before adding to the Official Sales Ledger.
             </span>
           </label>
         </div>
@@ -922,7 +922,7 @@
           <div class="space-y-2">
             <div v-if="isCommittingRicochetSync && ricochetCommitProgress" class="space-y-1">
               <div class="flex items-center justify-between text-xs font-bold text-info">
-                <span>Writing sales batch to Appwrite...</span>
+                <span>Saving sales to ledger…</span>
                 <span class="font-mono">{{ ricochetCommitProgress.done }} / {{ ricochetCommitProgress.total }}</span>
               </div>
               <progress

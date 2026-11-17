@@ -89,7 +89,7 @@ export async function writeFlagshipCmsOnServer(
   if (/data:[a-z0-9+/=-]+;base64,/i.test(rawStr)) {
     throw new CoopHttpError(
       400,
-      'Base64 data: URLs are forbidden in Appwrite CMS documents (Law 3). Use https:// links only.',
+      "Embedded image data isn't supported here — please use an https:// link.",
       'BASE64_FORBIDDEN'
     );
   }
@@ -103,7 +103,7 @@ export async function writeFlagshipCmsOnServer(
   if (serialized.length > MAX_SNAPSHOT_CHARS) {
     throw new CoopHttpError(
       413,
-      `CMS payload exceeds the ${MAX_SNAPSHOT_CHARS.toLocaleString()}-character Appwrite manifest limit (${serialized.length.toLocaleString()} chars).`,
+      'This page has too much text to save at once — please trim a few items and try again.',
       'PAYLOAD_TOO_LARGE'
     );
   }
@@ -125,12 +125,16 @@ export async function writeFlagshipCmsOnServer(
     }).slice(0, 4900),
   };
 
+  // Public read ONLY — never grant Role.any() update/delete (§1C-B); pass permissions on update too to strip legacy perms.
+  const publicReadOnlyPermissions = [Permission.read(Role.any())];
+
   try {
     await ctx.databases.updateDocument(
       ctx.dbId,
       MANIFESTS_COL_ID,
       PUBLIC_FLAGSHIP_CMS_DOC_ID,
-      docPayload
+      docPayload,
+      publicReadOnlyPermissions
     );
   } catch (updateErr: any) {
     if (updateErr?.code === 404) {
@@ -139,11 +143,7 @@ export async function writeFlagshipCmsOnServer(
         MANIFESTS_COL_ID,
         PUBLIC_FLAGSHIP_CMS_DOC_ID,
         docPayload,
-        [
-          Permission.read(Role.any()),
-          Permission.update(Role.any()),
-          Permission.delete(Role.any()),
-        ]
+        publicReadOnlyPermissions
       );
     } else {
       throw updateErr;

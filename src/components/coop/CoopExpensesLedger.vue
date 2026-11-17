@@ -25,6 +25,7 @@
           type="button"
           @click="openImportModal"
           class="btn btn-sm sm:btn-md btn-outline btn-primary gap-1.5 shadow-xs font-bold flex-1 sm:flex-initial min-h-[40px]"
+          data-vendor-ok
           title="Upload multiple invoice PDFs at once (Appwrite, Google, Vercel, etc.)"
         >
           <Icon icon="solar:upload-track-bold-duotone" class="w-4 h-4 shrink-0" />
@@ -1111,6 +1112,7 @@
                 <textarea 
                   v-model="importCsvText" 
                   rows="5" 
+                  data-vendor-ok
                   placeholder="date,vendor,category,invoice_number,amount,status,notes&#10;2026-10-19,Appwrite,Software/Infrastructure,INV-0FCD135D,25.00,Paid,Pro plan monthly subscription&#10;2026-09-19,Vercel,Hosting/Pro,INV-892182,20.00,Paid,Vercel Pro subscription"
                   class="textarea textarea-bordered w-full font-mono text-xs leading-relaxed"
                   @input="parseExpensesCsv(importCsvText)"
@@ -2518,8 +2520,8 @@ const executeExpenseImport = async () => {
   }
 
   isImportingExpenses.value = true;
-  showLoader("Importing Commons Expenses...", {
-    step: `Recording ${itemsToImport.length} expense invoices into Appwrite...`,
+  showLoader("Importing Commons Expenses…", {
+    step: `Recording ${itemsToImport.length} invoices…`,
     progress: 5,
     cancelable: false
   });

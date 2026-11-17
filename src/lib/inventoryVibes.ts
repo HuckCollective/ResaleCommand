@@ -1,9 +1,11 @@
 import { matchesLocationFilter } from './warehouses';
+import { hasOnlineReadyTag } from './onlineCoCuration';
 
 export type SpatialLocationId = 'all' | '__unassigned__' | 'MD' | 'DT' | 'HG' | 'HH' | 'HD';
 export type SmartQueueId =
     | 'md_restock'
     | 'dt_restock'
+    | 'online_ready'
     | 'needs_md_sync'
     | 'missing_booth_sku'
     | 'booth_bins'
@@ -86,6 +88,13 @@ export const SMART_QUEUES: SmartQueueMeta[] = [
         shortLabel: '🐯 Pull for DT',
         description: 'Untagged backstock matching Dusty Tiger smalls, jewelry, enamel pins, pocket items, coins, and wands (<8").',
         badgeClass: 'badge-secondary'
+    },
+    {
+        id: 'online_ready',
+        label: '🌐 Online Ready',
+        shortLabel: '🌐 Online Ready',
+        description: 'Single-unit HG/HH backstock staged in the Online Ready Bin or co-curated for shared storefronts.',
+        badgeClass: 'badge-info'
     },
     {
         id: 'needs_md_sync',
@@ -286,7 +295,7 @@ export function isAlreadyInBooth(item: any): boolean {
  * True if item is untagged backstock/unassigned (not already in MD/DT and no 0EJ SKU) and matches Memory Den vibes.
  */
 export function matchesMdRestockVibe(item: any): boolean {
-    if (!item || !isWorkingStockItem(item) || isAlreadyInBooth(item)) return false;
+    if (!item || !isWorkingStockItem(item) || isAlreadyInBooth(item) || hasOnlineReadyTag(item)) return false;
     const text = getSearchableVibeText(item);
     return MD_VIBE_REGEX.test(text);
 }
@@ -295,7 +304,7 @@ export function matchesMdRestockVibe(item: any): boolean {
  * True if item is untagged backstock/unassigned (not already in MD/DT and no 0EJ SKU) and matches Dusty Tiger smalls/jewelry/pins/wands.
  */
 export function matchesDtRestockVibe(item: any): boolean {
-    if (!item || !isWorkingStockItem(item) || isAlreadyInBooth(item)) return false;
+    if (!item || !isWorkingStockItem(item) || isAlreadyInBooth(item) || hasOnlineReadyTag(item)) return false;
     const text = getSearchableVibeText(item);
     if (DT_EXCLUSION_REGEX.test(text)) return false;
     return DT_VIBE_REGEX.test(text);
@@ -333,6 +342,8 @@ export function matchesSmartQueue(item: any, queueId: string | null | undefined)
             return matchesMdRestockVibe(item);
         case 'dt_restock':
             return matchesDtRestockVibe(item);
+        case 'online_ready':
+            return isWorkingStockItem(item) && hasOnlineReadyTag(item);
         case 'needs_md_sync':
             return needsMdSync(item);
         case 'missing_booth_sku':

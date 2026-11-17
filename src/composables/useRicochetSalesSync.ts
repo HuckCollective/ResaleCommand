@@ -3,6 +3,7 @@ import { Permission, Role } from 'appwrite';
 import { databases, ID, Query } from '../lib/appwrite';
 import { getDatabaseId, getItemsCollectionId, resolveCollectionId } from '../lib/appwriteEnv';
 import { buildSaleOrderReference, parseRicochetExportCsv } from '../lib/ricochetPayoutParser';
+import { toUserMessage } from '../lib/userFacingErrors';
 
 // Same environment-aware IDs the working Inventory Sync uses (client SDK, logged-in session — no serverless API key)
 const DATABASE_ID = getDatabaseId();
@@ -1070,7 +1071,7 @@ export function useRicochetSalesSync(options: UseRicochetSalesSyncOptions) {
                 committedRowKeys.add(rowKeyOf(row));
               } catch (err: any) {
                 const errCode = Number(err?.code || 0);
-                const errMsg = String(err?.message || err || 'Unknown Appwrite error');
+                const errMsg = String(err?.message || err || 'Save error');
                 if (errCode === 409 || /document.*already exists/i.test(errMsg)) {
                   const existingConflictDoc: any = await databases
                     .getDocument(DATABASE_ID, COLLECTION_SALES, deterministicId)
@@ -1107,7 +1108,9 @@ export function useRicochetSalesSync(options: UseRicochetSalesSyncOptions) {
         ricochetCommitProgress.value = { done: Math.min(totalRows, start + chunk.length), total: totalRows };
 
         if (batchFailed > 0 && batchCommitted === 0) {
-          throw new Error(`Appwrite rejected batch ${batchNo}/${batchCount}: ${batchErrors[0] || 'unknown error'}`);
+          throw new Error(
+            `Couldn't save batch ${batchNo}/${batchCount} — tap Retry (won't create duplicates).`
+          );
         }
       }
 
@@ -1193,15 +1196,16 @@ export function useRicochetSalesSync(options: UseRicochetSalesSyncOptions) {
         type: failedTotal > 0 ? 'warning' : 'success',
         message:
           failedTotal > 0
-            ? `⚠️ Committed ${committedTotal} sales, ${failedTotal} failed${batchErrors[0] ? ` — Appwrite: ${batchErrors[0]}` : ''}. Re-run Commit to retry (duplicates are skipped automatically).`
-            : `✅ Committed ${committedTotal} verified Ricochet sales (${skippedTotal} skipped: ${skippedDuplicateTickets} already synced${skippedNoTicket ? `, ${skippedNoTicket} without a Ricochet ticket/sold date — e.g. ${noTicketExamples.join(' | ')}` : ''}).`,
+            ? `⚠️ Saved ${committedTotal} sales, ${failedTotal} didn't go through — tap Retry (won't create duplicates).`
+            : `✅ Saved ${committedTotal} verified sales to ledger (${skippedTotal} skipped: ${skippedDuplicateTickets} already saved${skippedNoTicket ? `, ${skippedNoTicket} without a ticket/sold date — e.g. ${noTicketExamples.join(' | ')}` : ''}).`,
       });
       onAfterLiveCommit?.();
     } catch (err: any) {
-      // Unfreeze immediately (finally resets isCommitting + progress) and surface the exact error message
+      // Unfreeze immediately (finally resets isCommitting + progress) and surface reassuring retry message
+      console.warn('[useRicochetSalesSync] Commit interrupted:', err);
       addToast({
         type: 'error',
-        message: `Commit stopped at ${ricochetCommitProgress.value?.done ?? 0} / ${totalRows}: ${err?.message || 'Unknown error'} — re-run Commit to resume (already-written tickets are skipped).`,
+        message: `Saved ${ricochetCommitProgress.value?.done ?? 0} of ${totalRows} before pausing — ${toUserMessage(err, "tap Retry to finish (won't create duplicates).")}`,
       });
     } finally {
       isCommittingRicochetSync.value = false;

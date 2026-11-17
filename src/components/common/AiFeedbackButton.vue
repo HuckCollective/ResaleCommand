@@ -31,7 +31,7 @@
                   <span class="badge badge-warning badge-xs font-bold">Governed Queue</span>
                 </div>
                 <p class="text-xs text-base-content/70 mt-0.5 leading-relaxed">
-                  Staged in Appwrite for Founder &amp; Developer vetting. Submissions never auto-mutate live prompts.
+                  Saved for Founder &amp; Builder review. Submissions never auto-change live settings.
                 </p>
               </div>
             </div>

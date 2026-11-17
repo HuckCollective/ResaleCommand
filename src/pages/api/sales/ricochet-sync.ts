@@ -969,7 +969,7 @@ export const POST: APIRoute = async ({ request, url }) => {
               }
             } else {
               failedCount++;
-              recordCommitError(errMsg || 'Appwrite rejected the sale document');
+              recordCommitError(errMsg || "Couldn't save this sale record");
             }
           }
         }

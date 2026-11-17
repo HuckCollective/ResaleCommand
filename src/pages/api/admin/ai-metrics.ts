@@ -98,7 +98,7 @@ export const GET: APIRoute = async ({ request }) => {
 
     if (!endpoint || !projectId || !apiKey) {
       return new Response(
-        JSON.stringify({ error: 'Appwrite credentials not configured' }),
+        JSON.stringify({ error: 'Service temporarily unavailable — please try again.' }),
         {
           status: 500,
           headers: { 'Content-Type': 'application/json' },

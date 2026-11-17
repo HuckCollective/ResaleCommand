@@ -8,6 +8,7 @@ import { DB_ID, getCollectionId } from '../lib/inventory';
 import { Query } from 'appwrite';
 import { ensureItemUpc, isValidOrgUpc } from '../lib/upcAuthority';
 import { reconcileManifestWithRicochetCsv, type ReconcileResult } from '../lib/manifestReconciliation';
+import { hasOnlineReadyTag } from '../lib/onlineCoCuration';
 
 // Shared singleton state across all views
 const activeManifest = ref<ManifestDocument | null>(null);
@@ -502,6 +503,23 @@ export function useManifest() {
         silent = false
     ) {
         if (!items || items.length === 0) return;
+        const eligibleItems = items.filter((item) => !hasOnlineReadyTag(item));
+        const skippedOnlineCount = items.length - eligibleItems.length;
+        if (eligibleItems.length === 0) {
+            if (!silent) {
+                addToast({
+                    type: 'warning',
+                    message: '🌐 Online Ready items stay in backstock — release them from the Online Bin before staging a booth drop.'
+                });
+            }
+            return;
+        }
+        if (skippedOnlineCount > 0 && !silent) {
+            addToast({
+                type: 'info',
+                message: `Skipped ${skippedOnlineCount} 🌐 Online Ready item${skippedOnlineCount === 1 ? '' : 's'} (kept in backstock).`
+            });
+        }
         return enqueueManifestUpdate(async () => {
             isSyncing.value = true;
             try {
@@ -541,7 +559,7 @@ export function useManifest() {
                 const currentItemIds = new Set(activeManifest.value.itemIds || []);
                 const newItemsToAdd: any[] = [];
 
-                for (const item of items) {
+                for (const item of eligibleItems) {
                     if (!currentItemIds.has(item.$id)) {
                         currentItemIds.add(item.$id);
                         newItemsToAdd.push(item);

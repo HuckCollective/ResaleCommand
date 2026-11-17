@@ -1,7 +1,7 @@
 <template>
   <Teleport v-if="mounted" to="body">
     <Transition name="rc-drawer">
-      <div v-if="modelValue" class="fixed inset-0 z-400" role="dialog" aria-modal="true" :aria-label="title">
+      <div v-if="modelValue" class="fixed inset-0" :class="zClass" role="dialog" aria-modal="true" :aria-label="title">
         <!-- Backdrop (solid, no blur — avoids GPU scroll lag) -->
         <div class="absolute inset-0 bg-black/60" @click="close"></div>
 
@@ -53,9 +53,11 @@ const props = withDefaults(
     title: string;
     subtitle?: string;
     size?: 'md' | 'lg' | 'xl';
+    zClass?: string;
   }>(),
   {
     size: 'md',
+    zClass: 'z-400',
   }
 );
 const emit = defineEmits<{ (e: 'update:modelValue', value: boolean): void; (e: 'close'): void }>();

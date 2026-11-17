@@ -108,8 +108,8 @@
             <!-- Privacy notice -->
             <div class="mt-4 p-3 bg-base-200 rounded-lg text-xs opacity-80 flex items-start gap-2 border border-base-300">
                 <Icon icon="solar:info-circle-linear" class="w-4 h-4 text-info flex-shrink-0 mt-0.5" />
-                <div>
-                    <span class="font-bold">Missing names or emails?</span> Appwrite hides member contact info by default. To make them visible to your team, open your **Appwrite Console > Auth > Security > Memberships privacy** and disable the privacy toggles.
+                <div data-vendor-ok>
+                    <span class="font-bold">Missing names or emails?</span> Appwrite hides member contact info by default. To make them visible to your team, open your **Appwrite Console &gt; Auth &gt; Security &gt; Memberships privacy** and disable the privacy toggles.
                 </div>
             </div>
         </div>

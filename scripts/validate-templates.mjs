@@ -741,7 +741,7 @@ const transportContracts = [
         mustContain: [
             { pattern: /<BottomActionDock\b/, label: 'Sticky bottom action bar (BottomActionDock)' },
             { pattern: /Unlock Live Commit/, label: 'Unlock Live Commit checkbox in the bottom bar' },
-            { pattern: /Committing to Appwrite\.\.\./, label: 'Live batch progress text in the bottom bar' },
+            { pattern: /Saving sales to ledger/, label: 'Live batch progress text in the bottom bar (Plain-English Collective Voice)' },
             { pattern: /Already Synced \(\{\{\s*lockedItemCount\s*\}\} items committed\)/, label: 'Permanent Already Synced badge' },
         ],
     },
@@ -754,7 +754,7 @@ const transportContracts = [
             { pattern: /ticketLineKey\s*\(/, label: 'Per-line (multiset) ticket + gross + net duplicate ledger' },
             { pattern: /skippedNoTicket/, label: 'Sales are created only from rows that have a real Ricochet ticket + sold date' },
             { pattern: /if\s*\(\s*row\.matchedItemId\s*&&\s*!isBinSale\s*\)/, label: 'Booth Bin double-depletion guard (!isBinSale on item update)' },
-            { pattern: /Appwrite rejected batch/, label: 'Exact Appwrite error surfaced when a batch is rejected' },
+            { pattern: /Couldn't save batch \$\{batchNo\}\/\$\{batchCount\}/, label: 'Reassuring batch retry error surfaced when a batch fails' },
         ],
         mustNotContain: [
             { pattern: /mode:\s*['"](?:commit|finalize)['"]/, label: 'serverless proxy commit/finalize calls (commits must use client Appwrite SDK directly)' },
@@ -1296,6 +1296,98 @@ for (const contract of transportContracts) {
         if (file.endsWith('.vue') && /\b(truncate|line-clamp-)/.test(src.split('<script')[0])) {
             fail(`${file} uses truncate/line-clamp. Dashboard text must wrap fully.`);
         }
+    }
+}
+
+// 15. COLLECTIVE VOICE & PLAIN-ENGLISH UI GUARD: zero infrastructure/vendor jargon in member-readable templates & sinks
+{
+    const fail = (msg) => { console.error(`❌ [Plain-English UI §15] ${msg}`); hasErrors = true; };
+    const INFRA_JARGON_RE =
+        /\b(?:Appwrite|Vercel|Supabase|resale_db|coop_ledger|coop_proposals|localStorage|JWT)\b|\bAstro\s+(?:\d|Server|SSR)|\bDaisyUI\b|\bTailwind\b/;
+
+    const stripVendorOkMarkup = (markup) =>
+        markup
+            .replace(/<([a-zA-Z0-9-]+)\b[^>]*\bdata-vendor-ok\b[^>]*>[\s\S]*?<\/\1>/g, '')
+            .replace(/<[^>]*\bdata-vendor-ok\b[^>]*>/g, '');
+
+    // Pass 1: Templates & HTML Markup (.vue <template> and .astro body)
+    const markupFiles = getFiles('src', ['.vue', '.astro']);
+    for (const fullPath of markupFiles) {
+        const rel = path.relative(process.cwd(), fullPath).replace(/\\/g, '/');
+        if (/FounderVault|AiStudio/i.test(rel)) continue;
+        const raw = fs.readFileSync(fullPath, 'utf8');
+
+        let tpl = '';
+        if (rel.endsWith('.vue')) {
+            tpl = raw.split('<script')[0] || '';
+        } else {
+            tpl = raw
+                .replace(/^---[\s\S]*?---/, '')
+                .replace(/<script\b[\s\S]*?<\/script>/gi, '')
+                .replace(/<style\b[\s\S]*?<\/style>/gi, '');
+        }
+        tpl = stripVendorOkMarkup(tpl.replace(/<!--[\s\S]*?-->/g, ''));
+
+        const lines = tpl.split('\n');
+        lines.forEach((line, idx) => {
+            const m = INFRA_JARGON_RE.exec(line);
+            if (m) {
+                fail(`${rel} (template line ~${idx + 1}): exposes developer/vendor term "${m[0]}" in user-facing markup ("${line.trim().slice(0, 110)}"). Use Collective plain English or mark legitimate SaaS vendor bill examples with data-vendor-ok.`);
+            }
+        });
+    }
+
+    // Pass 2: Script-side user-facing sinks (toasts, loader steps, error responses, titles/hints)
+    const SINK_TRIGGER_RE =
+        /\b(?:addToast|confirmDialog|showLoader|CoopHttpError)\s*\(|\b(?:message|step|subtitle|hint)\s*:|\b(?:errorMsg|loadError|errorMessage)\.value\s*=|\bnew\s+Error\s*\(|\bjson\s*\(\s*\{\s*error\b|\{\s*error\s*:/;
+    const LITERAL_EXTRACT_RE = /'([^'\\\n]*(?:\\.[^'\\\n]*)*)'|"([^"\\\n]*(?:\\.[^"\\\n]*)*)"|`([^`\\]*(?:\\.[^`\\]*)*)`/g;
+    const scriptRoots = [
+        ...getFiles('src/components', ['.vue']),
+        ...getFiles('src/composables', ['.ts']),
+        ...getFiles('src/lib', ['.ts']),
+        ...getFiles('src/pages/api', ['.ts']),
+    ];
+
+    for (const fullPath of scriptRoots) {
+        const rel = path.relative(process.cwd(), fullPath).replace(/\\/g, '/');
+        if (
+            rel === 'src/lib/generatedSkillBundles.ts' ||
+            rel === 'src/lib/devAiRouting.ts' ||
+            rel === 'src/lib/founderVault.ts' ||
+            rel === 'src/lib/userFacingErrors.ts' ||
+            /FounderVault|AiStudio/i.test(rel)
+        ) {
+            continue;
+        }
+        const raw = fs.readFileSync(fullPath, 'utf8');
+        const scriptPart = rel.endsWith('.vue') ? (raw.split(/<script\b[^>]*>/i)[1] || '') : raw;
+        const lines = scriptPart.split('\n');
+        lines.forEach((line, idx) => {
+            const trimmed = line.trim();
+            if (
+                !trimmed ||
+                trimmed.startsWith('//') ||
+                trimmed.startsWith('*') ||
+                trimmed.startsWith('/*') ||
+                trimmed.startsWith('import ') ||
+                /\bconsole\.(?:log|warn|error|info|debug)\b/.test(line) ||
+                line.includes('rc-vendor-ok')
+            ) {
+                return;
+            }
+            if (!SINK_TRIGGER_RE.test(line)) return;
+
+            let lm;
+            LITERAL_EXTRACT_RE.lastIndex = 0;
+            while ((lm = LITERAL_EXTRACT_RE.exec(line)) !== null) {
+                const rawLit = lm[1] ?? lm[2] ?? lm[3] ?? '';
+                const withoutInterps = rawLit.replace(/\$\{[^}]*\}/g, '');
+                const hit = INFRA_JARGON_RE.exec(withoutInterps);
+                if (hit) {
+                    fail(`${rel} (script line ~${idx + 1}): user-facing string exposes developer/vendor term "${hit[0]}" ("${withoutInterps.trim().slice(0, 110)}"). Use plain Collective language or toUserMessage().`);
+                }
+            }
+        });
     }
 }
 
