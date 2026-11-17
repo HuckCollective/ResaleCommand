@@ -1,36 +1,28 @@
 ---
 name: ai-context-sync
-description: On-demand workspace context, sibling flagship repo (thehcllc) skill mirror, Gemini Web bundle exporter, and Dev AI model roster freshness check. Use when the user asks to sync skills to thehcllc, export Gemini Web skill bundles, or check Dev AI model roster freshness.
+description: On-demand workspace context, sibling flagship repo (thehcllc) prompt generator, Gemini Web bundle exporter, and Dev AI model roster freshness check. Use when the user asks to sync skills to thehcllc, export Gemini Web skill bundles, or check Dev AI model roster freshness.
 ---
 
 # On-Demand AI Context & Skill Sync (`ai-context-sync`)
 
-> **Why This Is an On-Demand Skill Instead of a Commit Script:**
+> **Zero Cross-Repo Shell Scripts (Zero Permission Prompts!):**
 > - Root [`AGENTS.md`](file:///c:/Users/15034/Projects/ResaleCommand/AGENTS.md) and `.agents/skills/*/SKILL.md` are first-class Markdown files edited directly in the IDE.
-> - `/coop/vault` (`src/pages/api/generate-vault-prompt.ts`) imports `AGENTS.md?raw`, `ACTIVE_SESSION.md?raw`, and `.agents/skills/*/SKILL.md?raw` **at Vite compile time** via [`src/lib/generatedSkillBundles.ts`](file:///c:/Users/15034/Projects/ResaleCommand/src/lib/generatedSkillBundles.ts) — so Vercel deployments automatically pick up skill edits with **zero** sync script!
-> - `npm run verify` runs `node scripts/validate-templates.mjs` **read-only inside the sandbox** with zero file mutations.
+> - `/coop/vault` (`src/pages/api/generate-vault-prompt.ts`) imports `AGENTS.md?raw`, `ACTIVE_SESSION.md?raw`, and `.agents/skills/*/SKILL.md?raw` **at Vite compile time** via [`src/lib/generatedSkillBundles.ts`](file:///c:/Users/15034/Projects/ResaleCommand/src/lib/generatedSkillBundles.ts).
+> - Never run unsandboxed cross-repo Node scripts from `ResaleCommand` into `..\thehcllc`. Instead, output a **ready-to-paste prompt for the `thehcllc` IDE window** where `thehcllc` is the native active workspace!
 
 Run ONLY the workflow below that matches what the user asked for:
 
 ---
 
-## Workflow A — Mirror Curated Flagship Skills & Brand Config to `thehcllc`
+## Workflow A — Self-Contained Copy-Paste Prompt for `thehcllc` (Zero File Transfers!)
 
-**Trigger phrases:** *"Sync skills to thehcllc"*, *"Mirror flagship context"*, *"Sync brand config to thehcllc"*
+**Trigger phrases:** *"Sync skills to thehcllc"*, *"Mirror flagship context"*, *"Dump skills for thehcllc"*
 
-1. Verify sibling repo `c:\Users\15034\Projects\thehcllc` exists on disk.
-2. Mirror ONLY these **9 curated flagship skills** recursively (including `references/` subfolders) from `c:\Users\15034\Projects\ResaleCommand\.agents\skills\<skill>` to `c:\Users\15034\Projects\thehcllc\.agents\skills\<skill>` (excluding internal POS/warehouse/printer/tax skills):
-   - `laws-of-ux`
-   - `huckleberry-brand-and-domain-identity`
-   - `democracy-at-work-cooperative`
-   - `social-marketing-and-drop-broadcasting`
-   - `ux-design-system-taxonomy`
-   - `mobile-ux-standards`
-   - `daisyui`
-   - `vue-component-standards`
-   - `hucks-resale-core`
-3. If `c:\Users\15034\Projects\ResaleCommand\src\site-config.ts` contains `socialMeta`, copy it to `c:\Users\15034\Projects\thehcllc\src\site-config.ts`.
-4. Ensure `c:\Users\15034\Projects\thehcllc\AGENTS.md` is up to date and remove any legacy `.clinerules` or duplicate `GEMINI.md` in `thehcllc` so Antigravity loads a single clean `AGENTS.md` there too.
+1. **Zero Cross-Repo Reads or Writes:** Neither `ResaleCommand` nor `thehcllc` should ever read or write across sibling repo folders (which can trigger sandbox blocks or fail across machines).
+2. **Embed the Exact File Contents Directly Inside the Prompt:**
+   - Identify which of the 9 curated flagship skills (`laws-of-ux`, `huckleberry-brand-and-domain-identity`, `democracy-at-work-cooperative`, `social-marketing-and-drop-broadcasting`, `ux-design-system-taxonomy`, `mobile-ux-standards`, `daisyui`, `vue-component-standards`, `hucks-resale-core`), `src/site-config.ts`, or `AGENTS.md` rules changed (or include all requested files if the user asks for a full dump).
+   - Output **ONE self-contained copy-paste IDE prompt block** containing the **exact full Markdown/TS contents inline** for each target path inside `thehcllc` (e.g. `FILE: .agents/skills/<name>/SKILL.md` followed by its exact content).
+   - Instruct the `thehcllc` agent to write those embedded payloads directly into its own workspace via native `write_file` / `edit_file` (with **zero** reads from `../ResaleCommand`), run `node scripts/validate-templates.mjs` in its own sandbox (`BypassSandbox: false`), and commit/push when requested.
 
 ---
 
@@ -39,7 +31,7 @@ Run ONLY the workflow below that matches what the user asked for:
 **Trigger phrases:** *"Export Gemini Web skill bundles"*, *"Rebuild dist-gemini-skills"*
 
 1. Read the 6 bundle definitions in [`src/lib/generatedSkillBundles.ts`](file:///c:/Users/15034/Projects/ResaleCommand/src/lib/generatedSkillBundles.ts) (`hucks-resale-core`, `rc-1-scout-vision`, `rc-2-inventory-splitter`, `rc-3-booth-drops`, `rc-4-sales-coop`, `rc-5-social-studio`).
-2. Using a temporary script in git-ignored `scratch/` (deleted immediately after running) or native `write_file` calls, write each assembled bundle to git-ignored `dist-gemini-skills/<bundle-id>/SKILL.md` and report which bundles changed since the last export so the user knows which ones to re-upload to Gemini Web.
+2. Using native `write_file` calls inside `c:\Users\15034\Projects\ResaleCommand\dist-gemini-skills\<bundle-id>\SKILL.md` (in-workspace, zero `BypassSandbox` needed!), write each assembled bundle and list which bundles changed so the user knows which ones to re-upload to Gemini Web.
 
 ---
 
