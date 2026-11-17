@@ -312,7 +312,6 @@ for (const file of vueFiles) {
 const ALLOWED_PERMANENT_SCRIPTS = new Set([
     'inspect_schema.js',
     'audit_schema.mjs',
-    'sync-ai-context.mjs',
     'validate-templates.mjs',
 ]);
 
@@ -362,17 +361,26 @@ for (const rel of salesSyncGuardedFiles) {
 }
 
 // =========================================================================
-// 5c. SKILL, RULE, GEMINI.MD & PLUGIN SUBAGENT HEALTH CHECK
+// 5c. SKILL, RULE, AGENTS.MD & PLUGIN SUBAGENT HEALTH CHECK
 // =========================================================================
 {
-    const geminiMdPath = path.join(process.cwd(), 'GEMINI.md');
-    if (fs.existsSync(geminiMdPath)) {
-        const geminiBytes = Buffer.byteLength(fs.readFileSync(geminiMdPath, 'utf8'), 'utf8');
-        if (geminiBytes >= 24000) {
-            console.error(`❌ Rule health: GEMINI.md is ${geminiBytes} bytes (>= 24,000 B Antigravity hard cap — Laws 1–7 will truncate!)`);
+    const agentsMdPath = path.join(process.cwd(), 'AGENTS.md');
+    if (!fs.existsSync(agentsMdPath)) {
+        console.error('❌ Rule health: Missing root AGENTS.md workspace rules file!');
+        hasErrors = true;
+    } else {
+        const agentsBytes = Buffer.byteLength(fs.readFileSync(agentsMdPath, 'utf8'), 'utf8');
+        if (agentsBytes >= 24000) {
+            console.error(`❌ Rule health: AGENTS.md is ${agentsBytes} bytes (>= 24,000 B Antigravity hard cap — Laws 1–7 will truncate!)`);
             hasErrors = true;
-        } else if (geminiBytes >= 20000) {
-            console.warn(`⚠️ Rule health: GEMINI.md is ${geminiBytes} bytes (approaching 24,000 B cap; keep < 20,000 B)`);
+        } else if (agentsBytes >= 20000) {
+            console.warn(`⚠️ Rule health: AGENTS.md is ${agentsBytes} bytes (approaching 24,000 B cap; keep < 20,000 B)`);
+        }
+    }
+    for (const legacyRule of ['GEMINI.md', '.clinerules']) {
+        if (fs.existsSync(path.join(process.cwd(), legacyRule))) {
+            console.error(`❌ Rule health: Legacy root ${legacyRule} found alongside AGENTS.md — delete it to prevent duplicate rule token loading!`);
+            hasErrors = true;
         }
     }
 
@@ -498,19 +506,28 @@ for (const rel of salesSyncGuardedFiles) {
         }
     }
 
-    // Every module named in a Gemini Web bundle must exist as a skill folder or a rule file
-    const syncScriptPath = path.join(process.cwd(), 'scripts', 'sync-ai-context.mjs');
-    if (fs.existsSync(syncScriptPath)) {
-        const syncSource = fs.readFileSync(syncScriptPath, 'utf8');
-        const bundleRef = /\{\s*type:\s*'(skill|rule)'\s*,\s*name:\s*'([^']+)'\s*\}/g;
+    // Every ?raw module imported in src/lib/generatedSkillBundles.ts must exist on disk
+    const skillBundlesPath = path.join(process.cwd(), 'src', 'lib', 'generatedSkillBundles.ts');
+    if (!fs.existsSync(skillBundlesPath)) {
+        console.error('❌ Skill health: Missing src/lib/generatedSkillBundles.ts');
+        hasErrors = true;
+    } else {
+        const bundlesSource = fs.readFileSync(skillBundlesPath, 'utf8');
+        const rawImportRegex = /from\s+['"]([^'"]+)\?raw['"]/g;
         let m;
-        while ((m = bundleRef.exec(syncSource))) {
-            const [, kind, name] = m;
-            const target = kind === 'skill' ? path.join(skillsRoot, name, 'SKILL.md') : path.join(rulesRoot, `${name}.md`);
-            if (!fs.existsSync(target)) {
-                console.error(`❌ Skill health: Gemini bundle references ${kind} "${name}" but ${path.relative(process.cwd(), target)} does not exist`);
+        let count = 0;
+        while ((m = rawImportRegex.exec(bundlesSource))) {
+            count += 1;
+            const relImport = m[1];
+            const resolved = path.resolve(path.dirname(skillBundlesPath), relImport);
+            if (!fs.existsSync(resolved)) {
+                console.error(`❌ Skill health: generatedSkillBundles.ts imports "${relImport}?raw" but ${path.relative(process.cwd(), resolved)} does not exist`);
                 hasErrors = true;
             }
+        }
+        if (count === 0) {
+            console.error('❌ Skill health: src/lib/generatedSkillBundles.ts has zero ?raw skill imports');
+            hasErrors = true;
         }
     }
 }
@@ -771,22 +788,22 @@ const transportContracts = [
         ],
     },
     {
-        file: '.agents/skills/hucks-resale-core/SKILL.md',
+        file: 'AGENTS.md',
         mustContain: [
-            { pattern: /LAW 1 — 4 Locations Only/, label: 'Law 1 (4 Locations Only) in the master shared skill' },
-            { pattern: /LAW 2 — Zero Hardcoding/, label: 'Law 2 (Zero Hardcoding) in the master shared skill' },
-            { pattern: /LAW 3 — 100% Shared Matching/, label: 'Law 3 (Shared Matching via salesBucketing.ts) in the master shared skill' },
-            { pattern: /LAW 4 — Appwrite-First Persistence/, label: 'Law 4 (Appwrite-First Persistence) in the master shared skill' },
-            { pattern: /LAW 5 — Enterprise UX\/IA Pattern/, label: 'Law 5 (Enterprise UX/IA Pattern) in the master shared skill' },
-            { pattern: /LAW 6 — 3-Tier Commit Idempotency/, label: 'Law 6 (3-Tier Commit Idempotency) in the master shared skill' },
-            { pattern: /LAW 7 — Date Bucketing Standard/, label: 'Law 7 (Date Bucketing Standard) in the master shared skill' },
+            { pattern: /LAW 1 — 4 Locations Only/, label: 'Law 1 (4 Locations Only) in root AGENTS.md' },
+            { pattern: /LAW 2 — Zero Hardcoding/, label: 'Law 2 (Zero Hardcoding) in root AGENTS.md' },
+            { pattern: /LAW 3 — 100% Shared Matching/, label: 'Law 3 (Shared Matching via salesBucketing.ts) in root AGENTS.md' },
+            { pattern: /LAW 4 — Appwrite-First Persistence/, label: 'Law 4 (Appwrite-First Persistence) in root AGENTS.md' },
+            { pattern: /LAW 5 — Enterprise UX\/IA Pattern/, label: 'Law 5 (Enterprise UX/IA Pattern) in root AGENTS.md' },
+            { pattern: /LAW 6 — 3-Tier Commit Idempotency/, label: 'Law 6 (3-Tier Commit Idempotency) in root AGENTS.md' },
+            { pattern: /LAW 7 — Date Bucketing Standard/, label: 'Law 7 (Date Bucketing Standard) in root AGENTS.md' },
         ],
     },
     {
-        file: 'scripts/sync-ai-context.mjs',
+        file: '.agents/skills/hucks-resale-core/SKILL.md',
         mustContain: [
-            { pattern: /const MASTER_ARCHITECTURE_LAWS\s*=/, label: 'Single-source MASTER_ARCHITECTURE_LAWS constant' },
-            { pattern: /LAW 7 — Date Bucketing Standard/, label: 'Law 7 inside the sync generator (skill header + GEMINI.md)' },
+            { pattern: /AGENTS\.md/, label: 'Pointer to root AGENTS.md (single source of truth for Laws 1–7)' },
+            { pattern: /ACTIVE_SESSION\.md/, label: 'Pointer to ACTIVE_SESSION.md' },
         ],
     },
     {
@@ -919,9 +936,9 @@ const transportContracts = [
         ],
     },
 ];
-// The master shared skill is the single source of truth for the 7 laws — no standalone rule files
+// Root AGENTS.md is the single source of truth for the 7 laws — no standalone rule files
 if (fs.existsSync(path.resolve('.agents/rules/master-architecture-laws.md'))) {
-    console.error('❌ Standalone .agents/rules/master-architecture-laws.md must be deleted: the 7 laws live ONLY in the master shared skill (hucks-resale-core) via scripts/sync-ai-context.mjs.');
+    console.error('❌ Standalone .agents/rules/master-architecture-laws.md must be deleted: the 7 laws live ONLY in root AGENTS.md.');
     hasErrors = true;
 }
 

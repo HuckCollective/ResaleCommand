@@ -70,7 +70,7 @@ In DaisyUI v5 (`--size-field: 0.25rem` in [`src/styles/theme.css`](file:///c:/Us
 - **Forms Use `<SlideOverDrawer>`:** Short/medium create & edit forms open inside [`SlideOverDrawer.vue`](file:///c:/Users/15034/Projects/ResaleCommand/src/components/common/SlideOverDrawer.vue) (`Esc` key close, backdrop scrim click close, `document.body.style.overflow = 'hidden'`, auto-focus into panel, sticky `#footer`) rather than centered `<dialog>` modals.
 - **Sanctioned Carve-Outs:**
   1. **Destructive / Emailing Confirmations:** Use `askConfirm()` (`src/stores/confirm.ts` ➔ `ConfirmContainer.vue`) or confirmation modals with email previews (`ux-design-system-taxonomy` §9).
-  2. **`SalesImportTray.vue` Exception:** Sanctioned by `GEMINI.md` Law 5 and `validate-templates.mjs` §11 as a right-edge intake tray — flag as `WARN`-only if missing focus lock, and **never rename** the component file.
+  2. **`SalesImportTray.vue` Exception:** Sanctioned by `AGENTS.md` Law 5 and `validate-templates.mjs` §11 as a right-edge intake tray — flag as `WARN`-only if missing focus lock, and **never rename** the component file.
 - **Native `<select>` Popups:** Preserve `global.css`'s `appearance: none !important` override on `select.select` so DaisyUI v5's experimental `base-select` never renders transparent, overlapping menus.
 
 ---

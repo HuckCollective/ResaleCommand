@@ -21,7 +21,7 @@ import {
 } from '../../lib/founderVault';
 
 const MAX_IDEA_CHARS = 4000;
-const CORE_CONTEXT_CHARS = 7000;
+const CORE_CONTEXT_CHARS = 18000;
 const SPECIALIST_CONTEXT_CHARS = 9000;
 
 const DESTINATION_INSTRUCTIONS: Record<PromptTargetDestination, string> = {

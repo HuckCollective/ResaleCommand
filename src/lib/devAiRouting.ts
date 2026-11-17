@@ -5,8 +5,8 @@
  * - World 1 (Reseller / App Runtime AI) lives ONLY in `src/lib/gemini.ts` (`gemini-flash-latest` on $40/mo Cloud credits).
  * - World 2 (Developer & Architecture AI Tooling) lives ONLY here (`src/lib/devAiRouting.ts` on Google AI Ultra).
  *
- * `/coop/vault` uses these tiers in an IDE-independent way (works identically in VS Code Cline, Antigravity IDE, Cursor, or AI Studio),
- * while `GEMINI.md` (Antigravity) and `.clinerules` (VS Code Cline) supply IDE-native tool mechanics automatically.
+ * `/coop/vault` uses these tiers in an IDE-independent way (works identically in Antigravity IDE, Cursor, Copilot, or AI Studio),
+ * while root `AGENTS.md` supplies workspace rules and architecture laws automatically.
  */
 
 export const DEV_AI_ROSTER_LAST_REVIEWED = '2026-11-12';
