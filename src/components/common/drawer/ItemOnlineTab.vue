@@ -17,7 +17,7 @@
                     {{ effectiveUpc || 'NO-SKU' }}
                   </span>
                   <span
-                    v-if="existingRecord && existingRecord.status !== 'released'"
+                    v-if="existingRecord && !isFreeCoCurationStatus(existingRecord.status)"
                     class="badge badge-sm font-bold whitespace-nowrap shrink-0"
                     :class="statusBadgeClass"
                   >
@@ -61,6 +61,127 @@
           </div>
         </div>
 
+        <!-- REQUEST / COUNTER-OFFER PANEL (owner approves; everyone else asks) -->
+        <section
+          v-if="existingRecord && isPending"
+          class="rounded-2xl border border-info/40 bg-info/10 p-3.5 sm:p-4 space-y-3"
+        >
+          <div class="flex items-start justify-between gap-2 flex-wrap">
+            <div class="text-xs sm:text-sm">
+              <strong>{{ existingRecord.status === 'countered' ? '↔️ Counter-offer sent' : '📨 Co-curate request' }}</strong>
+              from {{ existingRecord.listerName }} — {{ modeLabel(existingRecord.mode, existingRecord.transferFloorPrice) }}
+            </div>
+            <span class="badge badge-xs badge-info text-info-content font-mono font-bold whitespace-nowrap shrink-0">
+              Answer by {{ existingRecord.requestExpiresAt }}
+            </span>
+          </div>
+          <p v-if="existingRecord.requestNote" class="text-xs text-base-content/80">“{{ existingRecord.requestNote }}”</p>
+          <p v-if="existingRecord.counter" class="text-xs text-base-content/80">
+            <strong>{{ existingRecord.counter.byName }}</strong> countered with
+            {{ modeLabel(existingRecord.counter.mode, existingRecord.counter.transferFloorPrice) }}.
+            <span v-if="existingRecord.counter.note">“{{ existingRecord.counter.note }}”</span>
+          </p>
+
+          <!-- Owner / Founder answers a fresh request -->
+          <template v-if="access.canDecide && existingRecord.status === 'requested'">
+            <div class="flex items-center gap-2 flex-wrap">
+              <button
+                type="button"
+                :disabled="actionBusy"
+                class="btn btn-sm h-11 md:h-9 btn-primary text-primary-content rounded-xl font-black"
+                @click="runAction('approve', {}, '✅ Approved — the 14-day listing hold has started.', true)"
+              >
+                ✅ Approve
+              </button>
+              <button
+                type="button"
+                :disabled="actionBusy"
+                class="btn btn-sm h-11 md:h-9 btn-ghost border border-base-300 rounded-xl font-bold"
+                @click="runAction('decline', {}, 'Request declined.')"
+              >
+                Decline
+              </button>
+            </div>
+            <details class="rounded-xl border border-base-300 bg-base-100 p-3">
+              <summary class="text-xs font-bold cursor-pointer select-none">Offer different terms instead</summary>
+              <div class="mt-2.5 space-y-2">
+                <select
+                  v-model="counterMode"
+                  aria-label="Counter-offer terms"
+                  class="select select-bordered select-sm h-11 md:h-9 w-full rounded-xl text-xs font-semibold"
+                >
+                  <option v-for="m in requestableModes" :key="m" :value="m">{{ modeLabel(m, 0) }}</option>
+                </select>
+                <input
+                  v-if="counterMode === 'transfer_price'"
+                  v-model="counterFloorInput"
+                  type="text"
+                  inputmode="decimal"
+                  aria-label="Counter-offer transfer floor"
+                  placeholder="Transfer floor $"
+                  class="input input-bordered input-sm h-11 md:h-9 w-full sm:w-48 rounded-xl font-mono"
+                />
+                <input
+                  v-model="counterNote"
+                  type="text"
+                  maxlength="300"
+                  aria-label="Counter-offer note"
+                  placeholder="Short note (optional)"
+                  class="input input-bordered input-sm h-11 md:h-9 w-full rounded-xl text-xs"
+                />
+                <button
+                  type="button"
+                  :disabled="actionBusy"
+                  class="btn btn-sm h-11 md:h-9 btn-outline rounded-xl font-bold"
+                  @click="sendCounter"
+                >
+                  Send Counter-Offer
+                </button>
+              </div>
+            </details>
+          </template>
+
+          <!-- Requester answers a counter-offer -->
+          <template v-else-if="access.isRequester && existingRecord.status === 'countered'">
+            <div class="flex items-center gap-2 flex-wrap">
+              <button
+                type="button"
+                :disabled="actionBusy"
+                class="btn btn-sm h-11 md:h-9 btn-primary text-primary-content rounded-xl font-black"
+                @click="runAction('accept_counter', {}, '✅ Counter-offer accepted — the 14-day listing hold has started.', true)"
+              >
+                ✅ Accept Counter-Offer
+              </button>
+              <button
+                type="button"
+                :disabled="actionBusy"
+                class="btn btn-sm h-11 md:h-9 btn-ghost border border-base-300 rounded-xl font-bold"
+                @click="runAction('withdraw', {}, 'Request withdrawn.')"
+              >
+                No Thanks
+              </button>
+            </div>
+          </template>
+
+          <template v-else-if="access.isRequester">
+            <div class="flex items-center justify-between gap-2 flex-wrap text-xs">
+              <span class="text-base-content/70">Waiting for the item's owner to answer.</span>
+              <button
+                type="button"
+                :disabled="actionBusy"
+                class="btn btn-sm h-11 md:h-9 btn-ghost border border-base-300 rounded-xl font-bold"
+                @click="runAction('withdraw', {}, 'Request withdrawn.')"
+              >
+                Withdraw Request
+              </button>
+            </div>
+          </template>
+
+          <p v-else class="text-xs text-base-content/70">
+            {{ access.ownerKnown ? "Waiting for the item's owner to answer." : 'This item has no recorded buyer, so a Founder answers.' }}
+          </p>
+        </section>
+
         <!-- INELIGIBLE GUARD -->
         <div
           v-if="!eligibility.eligible"
@@ -99,7 +220,7 @@
           </button>
         </div>
 
-        <template v-if="eligibility.eligible && !loading">
+        <template v-if="eligibility.eligible && !loading && !isPending">
           <!-- 2. PHYSICAL BACKSTOCK BIN FACILITY (LAW 1: STRICTLY HG OR HH) -->
           <section class="space-y-2">
             <label class="text-xs font-extrabold uppercase tracking-wider text-base-content/80 block">
@@ -142,7 +263,11 @@
             </div>
 
             <div class="space-y-2">
+              <p v-if="mustRequest" class="rounded-xl bg-info/10 border border-info/30 px-3 py-2 text-xs text-base-content">
+                📨 This item belongs to another member. Pick the help you're offering and send a request — they approve it before anything changes.
+              </p>
               <button
+                v-if="!mustRequest"
                 type="button"
                 :disabled="isSplitFrozen"
                 class="w-full text-left rounded-2xl border p-3 transition-all cursor-pointer"
@@ -161,14 +286,44 @@
                 type="button"
                 :disabled="isSplitFrozen"
                 class="w-full text-left rounded-2xl border p-3 transition-all cursor-pointer"
+                :class="mode === 'booth_prep' ? 'border-primary bg-primary/10 ring-1 ring-primary/30' : 'border-base-300 bg-base-100 hover:border-base-content/30'"
+                @click="mode = 'booth_prep'"
+              >
+                <div class="font-bold text-xs sm:text-sm text-base-content">
+                  🏷️ Co-Curate: Booth Prep Assist ({{ tierPct('booth_prep') }}% to the Co-Curator)
+                </div>
+                <div class="text-[11px] text-base-content/70 mt-0.5">
+                  Cleans, scans, tags and places the item in a booth. Original buyer recoups 100% of cost first; Commons keeps {{ commonsShareLabel }}%.
+                </div>
+              </button>
+
+              <button
+                type="button"
+                :disabled="isSplitFrozen"
+                class="w-full text-left rounded-2xl border p-3 transition-all cursor-pointer"
+                :class="mode === 'photo_stage' ? 'border-primary bg-primary/10 ring-1 ring-primary/30' : 'border-base-300 bg-base-100 hover:border-base-content/30'"
+                @click="mode = 'photo_stage'"
+              >
+                <div class="font-bold text-xs sm:text-sm text-base-content">
+                  📸 Co-Curate: Unbox, Photo &amp; Stage ({{ tierPct('photo_stage') }}% to the Co-Curator)
+                </div>
+                <div class="text-[11px] text-base-content/70 mt-0.5">
+                  Unboxes, cleans and tests, shoots the full photo set and writes the listing.
+                </div>
+              </button>
+
+              <button
+                type="button"
+                :disabled="isSplitFrozen"
+                class="w-full text-left rounded-2xl border p-3 transition-all cursor-pointer"
                 :class="mode === 'split_half' ? 'border-primary bg-primary/10 ring-1 ring-primary/30' : 'border-base-300 bg-base-100 hover:border-base-content/30'"
                 @click="mode = 'split_half'"
               >
                 <div class="font-bold text-xs sm:text-sm text-base-content">
-                  🤝 Co-Curate: 50/50 Curator Split ({{ halfCuratorLabel }}% OG Buyer / {{ halfCuratorLabel }}% Lister)
+                  📦 Co-Curate: Full Online Turnkey ({{ tierPct('split_half') }}% to the Co-Curator)
                 </div>
                 <div class="text-[11px] text-base-content/70 mt-0.5">
-                  OG Buyer recoups 100% item cost first; Commons keeps {{ commonsShareLabel }}%; remaining Curator Surplus splits evenly.
+                  Cleans, photographs, lists and ships it. The curator share splits evenly.
                 </div>
               </button>
 
@@ -207,7 +362,7 @@
             </div>
 
             <!-- Lister attribution when co-curating -->
-            <div v-if="mode !== 'self_listed'" class="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1">
+            <div v-if="mode !== 'self_listed' && !mustRequest" class="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1">
               <div class="flex flex-col gap-1">
                 <label for="rc-online-lister-name" class="text-[11px] font-bold text-base-content/80">Active Lister Name</label>
                 <input
@@ -230,9 +385,20 @@
                 >
                   <option value="HUCK-">🫐 HUCK- (Huckleberry Curator)</option>
                   <option value="PDXGL-">🎲 PDXGL- (PDX Game Library)</option>
-                  <option value="SWEAT-">🛠️ SWEAT- (Sweat-Equity Member)</option>
+                  <option v-if="listerPrefixInput === 'SWEAT-'" value="SWEAT-">Legacy sweat-equity bucket</option>
                 </select>
               </div>
+            </div>
+            <div v-if="mustRequest" class="space-y-1.5 pt-1">
+              <label for="rc-online-request-note" class="text-[11px] font-bold text-base-content/80">Note to the owner (optional)</label>
+              <input
+                id="rc-online-request-note"
+                v-model="requestNote"
+                type="text"
+                maxlength="300"
+                placeholder="e.g. I can photograph and list this on eBay this week"
+                class="input input-bordered input-sm h-11 md:h-9 w-full rounded-xl bg-base-100 text-xs sm:text-sm"
+              />
             </div>
           </section>
 
@@ -313,7 +479,7 @@
           </section>
 
           <!-- 5. LIVE MARKETPLACE LISTING LINKS -->
-          <section class="space-y-2.5">
+          <section v-if="!mustRequest" class="space-y-2.5">
             <div class="flex items-center justify-between gap-2 flex-wrap">
               <label class="text-xs font-extrabold uppercase tracking-wider text-base-content/80">
                 3. Live Marketplace Links (Locks Claim Past 14 Days)
@@ -418,7 +584,17 @@
           Back to Details
         </button>
         <button
-          v-if="eligibility.eligible"
+          v-if="eligibility.eligible && mustRequest && !isPending"
+          type="button"
+          :disabled="actionBusy"
+          class="btn btn-sm h-11 md:h-9 btn-primary text-primary-content rounded-xl font-black px-4 gap-1.5 shadow-md border border-primary-content/25 active:scale-95 transition-all"
+          @click="sendRequest"
+        >
+          <span v-if="actionBusy" class="loading loading-spinner loading-xs"></span>
+          <span>{{ actionBusy ? 'Sending request…' : '📨 Send Request to Co-Curate' }}</span>
+        </button>
+        <button
+          v-else-if="eligibility.eligible && !isPending"
           type="button"
           :disabled="saving || Boolean(invalidUrlWarning)"
           class="btn btn-sm h-11 md:h-9 btn-primary text-primary-content rounded-xl font-black px-4 gap-1.5 shadow-md border border-primary-content/25 active:scale-95 transition-all"
@@ -443,10 +619,15 @@ import { sanitizeHttpsUrl } from '../../../lib/flagshipContent';
 import { isAlreadyInBooth } from '../../../lib/inventoryVibes';
 import { parsePriceValue } from '../../../lib/lot-strategy';
 import {
+  COCURATION_REQUESTABLE_MODES,
   ONLINE_PLATFORM_OPTIONS,
   checkCoCurationEligibility,
+  coCurationListerSharePct,
   computeCoCurationSplitCents,
   hasOnlineReadyTag,
+  isCoCurationTierMode,
+  isFreeCoCurationStatus,
+  isPendingCoCurationStatus,
   type CoCurationMode,
   type CoCurationRecord,
   type OnlinePlatformKey,
@@ -513,23 +694,77 @@ const isCurrentlyInRetailBooth = computed(() => isAlreadyInBooth(props.item));
 const hasActiveBinStatus = computed(
   () =>
     hasOnlineReadyTag(props.item) ||
-    Boolean(existingRecord.value && existingRecord.value.status !== 'released')
+    Boolean(
+      existingRecord.value &&
+        !isFreeCoCurationStatus(existingRecord.value.status) &&
+        !isPendingCoCurationStatus(existingRecord.value.status)
+    )
 );
+
+const isPending = computed(() => isPendingCoCurationStatus(existingRecord.value?.status));
+
+// What THIS member may do on this item (the server decides; the drawer only reflects it).
+const access = ref({
+  ownerKnown: false,
+  isOwner: false,
+  isFounder: false,
+  canDecide: false,
+  isRequester: false,
+});
+const isApprovedLister = computed(
+  () =>
+    access.value.isRequester &&
+    (existingRecord.value?.status === 'claimed' ||
+      existingRecord.value?.status === 'listed' ||
+      existingRecord.value?.status === 'sold')
+);
+// Someone else's item: ask first, owner approves. Unknown owner keeps the classic direct save.
+const mustRequest = computed(
+  () => access.value.ownerKnown && !access.value.canDecide && !isApprovedLister.value
+);
+
+const actionBusy = ref(false);
+const requestNote = ref('');
+const requestableModes = COCURATION_REQUESTABLE_MODES;
+const counterMode = ref<CoCurationMode>('split_half');
+const counterFloorInput = ref('0.00');
+const counterNote = ref('');
 
 const isSplitFrozen = computed(
   () =>
-    existingRecord.value?.status === 'listed' || existingRecord.value?.status === 'sold'
+    existingRecord.value?.status === 'listed' ||
+    existingRecord.value?.status === 'sold' ||
+    Boolean(existingRecord.value?.approvedAt)
 );
 
 const curatorShareLabel = computed(() => Number(curatorSharePct.value.toFixed(1)));
 const commonsShareLabel = computed(() => Number(commonsSharePct.value.toFixed(1)));
 const halfCuratorLabel = computed(() => Number((curatorSharePct.value / 2).toFixed(1)));
 
+const TIER_NAMES: Record<string, string> = {
+  booth_prep: 'Booth Prep Assist',
+  photo_stage: 'Unbox, Photo & Stage',
+  split_half: 'Full Online Turnkey',
+};
+
+const tierPct = (m: 'booth_prep' | 'photo_stage' | 'split_half') =>
+  coCurationListerSharePct(m, curatorSharePct.value);
+
+const modeLabel = (m: CoCurationMode, floor = 0): string => {
+  if (m === 'transfer_price') {
+    return floor > 0 ? `Transfer floor $${Number(floor).toFixed(2)}` : 'Agreed transfer floor';
+  }
+  if (isCoCurationTierMode(m)) return `${TIER_NAMES[m]} (${tierPct(m)}% to the Co-Curator)`;
+  return 'Own listing';
+};
+
 const statusBadgeLabel = computed(() => {
   const st = existingRecord.value?.status;
   if (st === 'sold') return '🔒 Sold & Settled';
   if (st === 'listed') return '✅ Live Online';
   if (st === 'claimed') return '⏳ Claimed (14d Hold)';
+  if (st === 'requested') return '📨 Request Pending';
+  if (st === 'countered') return '↔️ Counter-Offer';
   return 'Released';
 });
 
@@ -537,7 +772,7 @@ const statusBadgeClass = computed(() => {
   const st = existingRecord.value?.status;
   if (st === 'sold') return 'badge-neutral text-neutral-content';
   if (st === 'listed') return 'badge-success text-success-content';
-  if (st === 'claimed') return 'badge-info text-info-content';
+  if (st === 'claimed' || st === 'requested' || st === 'countered') return 'badge-info text-info-content';
   return 'badge-ghost';
 });
 
@@ -594,7 +829,7 @@ const resetDraftFromItem = () => {
 
 const hydrateFromRecord = (rec: CoCurationRecord | null) => {
   existingRecord.value = rec;
-  if (!rec || rec.status === 'released') return;
+  if (!rec || isFreeCoCurationStatus(rec.status)) return;
   binFacility.value = rec.binFacility === 'HG' ? 'HG' : 'HH';
   mode.value = rec.mode;
   transferFloorInput.value = Number(rec.transferFloorPrice || 0).toFixed(2);
@@ -634,6 +869,17 @@ const loadExistingClaim = async () => {
       throw new Error(body?.error || `Failed to load Online Bin status (${res.status})`);
     }
     hydrateFromRecord(body?.record || null);
+    if (body?.access) {
+      access.value = {
+        ownerKnown: Boolean(body.access.ownerKnown),
+        isOwner: Boolean(body.access.isOwner),
+        isFounder: Boolean(body.access.isFounder),
+        canDecide: Boolean(body.access.canDecide),
+        isRequester: Boolean(body.access.isRequester),
+      };
+    }
+    // Someone else's item can only be requested, never saved directly.
+    if (mustRequest.value && mode.value === 'self_listed') mode.value = 'split_half';
   } catch (err: any) {
     console.warn('[ItemOnlineTab] load failed:', err);
     loadError.value = toUserMessage(err, "Couldn't load Online Ready Bin details — tap Retry Load.");
@@ -672,6 +918,86 @@ const copyPirateShipSku = async () => {
   } catch {
     addToast({ type: 'info', message: `SKU: ${effectiveUpc.value}` });
   }
+};
+
+/** One helper for every request-and-approve step (request, approve, decline, counter, accept, withdraw). */
+const runAction = async (
+  action: string,
+  record: Record<string, any>,
+  okMessage: string,
+  refreshParent = false
+) => {
+  const id = String(props.item?.$id || '').trim();
+  if (!id || actionBusy.value) return;
+  actionBusy.value = true;
+  try {
+    const headers = await getCoopJwtHeaders();
+    const res = await fetch('/api/coop/co-curation', {
+      method: 'POST',
+      headers: { ...headers, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action, itemId: id, record }),
+    });
+    const body = await res.json().catch(() => null);
+    if (!res.ok) {
+      throw new Error(body?.error || `That didn't go through (${res.status})`);
+    }
+    existingRecord.value = body?.record || null;
+    addToast({ type: 'success', message: okMessage });
+    // Only approving puts the item into the bin, so only then does the parent need fresh item data.
+    if (refreshParent) {
+      emit('saved', {
+        item: body?.item || props.item || {},
+        record: body?.record || null,
+      });
+    }
+    await loadExistingClaim();
+  } catch (err: any) {
+    console.warn(`[ItemOnlineTab] ${action} failed:`, err);
+    addToast({
+      type: 'error',
+      message: toUserMessage(err, "Couldn't update the co-curation request — please try again."),
+    });
+  } finally {
+    actionBusy.value = false;
+  }
+};
+
+const sendRequest = async () => {
+  if (mode.value === 'self_listed') mode.value = 'split_half';
+  if (mode.value === 'transfer_price' && parsePriceValue(transferFloorInput.value) <= 0) {
+    addToast({ type: 'warning', message: 'Enter a transfer floor above $0.00 before sending.' });
+    return;
+  }
+  await runAction(
+    'request',
+    {
+      mode: mode.value,
+      transferFloorPrice: parsePriceValue(transferFloorInput.value),
+      binFacility: binFacility.value,
+      requestNote: requestNote.value.trim(),
+      upc: effectiveUpc.value,
+      titleSnapshot: itemTitle.value,
+    },
+    '📨 Request sent. The owner has 3 days to answer.'
+  );
+  requestNote.value = '';
+};
+
+const sendCounter = async () => {
+  if (counterMode.value === 'transfer_price' && parsePriceValue(counterFloorInput.value) <= 0) {
+    addToast({ type: 'warning', message: 'Enter a transfer floor above $0.00 for your counter-offer.' });
+    return;
+  }
+  await runAction(
+    'counter',
+    {
+      mode: counterMode.value,
+      transferFloorPrice: parsePriceValue(counterFloorInput.value),
+      requestNote: counterNote.value.trim(),
+    },
+    '↔️ Counter-offer sent. They have 3 days to answer.'
+  );
+  counterNote.value = '';
 };
 
 const handleSave = async () => {

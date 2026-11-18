@@ -19,16 +19,82 @@ export const ONLINE_READY_SELLING_TAG = 'ONLINE_READY_BIN';
 export const ONLINE_READY_DISPLAY_LABEL = '🌐 Online Ready';
 export const COOP_ONLINE_COCURATION_LOCATION_ID = 'COOP_ONLINE_COCURATION';
 export const COCURATION_CLAIM_WINDOW_DAYS = 14;
+/** A pending co-curation request (or counter-offer) waits this many days for an answer before it expires. */
+export const COCURATION_REQUEST_WINDOW_DAYS = 3;
 
-export type CoCurationMode = 'self_listed' | 'split_half' | 'transfer_price';
+export type CoCurationMode =
+  | 'self_listed'
+  | 'booth_prep'
+  | 'photo_stage'
+  | 'split_half'
+  | 'transfer_price';
 export type OnlinePlatformKey = 'ebay' | 'whatnot' | 'depop' | 'poshmark' | 'district';
-export type CoCurationStatus = 'claimed' | 'listed' | 'sold' | 'released';
+export type CoCurationStatus =
+  | 'requested'
+  | 'countered'
+  | 'claimed'
+  | 'listed'
+  | 'sold'
+  | 'released'
+  | 'declined'
+  | 'expired';
+
+/**
+ * Co-Curator tiers. The Lister's cut is a fixed fraction of the LIVE Curator pool (never a literal 70),
+ * so if the Collective changes `curatorSharePct` the tiers scale with it.
+ * With a 70% pool: Booth Prep = 15, Photo & Stage = 25, Online Turnkey = 35 points of the sale surplus.
+ */
+export type CoCurationTierMode = 'booth_prep' | 'photo_stage' | 'split_half';
+export const COCURATION_LISTER_POOL_SHARE: Record<CoCurationTierMode, readonly [number, number]> = {
+  booth_prep: [3, 14],
+  photo_stage: [5, 14],
+  split_half: [1, 2],
+};
+
+/** Modes a member may offer when asking to co-curate someone else's item. */
+export const COCURATION_REQUESTABLE_MODES: readonly CoCurationMode[] = [
+  'booth_prep',
+  'photo_stage',
+  'split_half',
+  'transfer_price',
+];
+
+export function isCoCurationTierMode(mode: unknown): mode is CoCurationTierMode {
+  return mode === 'booth_prep' || mode === 'photo_stage' || mode === 'split_half';
+}
+
+/** Lister's share of the sale surplus, in percentage points, for display (e.g. 15 / 25 / 35 at a 70% pool). */
+export function coCurationListerSharePct(mode: CoCurationTierMode, curatorSharePct: number): number {
+  const [num, den] = COCURATION_LISTER_POOL_SHARE[mode];
+  return Number(((curatorSharePct * num) / den).toFixed(1));
+}
+
+export function isPendingCoCurationStatus(status: CoCurationStatus | undefined | null): boolean {
+  return status === 'requested' || status === 'countered';
+}
+
+export function isActiveCoCurationStatus(status: CoCurationStatus | undefined | null): boolean {
+  return status === 'claimed' || status === 'listed' || status === 'sold';
+}
+
+/** A record the next member may overwrite with a brand-new request. */
+export function isFreeCoCurationStatus(status: CoCurationStatus | undefined | null): boolean {
+  return !status || status === 'released' || status === 'declined' || status === 'expired';
+}
 
 export interface OnlinePlatformListing {
   platform: OnlinePlatformKey;
   listingUrl: string;
   listedPrice: number;
   listedAt: string;
+}
+
+export interface CoCurationCounter {
+  mode: CoCurationMode;
+  transferFloorPrice: number;
+  note: string;
+  byName: string;
+  at: string;
 }
 
 export interface CoCurationRecord {
@@ -50,6 +116,14 @@ export interface CoCurationRecord {
   soldAt?: string;
   listings: OnlinePlatformListing[];
   updatedAt: string;
+  /** Request-and-approve fields (empty on legacy self-claims). */
+  ownerUserId?: string;
+  requestedAt?: string;
+  requestExpiresAt?: string;
+  requestNote?: string;
+  counter?: CoCurationCounter;
+  approvedAt?: string;
+  approvedByName?: string;
 }
 
 export const ONLINE_PLATFORM_OPTIONS: ReadonlyArray<{
@@ -171,7 +245,11 @@ export function normalizeCoCurationRecord(raw: any): CoCurationRecord {
     : [];
 
   const mode: CoCurationMode =
-    raw?.mode === 'split_half' || raw?.mode === 'transfer_price' || raw?.mode === 'self_listed'
+    raw?.mode === 'booth_prep' ||
+    raw?.mode === 'photo_stage' ||
+    raw?.mode === 'split_half' ||
+    raw?.mode === 'transfer_price' ||
+    raw?.mode === 'self_listed'
       ? raw.mode
       : 'self_listed';
 
@@ -192,12 +270,34 @@ export function normalizeCoCurationRecord(raw: any): CoCurationRecord {
   const expiresAt =
     sanitizeYmd(raw?.expiresAt) || addCalendarDaysYmd(claimedAt, COCURATION_CLAIM_WINDOW_DAYS);
 
-  let status: CoCurationStatus =
-    raw?.status === 'sold' || raw?.status === 'released' || raw?.status === 'listed'
-      ? raw.status
-      : 'claimed';
+  const RAW_STATUSES = [
+    'requested',
+    'countered',
+    'listed',
+    'sold',
+    'released',
+    'declined',
+    'expired',
+  ] as const;
+  let status: CoCurationStatus = (RAW_STATUSES as readonly string[]).includes(raw?.status)
+    ? raw.status
+    : 'claimed';
   if (status === 'claimed' && listings.length > 0) {
     status = 'listed';
+  }
+
+  let counter: CoCurationCounter | undefined;
+  if (raw?.counter && typeof raw.counter === 'object') {
+    const cMode: CoCurationMode = COCURATION_REQUESTABLE_MODES.includes(raw.counter.mode)
+      ? raw.counter.mode
+      : 'split_half';
+    counter = {
+      mode: cMode,
+      transferFloorPrice: Math.max(0, Number(Number(raw.counter.transferFloorPrice || 0).toFixed(2))),
+      note: cleanText(raw.counter.note, 300),
+      byName: cleanText(raw.counter.byName, 60, 'Item Owner'),
+      at: sanitizeYmd(raw.counter.at),
+    };
   }
 
   return {
@@ -222,18 +322,32 @@ export function normalizeCoCurationRecord(raw: any): CoCurationRecord {
       typeof raw?.updatedAt === 'string' && /^\d{4}-\d{2}-\d{2}/.test(raw.updatedAt)
         ? raw.updatedAt.slice(0, 30)
         : new Date().toISOString(),
+    ownerUserId: raw?.ownerUserId ? cleanText(raw.ownerUserId, 48) : undefined,
+    requestedAt: sanitizeYmd(raw?.requestedAt) || undefined,
+    requestExpiresAt: sanitizeYmd(raw?.requestExpiresAt) || undefined,
+    requestNote: raw?.requestNote ? cleanText(raw.requestNote, 300) : undefined,
+    counter,
+    approvedAt: sanitizeYmd(raw?.approvedAt) || undefined,
+    approvedByName: raw?.approvedByName ? cleanText(raw.approvedByName, 60) : undefined,
   };
 }
 
 /**
- * Lazy 14-day claim clock evaluation (Law 7 string compare against `pacificTodayYmd()`):
- * If `status === 'claimed'`, `listings.length === 0`, and `todayYmd > expiresAt`,
- * the claim has expired and automatically releases back to the backstock pool.
+ * Lazy clock evaluation (Law 7 string compare against `pacificTodayYmd()`):
+ * - A `requested` / `countered` record past `requestExpiresAt` is `expired` (the item is free again).
+ * - A `claimed` record with no listings past `expiresAt` (14 days from approval) is `released`.
  */
 export function effectiveCoCurationStatus(
   rec: CoCurationRecord,
   todayYmd: string
 ): CoCurationStatus {
+  if (rec.status === 'requested' || rec.status === 'countered') {
+    if (rec.requestExpiresAt && /^\d{4}-\d{2}-\d{2}$/.test(todayYmd) && todayYmd > rec.requestExpiresAt) {
+      return 'expired';
+    }
+    return rec.status;
+  }
+  if (rec.status === 'declined' || rec.status === 'expired') return rec.status;
   if (rec.status === 'sold' || rec.status === 'released') return rec.status;
   if (rec.listings.length > 0 || rec.status === 'listed') return 'listed';
   if (rec.expiresAt && /^\d{4}-\d{2}-\d{2}$/.test(todayYmd) && todayYmd > rec.expiresAt) {
@@ -312,8 +426,11 @@ export function computeCoCurationSplitCents(opts: {
     };
   }
 
-  // mode === 'split_half' (half of live Curator share)
-  const listerTransferCents = Math.floor(totalCuratorProfitCents / 2);
+  // Co-Curator tiers: Lister takes a fixed fraction of the live Curator pool.
+  // Integer-cent remainder pattern: the Lister's share is floored and the Original Buyer keeps the rest,
+  // so no cent is ever created or lost.
+  const [num, den] = COCURATION_LISTER_POOL_SHARE[isCoCurationTierMode(opts.mode) ? opts.mode : 'split_half'];
+  const listerTransferCents = Math.floor((totalCuratorProfitCents * num) / den);
   const ogBaseProfitCents = totalCuratorProfitCents - listerTransferCents;
   return {
     effectiveRecoupCents,

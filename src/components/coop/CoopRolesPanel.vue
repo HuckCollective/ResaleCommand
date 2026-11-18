@@ -108,7 +108,7 @@
             <th>Account</th>
             <th>Status</th>
             <th>Work &amp; Security Roles</th>
-            <th>🔗 Linked Roster Profile</th>
+            <th>🏷️ Barcode Prefix</th>
           </tr>
         </thead>
         <tbody>
@@ -169,19 +169,13 @@
 
             <td class="min-w-48">
               <select
-                class="select select-bordered select-xs rounded-lg font-bold text-xs w-full max-w-56"
-                :value="linkedRosterNameForUser(m.userId)"
+                class="select select-bordered select-xs h-11 md:h-7 rounded-lg font-mono font-bold text-xs w-full max-w-56"
+                :value="prefixForUser(m)"
                 :disabled="!canManageLinks"
-                @change="handleLinkSelect(m, ($event.target as HTMLSelectElement).value)"
+                @change="handlePrefixSelect(m, ($event.target as HTMLSelectElement).value)"
               >
-                <option value="">— Unlinked —</option>
-                <option
-                  v-for="rm in members"
-                  :key="rm.name"
-                  :value="rm.name"
-                >
-                  {{ rm.name }} [{{ rm.partner }}-]
-                </option>
+                <option v-if="!prefixForUser(m)" value="" disabled>Pick a prefix…</option>
+                <option v-for="px in prefixOptions" :key="px" :value="px">🔒 {{ px }}</option>
               </select>
             </td>
           </tr>
@@ -213,6 +207,7 @@ import {
   deriveMemberHatsFromRoles,
   ensureCuratorBaseRoles,
   MEMBER_HAT_META,
+  PROTECTED_BARCODE_PREFIXES,
   type CoopMemberProfile,
   type MemberHat,
 } from '../../lib/coopGovernance';
@@ -287,6 +282,81 @@ function linkedRosterNameForUser(userId?: string): string {
   if (!userId) return '';
   const found = props.members.find((rm) => rm.userId === userId);
   return found ? found.name : '';
+}
+
+// Every member (and consignor) has a barcode prefix. Options come from prefixes already in use + the protected set.
+const prefixOptions = computed(() => {
+  const set = new Set<string>(PROTECTED_BARCODE_PREFIXES);
+  for (const rm of props.members) {
+    const px = String(rm.inventoryPrefix || '').trim().toUpperCase();
+    if (px) set.add(px);
+  }
+  return Array.from(set);
+});
+
+function rosterIndexForMembership(m: any): number {
+  const uid = String(m?.userId || '').trim();
+  const email = String(m?.userEmail || '').trim().toLowerCase();
+  const name = String(m?.userName || '').trim().toLowerCase();
+  return props.members.findIndex(
+    (rm) =>
+      (uid && rm.userId === uid) ||
+      (email && rm.email && rm.email.trim().toLowerCase() === email) ||
+      (name && rm.name.trim().toLowerCase() === name)
+  );
+}
+
+function prefixForUser(m: any): string {
+  const idx = rosterIndexForMembership(m);
+  return idx >= 0 ? String(props.members[idx].inventoryPrefix || '').toUpperCase() : '';
+}
+
+/** Picks a barcode prefix and auto-links (or creates) the matching roster profile so nobody stays "Unlinked". */
+function handlePrefixSelect(membership: any, prefix: string) {
+  if (!canManageLinks.value) return;
+  const clean = String(prefix || '').trim().toUpperCase();
+  if (!clean) return;
+  const uid = String(membership.userId || '').trim();
+  const email = membership.userEmail ? String(membership.userEmail).trim().toLowerCase() : undefined;
+  const partner: CoopMemberProfile['partner'] = clean.startsWith('PDXGL')
+    ? 'PDXGL'
+    : clean.startsWith('BB')
+      ? 'BB'
+      : 'HUCK';
+  const idx = rosterIndexForMembership(membership);
+  const derivedHats = deriveMemberHatsFromRoles(membership.roles || [], idx >= 0 ? props.members[idx] : undefined);
+
+  if (idx >= 0) {
+    emit(
+      'update:members',
+      props.members.map((rm, i) =>
+        i === idx
+          ? {
+              ...rm,
+              userId: uid || rm.userId,
+              email: email || rm.email,
+              partner,
+              inventoryPrefix: clean,
+              hats: derivedHats,
+              canVote: derivedHats.some((h) => MEMBER_HAT_META[h]?.canVote),
+            }
+          : rm
+      )
+    );
+    return;
+  }
+
+  const profile: CoopMemberProfile = {
+    name: String(membership.userName || email || 'Collective Member'),
+    partner,
+    role: partner === 'BB' ? 'Consignor' : 'Partner Curator',
+    canVote: derivedHats.some((h) => MEMBER_HAT_META[h]?.canVote),
+    userId: uid || undefined,
+    email,
+    hats: derivedHats,
+    inventoryPrefix: clean,
+  };
+  emit('update:members', [...props.members, profile]);
 }
 
 async function loadMemberships() {
@@ -469,18 +539,12 @@ async function handleInviteMember() {
       });
       emit('update:members', nextMembers);
     } else {
-      const partner: CoopMemberProfile['partner'] = isConsignorOnly
-        ? 'BB'
-        : invitedRole === 'curator' || invitedRole === 'founder'
-          ? 'HUCK'
-          : 'SWEAT';
+      const partner: CoopMemberProfile['partner'] = isConsignorOnly ? 'BB' : 'HUCK';
       const roleLabel: CoopMemberProfile['role'] = isConsignorOnly
         ? 'Consignor'
         : invitedRole === 'founder'
           ? 'Co-op Member'
-          : invitedRole === 'curator'
-            ? 'Partner Curator'
-            : 'Marketing & Social Enabler';
+          : 'Partner Curator';
       const newProfile: CoopMemberProfile = {
         name,
         partner,

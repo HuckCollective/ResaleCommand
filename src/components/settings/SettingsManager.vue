@@ -167,14 +167,13 @@
                 <span>{{ hat.label }}</span>
               </button>
             </div>
-            <div class="text-[11px] flex items-center gap-2 min-h-5">
-              <template v-if="memberUsesPrefix(m)">
-                <span class="opacity-60 font-bold">Barcode prefix:</span>
-                <select v-model="m.inventoryPrefix" :disabled="!canEditGlobal" class="select select-bordered select-xs rounded-lg font-mono font-bold">
-                  <option v-for="px in allPrefixes" :key="px" :value="px">🔒 {{ px }}</option>
-                </select>
-              </template>
-              <span v-else class="text-success font-bold">✨ $0 inventory required. Earns from the Labor &amp; Surplus Pool.</span>
+            <div class="text-[11px] flex items-center gap-2 min-h-5 flex-wrap">
+              <span class="opacity-60 font-bold">Barcode prefix:</span>
+              <select v-model="m.inventoryPrefix" :disabled="!canEditGlobal" class="select select-bordered select-xs h-11 md:h-7 rounded-lg font-mono font-bold">
+                <option v-if="!m.inventoryPrefix" :value="undefined" disabled>Pick a prefix…</option>
+                <option v-for="px in allPrefixes" :key="px" :value="px">🔒 {{ px }}</option>
+              </select>
+              <span v-if="!memberUsesInventory(m)" class="text-success font-bold">✨ Inventory optional. Earns from the Labor &amp; Surplus Pool.</span>
             </div>
           </div>
         </div>
@@ -507,6 +506,8 @@ const availableConsignorPrefixes = computed(() =>
 );
 
 const memberUsesPrefix = (m: CoopMemberProfile) => (m.hats || []).some((h) => MEMBER_HAT_META[h].usesPrefix);
+// Everyone has a barcode prefix; only Curators and Consignors are expected to bring inventory.
+const memberUsesInventory = (m: CoopMemberProfile) => (m.hats || []).some((h) => h === 'curator' || h === 'consignor');
 
 const toggleHat = (m: CoopMemberProfile, hat: MemberHat) => {
   const hats = new Set(m.hats || []);
@@ -524,6 +525,8 @@ const toggleHat = (m: CoopMemberProfile, hat: MemberHat) => {
 const derivePartnerCode = (m: CoopMemberProfile): CoopMemberProfile['partner'] => {
   const hats = m.hats || [];
   if (hats.length === 1 && hats[0] === 'consignor') return 'BB';
+  // Legacy members keep their old bucket until a prefix is picked for them.
+  if (!m.inventoryPrefix && m.partner === 'SWEAT') return 'SWEAT';
   if (!hats.some((h) => MEMBER_HAT_META[h].usesPrefix)) return 'SWEAT';
   return m.inventoryPrefix?.toUpperCase().startsWith('PDXGL') ? 'PDXGL' : 'HUCK';
 };

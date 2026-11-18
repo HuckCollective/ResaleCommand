@@ -4,9 +4,10 @@
 
 ---
 
-## ✅ WAVE 1 (P0) & WAVE 2 (P1) KRUG & LAWS OF UX OVERHAUL (`c49685c` & `588cce7` on `alpha-1` — Nov 17, 2026)
+## ✅ WAVE 1 (P0), WAVE 2 (P1) & WAVE 3 (P2) KRUG & LAWS OF UX OVERHAUL (`c49685c`, `588cce7` & Wave 3 on `alpha-1` — Nov 17, 2026)
 - **Wave 1 (P0) (`c49685c`)**: Shipped two-way role isolation (`CollectiveAccessGate.vue`, `serverAuth.ts`, `session.ts`, `memberAccess.ts`, `SalesList.vue`), fixed broken handlers + `/scan` ➔ `/scout` 302 redirect + `StoreHeaderCart.astro`, eliminated native browser `confirm`/`prompt` dialogs, upgraded `<ItemThumbnail>` with 2-stage `/preview` ➔ `/view` + `galleryImageIds` fallback, and added `validate-templates.mjs` **§18**.
 - **Wave 2 (P1) (`588cce7`)**: Rewired `RolloLabelTestWorkbench.vue` to `warehouses.ts` + `siteConfig.domain`, removed Law-1-violating free-text location creators (`LocationSyncView.vue`, `OrgSettingsView.vue`), replaced hardcoded fee/rent/policy fallbacks + static `MOCK_TENANTS`/`DB_TENANT_MAP`, unified `<SlideOverDrawer>` + ref-counted `useBodyScrollLock()` across 18 views, normalized auth emails + converted currency/hours inputs to `type="text" inputmode="decimal"`, and added `validate-templates.mjs` **§19**.
+- **Wave 3 (P2)**: Enforced Hick's Law Single-CPA docks/headers + `<= 7` inline filter chips, added Krug #5 Trunk Test `<h1>` landmarks + `/join` 1-click recovery + `<CoopSubNav>` on `/coop` + `<BottomActionDock>` on `/settings` + `huckleberry` theme tokens, upgraded `<768px` controls to `h-11 md:h-*` (`44px` touch floor), replaced bare spinners with `.skeleton` loaders, scrubbed remaining internal IDs + fake `subtotal * 4` math, and added `validate-templates.mjs` **§20**.
 
 ## ✅ HEADLESS FLAGSHIP & EVENTS CMS (`/coop/cms` ➔ `thehc.llc`) + MULTI-CHANNEL SALES CHECKOUT (`main` & `alpha-1` — Nov 16, 2026)
 - **Headless Flagship Content Manager & Multi-Channel Checkout (`5cae49c` — Merged & Deployed to Live `main`)**:
