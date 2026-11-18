@@ -202,8 +202,72 @@
       </div>
     </div>
 
-    <!-- Main 2-Column Grid: Log Form + Ledger Table -->
-    <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+    <!-- Top Segmented View Switcher: Task Board vs. Hours & Shifts Ledger -->
+    <div class="bg-base-100 border border-base-300 rounded-2xl p-2 shadow-2xs flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2">
+      <div class="grid grid-cols-2 gap-1.5 flex-1 sm:max-w-xl">
+        <button
+          type="button"
+          class="btn btn-sm h-11 md:h-9 rounded-xl font-black gap-1.5"
+          :class="activeLaborView === 'tasks' ? 'btn-primary text-primary-content shadow-2xs' : 'btn-ghost text-base-content/75'"
+          @click="setLaborView('tasks')"
+        >
+          <span>📋 Task Board &amp; Presets</span>
+          <span
+            v-if="taskActionableBadgeCount > 0"
+            class="badge badge-xs badge-warning text-warning-content font-mono font-bold whitespace-nowrap shrink-0"
+          >
+            {{ taskActionableBadgeCount }}
+          </span>
+        </button>
+        <button
+          type="button"
+          class="btn btn-sm h-11 md:h-9 rounded-xl font-black gap-1.5"
+          :class="activeLaborView === 'ledger' ? 'btn-primary text-primary-content shadow-2xs' : 'btn-ghost text-base-content/75'"
+          @click="setLaborView('ledger')"
+        >
+          <span>⏱️ Hours &amp; Shifts Ledger</span>
+          <span
+            v-if="approvalSummary.pendingCount > 0"
+            class="badge badge-xs badge-warning text-warning-content font-mono font-bold whitespace-nowrap shrink-0"
+          >
+            {{ approvalSummary.pendingCount }}
+          </span>
+        </button>
+      </div>
+
+      <div class="text-xs font-mono text-base-content/65 px-2 flex items-center gap-2 flex-wrap">
+        <span>📣 Promoter · 🔥 Enabler · 🛠️ Builder · ⏱️ Shift</span>
+      </div>
+    </div>
+
+    <!-- VIEW A: CO-OP TASK BOARD & 12 EDITABLE PRESETS -->
+    <CoopTaskBoardPanel
+      v-if="activeLaborView === 'tasks'"
+      :presets="taskPresets"
+      :tasks="boardTasks"
+      :loading="isLoadingTasks"
+      :saving="isSaving"
+      :current-user-id="coopIdentity?.userId || ''"
+      :is-founder="isFounder"
+      :can-log-labor="canLogLabor"
+      :can-edit-presets="canEditPresets"
+      :eligible-voter-count="eligibleVoterCount"
+      :required-peer-approvals="requiredPeerApprovals"
+      :allow-sole-founder-self="allowSoleFounderSelf"
+      @open-propose-custom="openProposeCustomDrawer"
+      @open-edit-presets="openEditPresetsDrawer"
+      @open-complete-task="openCompleteTaskDrawer"
+      @post-preset="handlePostPresetTask"
+      @vote-value="handleVoteTaskValue"
+      @founder-tiebreak="handleFounderTiebreak"
+      @claim="handleClaimTask"
+      @unclaim="handleUnclaimTask"
+      @approve-completion="handleApproveTaskCompletion"
+      @archive-task="handleArchiveTask"
+    />
+
+    <!-- VIEW B: Main 2-Column Grid: Log Form + Ledger Table -->
+    <div v-else class="grid grid-cols-1 lg:grid-cols-12 gap-6">
       <!-- Left: Log Enabling Labor Form -->
       <div class="lg:col-span-4 card bg-base-100 border border-base-300 shadow-sm rounded-3xl p-5 space-y-4 h-fit">
         <div class="flex items-center gap-2.5">
@@ -222,7 +286,7 @@
           v-if="!canLogLabor"
           class="rounded-xl border border-warning/35 bg-warning/10 p-3 text-xs text-base-content/80"
         >
-          Sign in with an active Co-op work role (<code>owner</code>, <code>founder</code>, <code>curator</code>, <code>promoter</code>, or <code>enabler</code>) to log Sweat-Equity hours.
+          Sign in with an active Co-op work role (<code>owner</code>, <code>founder</code>, <code>curator</code>, <code>promoter</code>, <code>enabler</code>, or <code>builder</code>) to log Sweat-Equity hours.
         </div>
 
         <div
@@ -291,7 +355,8 @@
           </label>
           <select
             v-model="form.category"
-            class="select select-bordered select-sm rounded-xl font-bold text-xs w-full"
+            class="select select-bordered select-sm h-11 md:h-8 rounded-xl font-bold text-xs w-full"
+            @change="handleFormCategoryChange"
           >
             <option value="Social & Marketing">📲 Dropcast Reels &amp; Social Marketing (Enabler)</option>
             <option value="Photography & Staging">📸 AI Deep Scan, Photo &amp; Tagging (Enabler)</option>
@@ -301,6 +366,24 @@
             <option value="Pop-Up & Event Staffing">⛺ Pop-Up Market &amp; Event Staffing (Producer)</option>
             <option value="Sourcing">🔍 Collective Sourcing &amp; Lot Splitting (Producer)</option>
           </select>
+        </div>
+
+        <div class="form-control">
+          <label class="label py-1">
+            <span class="label-text text-xs font-bold">Function Tag</span>
+          </label>
+          <div class="grid grid-cols-2 gap-1.5">
+            <button
+              v-for="ft in COOP_LABOR_FUNCTION_TAGS"
+              :key="ft"
+              type="button"
+              class="btn btn-xs h-11 md:h-8 rounded-xl font-bold justify-start px-2.5"
+              :class="form.functionTag === ft ? 'btn-secondary text-secondary-content' : 'btn-ghost bg-base-200/60 border border-base-300'"
+              @click="form.functionTag = ft"
+            >
+              <span>{{ FUNCTION_TAG_META[ft].label }}</span>
+            </button>
+          </div>
         </div>
 
         <div class="form-control">
@@ -325,6 +408,16 @@
             placeholder="e.g., Filmed 3 TikTok/IG reels for Friday booth drop, packed 4 eBay orders..."
             class="textarea textarea-bordered textarea-sm rounded-xl text-xs w-full"
           ></textarea>
+        </div>
+
+        <div
+          v-if="liveFormBarcodeWarning.warning"
+          class="rounded-xl border border-warning/45 bg-warning/15 p-3 text-xs space-y-1"
+        >
+          <div class="font-black text-warning">⚠️ Mentions Worker's Own Barcode Prefix</div>
+          <p class="text-[11px] text-base-content/85">
+            Detected <strong>{{ liveFormBarcodeWarning.matchedTokens.join(', ') }}</strong>. Own-inventory prep earns Gate 3 Curator profit — log only shared Collective Commons work here.
+          </p>
         </div>
 
         <div class="space-y-1.5">
@@ -444,9 +537,17 @@
                 </td>
                 <td>
                   <div class="flex flex-col gap-0.5">
-                    <span class="badge badge-xs badge-ghost font-semibold whitespace-nowrap">
-                      {{ entry.category }}
-                    </span>
+                    <div class="flex items-center gap-1 flex-wrap">
+                      <span
+                        class="badge badge-xs font-bold whitespace-nowrap shrink-0"
+                        :class="FUNCTION_TAG_META[resolveEntryFunctionTag(entry)].badgeClass"
+                      >
+                        {{ FUNCTION_TAG_META[resolveEntryFunctionTag(entry)].label }}
+                      </span>
+                      <span class="badge badge-xs badge-ghost font-semibold whitespace-nowrap shrink-0">
+                        {{ entry.category }}
+                      </span>
+                    </div>
                     <span
                       class="text-[10px] font-mono font-bold"
                       :class="classifySurplusLaborRole(entry.category) === 'Enabler of Surplus' ? 'text-secondary' : 'text-primary'"
@@ -487,6 +588,14 @@
                     </span>
                   </div>
                   <div class="truncate" :title="entry.notes">{{ entry.notes }}</div>
+                  <div v-if="entry.ownBarcodeWarning" class="mt-0.5">
+                    <span class="badge badge-2xs badge-warning font-bold whitespace-nowrap shrink-0" title="Entry text mentions worker's own barcode prefix — verify shared Co-op scope">
+                      ⚠️ Mentions Own Prefix
+                    </span>
+                  </div>
+                  <div v-if="entry.peerApprovals?.length" class="text-[10px] font-mono text-success">
+                    👥 Peer signed: {{ entry.peerApprovals.map((p) => p.name).join(', ') }}
+                  </div>
                   <div v-if="entry.decisionNote" class="text-[10px] italic text-warning truncate" :title="entry.decisionNote">
                     Note: {{ entry.decisionNote }}
                   </div>
@@ -654,17 +763,110 @@
         <div class="grid grid-cols-2 gap-3">
           <div class="form-control">
             <label class="label py-1"><span class="label-text font-bold">Work Date</span></label>
-            <input v-model="editDraft.date" type="date" class="input input-bordered input-sm rounded-xl font-mono text-xs" required />
+            <input v-model="editDraft.date" type="date" class="input input-bordered input-sm h-11 md:h-8 rounded-xl font-mono text-xs" required />
           </div>
           <div class="form-control">
             <label class="label py-1"><span class="label-text font-bold">Hours</span></label>
-            <input v-model.number="editDraft.hours" type="number" min="0.25" max="24" step="0.25" class="input input-bordered input-sm rounded-xl font-mono text-xs" required />
+            <input v-model="editDraft.hoursInput" type="text" inputmode="decimal" class="input input-bordered input-sm h-11 md:h-8 rounded-xl font-mono text-xs" required />
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div class="form-control">
+            <label class="label py-1"><span class="label-text font-bold">Category</span></label>
+            <select v-model="editDraft.category" class="select select-bordered select-sm h-11 md:h-8 rounded-xl font-bold text-xs">
+              <option value="Social & Marketing">Social &amp; Marketing</option>
+              <option value="Photography & Staging">Photography &amp; Staging</option>
+              <option value="Online Fulfillment & Shipping">Online Fulfillment &amp; Shipping</option>
+              <option value="Tech & Admin">Tech &amp; Admin</option>
+              <option value="Booth Restock">Booth Restock</option>
+              <option value="Pop-Up & Event Staffing">Pop-Up &amp; Event Staffing</option>
+              <option value="Sourcing">Sourcing</option>
+            </select>
+          </div>
+          <div class="form-control">
+            <label class="label py-1"><span class="label-text font-bold">Function Tag</span></label>
+            <select v-model="editDraft.functionTag" class="select select-bordered select-sm h-11 md:h-8 rounded-xl font-bold text-xs">
+              <option v-for="ft in COOP_LABOR_FUNCTION_TAGS" :key="ft" :value="ft">
+                {{ FUNCTION_TAG_META[ft].label }}
+              </option>
+            </select>
           </div>
         </div>
 
         <div class="form-control">
-          <label class="label py-1"><span class="label-text font-bold">Category</span></label>
-          <select v-model="editDraft.category" class="select select-bordered select-sm rounded-xl font-bold text-xs">
+          <label class="label py-1"><span class="label-text font-bold">Deliverable Proof</span></label>
+          <input v-model="editDraft.deliverableRef" type="text" class="input input-bordered input-sm h-11 md:h-8 rounded-xl text-xs" />
+        </div>
+
+        <div class="form-control">
+          <label class="label py-1"><span class="label-text font-bold">Notes</span></label>
+          <textarea v-model="editDraft.notes" rows="2" class="textarea textarea-bordered rounded-xl text-xs"></textarea>
+        </div>
+
+        <div class="flex justify-end gap-2 pt-2">
+          <button type="button" class="btn btn-sm h-11 md:h-8 btn-ghost rounded-xl" @click="drawerOpen = false">Cancel</button>
+          <button type="submit" class="btn btn-sm h-11 md:h-8 btn-primary text-primary-content rounded-xl font-black" :disabled="isSaving">
+            Save Changes
+          </button>
+        </div>
+      </form>
+
+      <!-- Hoisted Drawer Mode: Propose Custom Task (48h Quorum Vote) -->
+      <form
+        v-else-if="drawerMode === 'proposeCustomTask'"
+        class="space-y-3.5 text-xs"
+        @submit.prevent="submitProposeCustomDrawer"
+      >
+        <div class="rounded-2xl bg-info/10 border border-info/30 p-3.5 space-y-1">
+          <div class="font-black text-info">🗳️ 48h Point-Value Vote (≥ 50% Quorum)</div>
+          <p class="text-base-content/80">
+            Custom tasks open for claiming once at least half of confirmed voting members ({{ Math.ceil(Math.max(1, eligibleVoterCount) / 2) }} of {{ eligibleVoterCount }}) confirm the point value.
+          </p>
+        </div>
+
+        <div class="form-control">
+          <label class="label py-1"><span class="label-text font-bold">Task Title *</span></label>
+          <input
+            v-model="customTaskDraft.title"
+            type="text"
+            maxlength="140"
+            placeholder="e.g. Build custom locking acrylic wand display for Dusty Tiger"
+            class="input input-bordered input-sm h-11 md:h-9 rounded-xl text-xs font-bold"
+            required
+          />
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div class="form-control">
+            <label class="label py-1"><span class="label-text font-bold">Function Tag</span></label>
+            <select
+              v-model="customTaskDraft.functionTag"
+              class="select select-bordered select-sm h-11 md:h-9 rounded-xl font-bold text-xs"
+              @change="customTaskDraft.category = FUNCTION_TAG_META[customTaskDraft.functionTag].defaultCategory"
+            >
+              <option v-for="ft in COOP_LABOR_FUNCTION_TAGS" :key="ft" :value="ft">
+                {{ FUNCTION_TAG_META[ft].label }}
+              </option>
+            </select>
+          </div>
+
+          <div class="form-control">
+            <label class="label py-1"><span class="label-text font-bold">Proposed Points (= Hours) *</span></label>
+            <input
+              v-model="customTaskDraft.pointsInput"
+              type="text"
+              inputmode="decimal"
+              placeholder="e.g. 2.5"
+              class="input input-bordered input-sm h-11 md:h-9 rounded-xl font-mono font-bold text-xs"
+              required
+            />
+          </div>
+        </div>
+
+        <div class="form-control">
+          <label class="label py-1"><span class="label-text font-bold">Labor Category</span></label>
+          <select v-model="customTaskDraft.category" class="select select-bordered select-sm h-11 md:h-9 rounded-xl font-bold text-xs">
             <option value="Social & Marketing">Social &amp; Marketing</option>
             <option value="Photography & Staging">Photography &amp; Staging</option>
             <option value="Online Fulfillment & Shipping">Online Fulfillment &amp; Shipping</option>
@@ -676,19 +878,192 @@
         </div>
 
         <div class="form-control">
-          <label class="label py-1"><span class="label-text font-bold">Deliverable Proof</span></label>
-          <input v-model="editDraft.deliverableRef" type="text" class="input input-bordered input-sm rounded-xl text-xs" />
+          <label class="label py-1"><span class="label-text font-bold">Scope &amp; Deliverable Details</span></label>
+          <textarea
+            v-model="customTaskDraft.description"
+            rows="3"
+            maxlength="600"
+            placeholder="Describe what done looks like so voters can weigh the point value..."
+            class="textarea textarea-bordered rounded-xl text-xs"
+          ></textarea>
         </div>
 
-        <div class="form-control">
-          <label class="label py-1"><span class="label-text font-bold">Notes</span></label>
-          <textarea v-model="editDraft.notes" rows="2" class="textarea textarea-bordered rounded-xl text-xs"></textarea>
+        <div
+          v-if="liveCustomTaskBarcodeWarning.warning"
+          class="rounded-xl border border-warning/45 bg-warning/15 p-3 text-xs"
+        >
+          <strong class="text-warning">⚠️ Mentions Your Barcode Prefix ({{ liveCustomTaskBarcodeWarning.matchedTokens.join(', ') }}):</strong>
+          Make sure this task benefits the shared Collective Commons rather than personal inventory.
         </div>
 
         <div class="flex justify-end gap-2 pt-2">
-          <button type="button" class="btn btn-sm btn-ghost rounded-xl" @click="drawerOpen = false">Cancel</button>
-          <button type="submit" class="btn btn-sm btn-primary rounded-xl font-black" :disabled="isSaving">
-            Save Changes
+          <button type="button" class="btn btn-sm h-11 md:h-9 btn-ghost rounded-xl" @click="drawerOpen = false">
+            Cancel
+          </button>
+          <button
+            type="submit"
+            class="btn btn-sm h-11 md:h-9 btn-primary text-primary-content rounded-xl font-black"
+            :disabled="isSaving || customTaskDraft.title.trim().length < 3"
+          >
+            {{ isSaving ? 'Posting…' : 'Start 48h Point Vote' }}
+          </button>
+        </div>
+      </form>
+
+      <!-- Hoisted Drawer Mode: Submit Task Completion Proof -->
+      <form
+        v-else-if="drawerMode === 'completeTask' && activeTaskForCompletion"
+        class="space-y-3.5 text-xs"
+        @submit.prevent="submitCompleteTaskDrawer"
+      >
+        <div class="rounded-2xl bg-base-200/70 border border-base-300 p-3.5 space-y-1">
+          <div class="font-black text-sm">{{ activeTaskForCompletion.title }}</div>
+          <div class="font-mono text-secondary font-bold">
+            {{ activeTaskForCompletion.points.toFixed(2) }} pts (= {{ activeTaskForCompletion.points.toFixed(2) }}h) ·
+            {{ FUNCTION_TAG_META[activeTaskForCompletion.functionTag].label }}
+          </div>
+        </div>
+
+        <div class="form-control">
+          <label class="label py-1"><span class="label-text font-bold">Completion Date *</span></label>
+          <input
+            v-model="completeTaskDraft.completedDate"
+            type="date"
+            class="input input-bordered input-sm h-11 md:h-9 rounded-xl font-mono text-xs"
+            required
+          />
+          <span
+            v-if="isCompleteDateLocked"
+            class="text-[11px] font-bold text-error mt-1"
+          >
+            🔒 That month is locked after payout — pick an unlocked date or ask a Founder to unlock the month.
+          </span>
+        </div>
+
+        <div class="form-control">
+          <label class="label py-1"><span class="label-text font-bold">Proof Link or Reference (Optional)</span></label>
+          <input
+            v-model="completeTaskDraft.deliverableRef"
+            type="text"
+            maxlength="500"
+            placeholder="e.g. https://instagram.com/reel/... or PR #42 or Booth photo batch"
+            class="input input-bordered input-sm h-11 md:h-9 rounded-xl text-xs"
+          />
+        </div>
+
+        <div class="form-control">
+          <label class="label py-1"><span class="label-text font-bold">What Was Completed *</span></label>
+          <textarea
+            v-model="completeTaskDraft.completionNotes"
+            rows="3"
+            maxlength="1500"
+            placeholder="Briefly summarize what you finished so peers can verify..."
+            class="textarea textarea-bordered rounded-xl text-xs"
+            required
+          ></textarea>
+        </div>
+
+        <div
+          v-if="liveCompleteBarcodeWarning.warning"
+          class="rounded-xl border border-warning/45 bg-warning/15 p-3 text-xs"
+        >
+          <strong class="text-warning">⚠️ Mentions Your Barcode Prefix ({{ liveCompleteBarcodeWarning.matchedTokens.join(', ') }}):</strong>
+          Peer approvers will see a reminder to confirm this was shared Collective Commons work.
+        </div>
+
+        <div class="flex justify-end gap-2 pt-2">
+          <button type="button" class="btn btn-sm h-11 md:h-9 btn-ghost rounded-xl" @click="drawerOpen = false">
+            Cancel
+          </button>
+          <button
+            type="submit"
+            class="btn btn-sm h-11 md:h-9 btn-primary text-primary-content rounded-xl font-black"
+            :disabled="isSaving || isCompleteDateLocked || !completeTaskDraft.completionNotes.trim()"
+          >
+            {{ isSaving ? 'Submitting…' : 'Submit for Peer Sign-Off' }}
+          </button>
+        </div>
+      </form>
+
+      <!-- Hoisted Drawer Mode: Edit 12 Task Presets (Founder / Builder) -->
+      <form
+        v-else-if="drawerMode === 'editPresets'"
+        class="space-y-4 text-xs"
+        @submit.prevent="submitEditPresetsDrawer"
+      >
+        <div class="flex items-center justify-between gap-2 flex-wrap">
+          <p class="text-base-content/75">
+            Founders and Builders can tune preset titles, function tags, and base points (<code>0.25</code>–<code>24.0</code>).
+          </p>
+          <button
+            type="button"
+            class="btn btn-xs h-11 md:h-7 btn-ghost border border-base-300 rounded-lg font-bold"
+            @click="resetPresetDraftsToDefaults"
+          >
+            Reset Defaults
+          </button>
+        </div>
+
+        <div class="space-y-3 max-h-[62vh] overflow-y-auto pr-1">
+          <div
+            v-for="(p, idx) in presetDrafts"
+            :key="p.id"
+            class="rounded-2xl border border-base-300 bg-base-200/45 p-3 space-y-2"
+          >
+            <div class="flex items-center justify-between gap-2">
+              <span class="badge badge-xs badge-outline font-mono font-bold">#{{ idx + 1 }}</span>
+              <label class="inline-flex items-center gap-1.5 cursor-pointer font-bold">
+                <input v-model="p.active" type="checkbox" class="checkbox checkbox-xs checkbox-primary" />
+                <span>Active</span>
+              </label>
+            </div>
+
+            <input
+              v-model="p.title"
+              type="text"
+              maxlength="120"
+              class="input input-bordered input-xs h-11 md:h-8 rounded-lg font-bold text-xs w-full"
+              required
+            />
+
+            <div class="grid grid-cols-2 gap-2">
+              <select
+                v-model="p.functionTag"
+                class="select select-bordered select-xs h-11 md:h-8 rounded-lg font-bold text-xs"
+              >
+                <option v-for="ft in COOP_LABOR_FUNCTION_TAGS" :key="ft" :value="ft">
+                  {{ FUNCTION_TAG_META[ft].label }}
+                </option>
+              </select>
+              <input
+                v-model="p.pointsInput"
+                type="text"
+                inputmode="decimal"
+                placeholder="Pts"
+                class="input input-bordered input-xs h-11 md:h-8 rounded-lg font-mono font-bold text-xs"
+                required
+              />
+            </div>
+
+            <input
+              v-model="p.description"
+              type="text"
+              maxlength="400"
+              class="input input-bordered input-xs h-11 md:h-8 rounded-lg text-xs w-full"
+            />
+          </div>
+        </div>
+
+        <div class="flex justify-end gap-2 pt-2">
+          <button type="button" class="btn btn-sm h-11 md:h-9 btn-ghost rounded-xl" @click="drawerOpen = false">
+            Cancel
+          </button>
+          <button
+            type="submit"
+            class="btn btn-sm h-11 md:h-9 btn-primary text-primary-content rounded-xl font-black"
+            :disabled="isSaving"
+          >
+            {{ isSaving ? 'Saving…' : 'Save 12 Presets' }}
           </button>
         </div>
       </form>
@@ -702,14 +1077,34 @@ import { ref, computed, onMounted, watch } from 'vue';
 import { Icon } from '@iconify/vue';
 import CollectiveAccessGate from '../common/CollectiveAccessGate.vue';
 import SlideOverDrawer from '../common/SlideOverDrawer.vue';
+import CoopTaskBoardPanel from './CoopTaskBoardPanel.vue';
 import { addToast } from '../../stores/toast';
 import { askConfirm } from '../../stores/confirm';
 import { toUserMessage } from '../../lib/userFacingErrors';
+import { parsePriceValue } from '../../lib/lot-strategy';
 import { useAuth } from '../../composables/useAuth';
 import { useMemberCapabilities } from '../../lib/memberAccess';
 import { useCoopFounderGate } from '../../composables/useCoopFounderGate';
-import { fetchCoopLaborLedger, mutateCoopLabor } from '../../lib/coopLedgerClient';
+import {
+  fetchCoopLaborLedger,
+  fetchCoopTasksBoard,
+  mutateCoopLabor,
+  mutateCoopTasksBoard,
+  type CoopTasksBoardPendingBadges,
+} from '../../lib/coopLedgerClient';
 import { monthKeyToLabel } from '../../lib/salesBucketing';
+import {
+  clampTaskPoints,
+  COOP_LABOR_FUNCTION_TAGS,
+  DEFAULT_COOP_TASK_PRESETS,
+  detectOwnBarcodeWarning,
+  FUNCTION_TAG_META,
+  inferFunctionTagFromCategory,
+  normalizeFunctionTag,
+  type CoopLaborFunctionTag,
+  type CoopTaskItem,
+  type CoopTaskPreset,
+} from '../../lib/coopTaskBoard';
 import {
   loadCoopGovernanceState,
   getLaborHoursByPartnerForMonth,
@@ -742,7 +1137,9 @@ const {
 
 const isCloudSynced = ref(false);
 const isLoadingLedger = ref(false);
+const isLoadingTasks = ref(false);
 const isSaving = ref(false);
+const activeLaborView = ref<'tasks' | 'ledger'>('tasks');
 const selectedMonth = ref<string>('all');
 const statusFilter = ref<'all' | 'pending' | 'approved' | 'rejected'>('all');
 const selectedMemberIdx = ref<number>(0);
@@ -750,43 +1147,127 @@ const lockedMonths = ref<string[]>([]);
 const versionsByMonth = ref<Record<string, number>>({});
 const legacyPendingMigrationCount = ref(0);
 
+// Task Board State
+const taskPresets = ref<CoopTaskPreset[]>(DEFAULT_COOP_TASK_PRESETS.map((p) => ({ ...p })));
+const boardTasks = ref<CoopTaskItem[]>([]);
+const taskBoardVersion = ref<number | undefined>(undefined);
+const eligibleVoterCount = ref<number>(1);
+const requiredPeerApprovals = ref<number>(2);
+const allowSoleFounderSelf = ref<boolean>(false);
+const canEditPresets = ref<boolean>(false);
+const taskPendingBadges = ref<CoopTasksBoardPendingBadges>({
+  votesNeededForMe: 0,
+  peerSignoffsForMe: 0,
+  tiebreaksForFounder: 0,
+  pendingLaborForFounder: 0,
+  totalActionable: 0,
+});
+
+const taskActionableBadgeCount = computed(
+  () =>
+    taskPendingBadges.value.votesNeededForMe +
+    taskPendingBadges.value.peerSignoffsForMe +
+    taskPendingBadges.value.tiebreaksForFounder
+);
+
+function setLaborView(view: 'tasks' | 'ledger') {
+  activeLaborView.value = view;
+  if (typeof window !== 'undefined') {
+    const url = new URL(window.location.href);
+    if (view === 'tasks') url.searchParams.delete('view');
+    else url.searchParams.set('view', 'ledger');
+    window.history.replaceState({}, '', url.toString());
+  }
+}
+
 const form = ref<{
   date: string;
   hours: number;
   category: CoopLaborCategory;
+  functionTag: CoopLaborFunctionTag;
   deliverableRef: string;
   notes: string;
 }>({
   date: pacificTodayYmd(),
   hours: 1.5,
   category: 'Social & Marketing',
+  functionTag: 'promoter',
   deliverableRef: '',
   notes: '',
 });
 
-// Drawer state (replaces window.prompt / window.confirm)
+function handleFormCategoryChange() {
+  form.value.functionTag = inferFunctionTagFromCategory(form.value.category);
+}
+
+// Single Hoisted Drawer State (§16 — zero stacked right-edge drawers)
+type LaborDrawerMode =
+  | 'decision'
+  | 'bulkApprove'
+  | 'edit'
+  | 'proposeCustomTask'
+  | 'completeTask'
+  | 'editPresets';
+
 const drawerOpen = ref(false);
-const drawerMode = ref<'decision' | 'bulkApprove' | 'edit'>('decision');
+const drawerMode = ref<LaborDrawerMode>('decision');
 const decisionAction = ref<'reject' | 'unapprove'>('reject');
 const activeEntry = ref<CoopLaborEntry | null>(null);
 const decisionNoteInput = ref('');
 const editDraft = ref<{
   date: string;
-  hours: number;
+  hoursInput: string;
   category: CoopLaborCategory;
+  functionTag: CoopLaborFunctionTag;
   deliverableRef: string;
   notes: string;
 } | null>(null);
 
+const customTaskDraft = ref<{
+  title: string;
+  functionTag: CoopLaborFunctionTag;
+  category: CoopLaborCategory;
+  pointsInput: string;
+  description: string;
+}>({
+  title: '',
+  functionTag: 'enabler',
+  category: 'Booth Restock',
+  pointsInput: '2.0',
+  description: '',
+});
+
+const activeTaskForCompletion = ref<CoopTaskItem | null>(null);
+const completeTaskDraft = ref<{
+  completedDate: string;
+  deliverableRef: string;
+  completionNotes: string;
+}>({
+  completedDate: pacificTodayYmd(),
+  deliverableRef: '',
+  completionNotes: '',
+});
+
+interface EditablePresetDraft extends CoopTaskPreset {
+  pointsInput: string;
+}
+const presetDrafts = ref<EditablePresetDraft[]>([]);
+
 const drawerTitle = computed(() => {
   if (drawerMode.value === 'bulkApprove') return 'Approve Pending Labor Hours';
   if (drawerMode.value === 'edit') return 'Edit Labor Entry';
+  if (drawerMode.value === 'proposeCustomTask') return 'Propose Custom Collective Task';
+  if (drawerMode.value === 'completeTask') return 'Submit Task Proof for Peer Sign-Off';
+  if (drawerMode.value === 'editPresets') return 'Edit 12 Collective Task Presets';
   return decisionAction.value === 'reject' ? 'Reject Labor Entry' : 'Return Approved Entry to Pending';
 });
 
 const drawerSubtitle = computed(() => {
   if (drawerMode.value === 'bulkApprove') return 'Founder approval into the Official Labor Ledger';
   if (drawerMode.value === 'edit') return 'Month lock & approval reset rules';
+  if (drawerMode.value === 'proposeCustomTask') return '48h point-value vote (≥ 50% confirmed member quorum)';
+  if (drawerMode.value === 'completeTask') return 'Verified hours log automatically once required peers sign off';
+  if (drawerMode.value === 'editPresets') return 'Shared presets open immediately without a 48h vote';
   return 'Written note is stored permanently in the audit trail';
 });
 
@@ -823,6 +1304,56 @@ const isFormDateLocked = computed(() => {
   const mk = laborEntryMonthKey(form.value.date);
   return isMonthLocked(mk);
 });
+
+const isCompleteDateLocked = computed(() => {
+  const mk = laborEntryMonthKey(completeTaskDraft.value.completedDate);
+  return isMonthLocked(mk);
+});
+
+const selectedWorkerPrefix = computed(() => {
+  const memberObj = eligibleMembers.value[selectedMemberIdx.value] || eligibleMembers.value[0];
+  if (!memberObj) return '';
+  return memberObj.inventoryPrefix || (memberObj.partner !== 'SWEAT' ? `${memberObj.partner}-` : '');
+});
+
+const currentCallerPrefix = computed(() => {
+  const linkedName = coopIdentity.value?.linkedMemberName;
+  if (linkedName) {
+    const found = policyConfig.value.members.find(
+      (m) => m.name.trim().toLowerCase() === linkedName.trim().toLowerCase()
+    );
+    if (found) {
+      return found.inventoryPrefix || (found.partner !== 'SWEAT' ? `${found.partner}-` : '');
+    }
+  }
+  return selectedWorkerPrefix.value;
+});
+
+const liveFormBarcodeWarning = computed(() =>
+  detectOwnBarcodeWarning([form.value.notes, form.value.deliverableRef], selectedWorkerPrefix.value)
+);
+
+const liveCustomTaskBarcodeWarning = computed(() =>
+  detectOwnBarcodeWarning(
+    [customTaskDraft.value.title, customTaskDraft.value.description],
+    currentCallerPrefix.value
+  )
+);
+
+const liveCompleteBarcodeWarning = computed(() =>
+  detectOwnBarcodeWarning(
+    [
+      activeTaskForCompletion.value?.title,
+      completeTaskDraft.value.completionNotes,
+      completeTaskDraft.value.deliverableRef,
+    ],
+    currentCallerPrefix.value
+  )
+);
+
+function resolveEntryFunctionTag(entry: CoopLaborEntry): CoopLaborFunctionTag {
+  return normalizeFunctionTag(entry.functionTag, entry.category);
+}
 
 const validEntriesCount = computed(
   () => laborEntries.value.filter((e) => !isDemoSeedLaborEntry(e)).length
@@ -989,9 +1520,33 @@ async function refreshServerLaborLedger() {
   }
 }
 
+async function refreshTasksBoard() {
+  isLoadingTasks.value = true;
+  try {
+    const res = await fetchCoopTasksBoard();
+    taskPresets.value = res.presets || DEFAULT_COOP_TASK_PRESETS.map((p) => ({ ...p }));
+    boardTasks.value = res.tasks || [];
+    taskBoardVersion.value = res.version;
+    eligibleVoterCount.value = res.eligibleVoterCount || 1;
+    requiredPeerApprovals.value = res.requiredPeerApprovals || 2;
+    allowSoleFounderSelf.value = Boolean(res.allowSoleFounderSelf);
+    canEditPresets.value = Boolean(res.canEditPresets);
+    if (res.pendingBadges) {
+      taskPendingBadges.value = res.pendingBadges;
+    }
+  } catch (err: any) {
+    if (err?.status && err.status !== 401) {
+      addToast({ type: 'warning', message: toUserMessage(err, 'Could not load Collective Task Board.') });
+    }
+  } finally {
+    isLoadingTasks.value = false;
+  }
+}
+
 const handleAddLabor = async () => {
   const memberObj = eligibleMembers.value[selectedMemberIdx.value] || eligibleMembers.value[0];
-  if (!memberObj || form.value.hours <= 0) {
+  const parsedHours = parsePriceValue(form.value.hours);
+  if (!memberObj || parsedHours <= 0) {
     addToast({ type: 'error', message: 'Please enter valid hours (> 0).' });
     return;
   }
@@ -1011,12 +1566,13 @@ const handleAddLabor = async () => {
       member: memberObj.name,
       partner: partnerPrefix,
       category: form.value.category,
-      hours: Number(form.value.hours),
+      functionTag: form.value.functionTag,
+      hours: parsedHours,
       deliverableRef: form.value.deliverableRef.trim() || undefined,
       notes: form.value.notes.trim() || `${form.value.category} contribution`,
     });
 
-    await refreshServerLaborLedger();
+    await Promise.all([refreshServerLaborLedger(), refreshTasksBoard()]);
     form.value.notes = '';
     form.value.deliverableRef = '';
 
@@ -1024,12 +1580,12 @@ const handleAddLabor = async () => {
       res.entry?.approval === 'approved' ? 'Approved' : 'Pending Founder approval';
     addToast({
       type: 'success',
-      message: `Logged ${res.entry?.hours ?? form.value.hours}h for ${memberObj.name} (${statusMsg}).`,
+      message: `Logged ${res.entry?.hours ?? parsedHours}h for ${memberObj.name} (${statusMsg}).`,
     });
   } catch (err: any) {
     addToast({
       type: 'error',
-      message: err?.message || 'Failed to save labor entry.',
+      message: toUserMessage(err, 'Failed to save labor entry.'),
     });
   } finally {
     isSaving.value = false;
@@ -1133,8 +1689,9 @@ const openEditDrawer = (entry: CoopLaborEntry) => {
   activeEntry.value = entry;
   editDraft.value = {
     date: entry.date,
-    hours: Number(entry.hours),
+    hoursInput: String(Number(entry.hours)),
     category: entry.category,
+    functionTag: resolveEntryFunctionTag(entry),
     deliverableRef: entry.deliverableRef || '',
     notes: entry.notes || '',
   };
@@ -1145,6 +1702,11 @@ const openEditDrawer = (entry: CoopLaborEntry) => {
 const submitEditDrawer = async () => {
   if (!activeEntry.value || !editDraft.value) return;
   const origMonth = laborEntryMonthKey(activeEntry.value.date);
+  const parsedHours = parsePriceValue(editDraft.value.hoursInput);
+  if (parsedHours <= 0) {
+    addToast({ type: 'error', message: 'Hours must be greater than 0.' });
+    return;
+  }
   isSaving.value = true;
   try {
     await mutateCoopLabor({
@@ -1155,7 +1717,8 @@ const submitEditDrawer = async () => {
       member: activeEntry.value.member,
       partner: activeEntry.value.partner,
       category: editDraft.value.category,
-      hours: Number(editDraft.value.hours),
+      functionTag: editDraft.value.functionTag,
+      hours: parsedHours,
       deliverableRef: editDraft.value.deliverableRef.trim() || undefined,
       notes: editDraft.value.notes.trim(),
       expectedVersion: origMonth ? versionsByMonth.value[origMonth] : undefined,
@@ -1164,7 +1727,298 @@ const submitEditDrawer = async () => {
     await refreshServerLaborLedger();
     addToast({ type: 'success', message: 'Saved updated labor entry.' });
   } catch (err: any) {
-    addToast({ type: 'error', message: err?.message || 'Failed to update labor entry.' });
+    addToast({ type: 'error', message: toUserMessage(err, 'Failed to update labor entry.') });
+  } finally {
+    isSaving.value = false;
+  }
+};
+
+// Task Board Handlers (Single Hoisted SlideOverDrawer)
+const openProposeCustomDrawer = () => {
+  customTaskDraft.value = {
+    title: '',
+    functionTag: 'enabler',
+    category: 'Booth Restock',
+    pointsInput: '2.0',
+    description: '',
+  };
+  drawerMode.value = 'proposeCustomTask';
+  drawerOpen.value = true;
+};
+
+const submitProposeCustomDrawer = async () => {
+  const pts = clampTaskPoints(parsePriceValue(customTaskDraft.value.pointsInput), 1.5);
+  isSaving.value = true;
+  try {
+    const res = await mutateCoopTasksBoard({
+      mode: 'propose_custom',
+      title: customTaskDraft.value.title.trim(),
+      description: customTaskDraft.value.description.trim() || undefined,
+      functionTag: customTaskDraft.value.functionTag,
+      category: customTaskDraft.value.category,
+      proposedPoints: pts,
+      expectedVersion: taskBoardVersion.value,
+    });
+    drawerOpen.value = false;
+    await refreshTasksBoard();
+    addToast({
+      type: 'success',
+      message:
+        res.task?.status === 'open'
+          ? `Opened "${res.task.title}" (${res.task.points.toFixed(2)} pts).`
+          : `Started 48h point vote for "${customTaskDraft.value.title.trim()}".`,
+    });
+  } catch (err: any) {
+    addToast({ type: 'error', message: toUserMessage(err, 'Could not post custom task.') });
+  } finally {
+    isSaving.value = false;
+  }
+};
+
+const openEditPresetsDrawer = () => {
+  presetDrafts.value = taskPresets.value.map((p) => ({
+    ...p,
+    pointsInput: String(p.basePoints),
+  }));
+  drawerMode.value = 'editPresets';
+  drawerOpen.value = true;
+};
+
+const resetPresetDraftsToDefaults = () => {
+  presetDrafts.value = DEFAULT_COOP_TASK_PRESETS.map((p) => ({
+    ...p,
+    pointsInput: String(p.basePoints),
+  }));
+};
+
+const submitEditPresetsDrawer = async () => {
+  const cleaned: CoopTaskPreset[] = presetDrafts.value.map((d) => ({
+    id: d.id,
+    title: d.title.trim(),
+    functionTag: d.functionTag,
+    category: FUNCTION_TAG_META[d.functionTag]?.defaultCategory || d.category,
+    basePoints: clampTaskPoints(parsePriceValue(d.pointsInput), d.basePoints),
+    description: d.description.trim(),
+    active: d.active,
+  }));
+  isSaving.value = true;
+  try {
+    await mutateCoopTasksBoard({
+      mode: 'save_presets',
+      presets: cleaned,
+      expectedVersion: taskBoardVersion.value,
+    });
+    drawerOpen.value = false;
+    await refreshTasksBoard();
+    addToast({ type: 'success', message: '✅ Saved 12 Collective task presets.' });
+  } catch (err: any) {
+    addToast({ type: 'error', message: toUserMessage(err, 'Could not save task presets.') });
+  } finally {
+    isSaving.value = false;
+  }
+};
+
+const handlePostPresetTask = async (payload: {
+  presetId: string;
+  description?: string;
+  claimImmediately: boolean;
+}) => {
+  isSaving.value = true;
+  try {
+    const res = await mutateCoopTasksBoard({
+      mode: 'create_from_preset',
+      presetId: payload.presetId,
+      description: payload.description,
+      claimImmediately: payload.claimImmediately,
+      expectedVersion: taskBoardVersion.value,
+    });
+    await refreshTasksBoard();
+    addToast({
+      type: 'success',
+      message: payload.claimImmediately
+        ? `🏃 Claimed "${res.task?.title}" (${res.task?.points.toFixed(2)} pts).`
+        : `Posted "${res.task?.title}" to the Task Board.`,
+    });
+  } catch (err: any) {
+    addToast({ type: 'error', message: toUserMessage(err, 'Could not post preset task.') });
+  } finally {
+    isSaving.value = false;
+  }
+};
+
+const handleVoteTaskValue = async (payload: { taskId: string; points: number }) => {
+  isSaving.value = true;
+  try {
+    const res = await mutateCoopTasksBoard({
+      mode: 'vote_value',
+      taskId: payload.taskId,
+      points: payload.points,
+      expectedVersion: taskBoardVersion.value,
+    });
+    await refreshTasksBoard();
+    addToast({
+      type: 'success',
+      message:
+        res.task?.status === 'open'
+          ? `✅ Quorum reached — task opened at ${res.task.points.toFixed(2)} pts!`
+          : `Recorded your vote (${payload.points.toFixed(2)} pts).`,
+    });
+  } catch (err: any) {
+    addToast({ type: 'error', message: toUserMessage(err, 'Could not submit point vote.') });
+  } finally {
+    isSaving.value = false;
+  }
+};
+
+const handleFounderTiebreak = async (payload: {
+  taskId: string;
+  decision: 'decide' | 'restart';
+  points: number;
+}) => {
+  isSaving.value = true;
+  try {
+    await mutateCoopTasksBoard({
+      mode: 'founder_tiebreak',
+      taskId: payload.taskId,
+      decision: payload.decision,
+      points: payload.points,
+      expectedVersion: taskBoardVersion.value,
+    });
+    await refreshTasksBoard();
+    addToast({
+      type: 'success',
+      message:
+        payload.decision === 'decide'
+          ? `⚖️ Set task value to ${payload.points.toFixed(2)} pts & opened for claiming.`
+          : '🔄 Restarted fresh 48h point-value vote.',
+    });
+  } catch (err: any) {
+    addToast({ type: 'error', message: toUserMessage(err, 'Tiebreak action failed.') });
+  } finally {
+    isSaving.value = false;
+  }
+};
+
+const handleClaimTask = async (taskId: string) => {
+  isSaving.value = true;
+  try {
+    await mutateCoopTasksBoard({
+      mode: 'claim',
+      taskId,
+      expectedVersion: taskBoardVersion.value,
+    });
+    await refreshTasksBoard();
+    addToast({ type: 'success', message: '🏃 Task claimed!' });
+  } catch (err: any) {
+    addToast({ type: 'error', message: toUserMessage(err, 'Could not claim task.') });
+  } finally {
+    isSaving.value = false;
+  }
+};
+
+const handleUnclaimTask = async (taskId: string) => {
+  isSaving.value = true;
+  try {
+    await mutateCoopTasksBoard({
+      mode: 'unclaim',
+      taskId,
+      expectedVersion: taskBoardVersion.value,
+    });
+    await refreshTasksBoard();
+    addToast({ type: 'info', message: 'Released task back to Open.' });
+  } catch (err: any) {
+    addToast({ type: 'error', message: toUserMessage(err, 'Could not release task.') });
+  } finally {
+    isSaving.value = false;
+  }
+};
+
+const openCompleteTaskDrawer = (task: CoopTaskItem) => {
+  activeTaskForCompletion.value = task;
+  completeTaskDraft.value = {
+    completedDate: pacificTodayYmd(),
+    deliverableRef: '',
+    completionNotes: '',
+  };
+  drawerMode.value = 'completeTask';
+  drawerOpen.value = true;
+};
+
+const submitCompleteTaskDrawer = async () => {
+  if (!activeTaskForCompletion.value) return;
+  isSaving.value = true;
+  try {
+    await mutateCoopTasksBoard({
+      mode: 'submit_completion',
+      taskId: activeTaskForCompletion.value.id,
+      completedDate: completeTaskDraft.value.completedDate,
+      deliverableRef: completeTaskDraft.value.deliverableRef.trim() || undefined,
+      completionNotes: completeTaskDraft.value.completionNotes.trim(),
+      expectedVersion: taskBoardVersion.value,
+    });
+    drawerOpen.value = false;
+    await refreshTasksBoard();
+    addToast({
+      type: 'success',
+      message: '⏳ Submitted! Other Collective members can now sign off.',
+    });
+  } catch (err: any) {
+    addToast({ type: 'error', message: toUserMessage(err, 'Could not submit completion.') });
+  } finally {
+    isSaving.value = false;
+  }
+};
+
+const handleApproveTaskCompletion = async (taskId: string) => {
+  isSaving.value = true;
+  try {
+    const res = await mutateCoopTasksBoard({
+      mode: 'approve_completion',
+      taskId,
+      expectedVersion: taskBoardVersion.value,
+    });
+    await Promise.all([refreshTasksBoard(), refreshServerLaborLedger()]);
+    if (res.remainingApprovals === 0) {
+      addToast({
+        type: 'success',
+        message:
+          res.linkedLaborApproval === 'approved'
+            ? '✅ Task completed & recorded in the Official Labor Ledger (Approved)!'
+            : '✅ Peer sign-off complete — logged as Pending for Founder final stamp!',
+      });
+    } else {
+      addToast({
+        type: 'success',
+        message: `Signed off! ${res.remainingApprovals} more peer sign-off needed.`,
+      });
+    }
+  } catch (err: any) {
+    addToast({ type: 'error', message: toUserMessage(err, 'Could not sign off on task.') });
+  } finally {
+    isSaving.value = false;
+  }
+};
+
+const handleArchiveTask = async (taskId: string) => {
+  const ok = await askConfirm(
+    'Archive this task from the active Task Board?',
+    'Archive Task',
+    'Archive Task',
+    'Cancel',
+    'btn-warning'
+  );
+  if (!ok) return;
+  isSaving.value = true;
+  try {
+    await mutateCoopTasksBoard({
+      mode: 'archive_task',
+      taskId,
+      expectedVersion: taskBoardVersion.value,
+    });
+    await refreshTasksBoard();
+    addToast({ type: 'info', message: 'Archived task.' });
+  } catch (err: any) {
+    addToast({ type: 'error', message: toUserMessage(err, 'Could not archive task.') });
   } finally {
     isSaving.value = false;
   }
@@ -1221,12 +2075,14 @@ const exportCsv = () => {
     'Date',
     'Member',
     'Partner',
+    'FunctionTag',
     'Category',
     'WSDE_Role',
     'Hours',
     'Approval',
     'ApprovedBy',
     'ApprovedAt',
+    'OwnPrefixWarning',
     'DecisionNote',
     'DeliverableRef',
     'Notes',
@@ -1235,12 +2091,14 @@ const exportCsv = () => {
     l.date,
     `"${l.member.replace(/"/g, '""')}"`,
     l.partner,
+    resolveEntryFunctionTag(l),
     `"${l.category}"`,
     `"${classifySurplusLaborRole(l.category)}"`,
     l.hours,
     effectiveLaborApproval(l),
     `"${(l.approvedBy || '').replace(/"/g, '""')}"`,
     l.approvedAt || '',
+    l.ownBarcodeWarning ? 'YES' : '',
     `"${(l.decisionNote || '').replace(/"/g, '""')}"`,
     `"${(l.deliverableRef || '').replace(/"/g, '""')}"`,
     `"${l.notes.replace(/"/g, '""')}"`,
@@ -1267,22 +2125,37 @@ onMounted(async () => {
     policyConfig.value = state.policyConfig;
   }
 
-  await refreshServerLaborLedger();
+  await Promise.all([refreshServerLaborLedger(), refreshTasksBoard()]);
 
   if (typeof window !== 'undefined') {
     const params = new URLSearchParams(window.location.search);
+    const viewParam = params.get('view');
     const monthParam = params.get('month');
-    if (monthParam && /^\d{4}-(0[1-9]|1[0-2])$/.test(monthParam)) {
-      selectedMonth.value = monthParam;
-    }
     const statusParam = params.get('status');
-    if (statusParam === 'pending' || statusParam === 'approved' || statusParam === 'rejected') {
-      statusFilter.value = statusParam;
-    }
     const refParam = params.get('deliverableRef') || params.get('ref');
     const hrsParam = Number(params.get('hours'));
     const notesParam = params.get('notes');
     const partnerParam = (params.get('partner') || '').toUpperCase();
+
+    if (
+      viewParam === 'ledger' ||
+      monthParam ||
+      statusParam ||
+      refParam ||
+      hrsParam > 0 ||
+      notesParam
+    ) {
+      activeLaborView.value = 'ledger';
+    } else if (viewParam === 'tasks') {
+      activeLaborView.value = 'tasks';
+    }
+
+    if (monthParam && /^\d{4}-(0[1-9]|1[0-2])$/.test(monthParam)) {
+      selectedMonth.value = monthParam;
+    }
+    if (statusParam === 'pending' || statusParam === 'approved' || statusParam === 'rejected') {
+      statusFilter.value = statusParam;
+    }
     if (refParam) form.value.deliverableRef = refParam;
     if (hrsParam > 0) form.value.hours = hrsParam;
     if (notesParam) form.value.notes = notesParam;

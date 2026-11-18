@@ -183,6 +183,56 @@
       </table>
     </div>
 
+    <!-- Hat-Derived BCC Group Emails (Consignors Strictly Excluded §14A) -->
+    <div
+      v-if="hasAnyBccEmails"
+      class="rounded-xl bg-base-100 border border-base-300 p-3.5 space-y-2.5"
+    >
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+        <div>
+          <div class="text-xs font-black text-base-content flex items-center gap-1.5">
+            <Icon icon="solar:letter-bold-duotone" class="w-4 h-4 text-primary shrink-0" />
+            <span>Hat-Based Group Email (BCC)</span>
+          </div>
+          <p class="text-[11px] text-base-content/65">
+            Addresses stay private in BCC. Consignors are never included in collective group lists.
+          </p>
+        </div>
+
+        <div v-if="activeBccGroup && activeBccGroup.count > 0" class="flex items-center gap-2 flex-wrap shrink-0">
+          <a
+            :href="activeBccGroup.mailtoHref"
+            class="btn btn-xs h-11 md:h-8 btn-outline btn-primary rounded-lg font-black gap-1.5"
+          >
+            <span>✉️ Email {{ activeBccGroup.label }} ({{ activeBccGroup.count }})</span>
+          </a>
+          <button
+            type="button"
+            class="btn btn-xs h-11 md:h-8 btn-ghost border border-base-300 rounded-lg font-bold gap-1"
+            @click="copyActiveBccEmails"
+          >
+            <Icon icon="solar:copy-bold" class="w-3.5 h-3.5 text-primary shrink-0" />
+            <span>Copy BCC</span>
+          </button>
+        </div>
+      </div>
+
+      <div class="flex items-center gap-1.5 flex-wrap">
+        <button
+          v-for="grp in bccGroups"
+          :key="grp.id"
+          type="button"
+          class="btn btn-xs h-11 md:h-7 rounded-lg font-bold gap-1"
+          :class="selectedBccGroupId === grp.id ? 'btn-secondary text-secondary-content' : 'btn-ghost bg-base-200/60'"
+          :disabled="grp.count === 0"
+          @click="selectedBccGroupId = grp.id"
+        >
+          <span>{{ grp.icon }} {{ grp.label }}</span>
+          <span class="badge badge-2xs font-mono whitespace-nowrap shrink-0">{{ grp.count }}</span>
+        </button>
+      </div>
+    </div>
+
     <div class="text-[11px] text-base-content/65 flex items-center justify-between gap-2 flex-wrap">
       <span>
         <strong>Founder power:</strong> <code>owner</code> or <code>founder</code> (approves labor, locks/unlocks months).
@@ -211,6 +261,7 @@ import {
   type CoopMemberProfile,
   type MemberHat,
 } from '../../lib/coopGovernance';
+import { buildHatBccGroups, type BccGroupKey } from '../../lib/coopTaskBoard';
 import { toUserMessage } from '../../lib/userFacingErrors';
 
 const props = defineProps<{
@@ -244,6 +295,38 @@ const loadingMemberships = ref(false);
 const savingMembershipId = ref('');
 const inviting = ref(false);
 const errorMessage = ref('');
+const selectedBccGroupId = ref<BccGroupKey>('all_voting');
+
+const bccGroups = computed(() =>
+  buildHatBccGroups(memberships.value, props.members)
+);
+
+const hasAnyBccEmails = computed(() =>
+  bccGroups.value.some((g) => g.count > 0)
+);
+
+const activeBccGroup = computed(
+  () =>
+    bccGroups.value.find((g) => g.id === selectedBccGroupId.value) ||
+    bccGroups.value[0]
+);
+
+async function copyActiveBccEmails() {
+  const grp = activeBccGroup.value;
+  if (!grp || grp.emails.length === 0) return;
+  try {
+    await navigator.clipboard.writeText(grp.emails.join(', '));
+    addToast({
+      type: 'success',
+      message: `Copied ${grp.count} ${grp.label} email(s) — paste into your email BCC field.`,
+    });
+  } catch {
+    addToast({
+      type: 'warning',
+      message: 'Could not copy automatically — click Email button to open your mail app.',
+    });
+  }
+}
 
 const inviteForm = ref<{
   name: string;

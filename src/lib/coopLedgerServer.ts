@@ -13,11 +13,28 @@ import {
   laborEntryMonthKey,
   normalizeLaborEntries,
   normalizePolicyConfig,
+  pacificTodayYmd,
   type CoopLaborCategory,
   type CoopLaborEntry,
   type CoopMemberProfile,
   type CoopPolicyConfig,
 } from './coopGovernance';
+import {
+  clampTaskPoints,
+  CUSTOM_TASK_VOTE_WINDOW_MS,
+  deterministicTaskLaborId,
+  detectOwnBarcodeWarning,
+  evaluateTaskValueVote,
+  normalizeFunctionTag,
+  normalizeTaskPresets,
+  pruneTasksBoardForStorage,
+  refreshTaskStatusesAt,
+  resolvePeerApprovalPolicy,
+  type CoopLaborFunctionTag,
+  type CoopTaskItem,
+  type CoopTaskPeerApproval,
+  type CoopTaskPreset,
+} from './coopTaskBoard';
 import type {
   CoopAppwriteRole,
   CoopMeIdentity,
@@ -27,6 +44,7 @@ import type {
 
 export const COOP_LEDGER_COL_ID = 'coop_ledger';
 export const COOP_LABOR_INDEX_DOC_ID = 'coop_labor_months_index';
+export const COOP_TASKS_BOARD_DOC_ID = 'coop_tasks_board';
 const MANIFESTS_COL_ID = 'manifests';
 
 export const COOP_VIEW_AND_LOG_ROLES: readonly CoopAppwriteRole[] = [
@@ -41,6 +59,12 @@ export const COOP_VIEW_AND_LOG_ROLES: readonly CoopAppwriteRole[] = [
 export const COOP_FOUNDER_ROLES: readonly CoopAppwriteRole[] = [
   'owner',
   'founder',
+] as const;
+
+export const COOP_PRESET_EDIT_ROLES: readonly CoopAppwriteRole[] = [
+  'owner',
+  'founder',
+  'builder',
 ] as const;
 
 export const COOP_CMS_PUBLISH_ROLES: readonly CoopAppwriteRole[] = [
@@ -210,6 +234,7 @@ export async function loadGovernancePolicyOnServer(
 export interface VerifiedCoopCaller extends CoopMeIdentity {
   rosterMembers: CoopMemberProfile[];
   linkedMember?: CoopMemberProfile;
+  confirmedVotingMemberCount: number;
 }
 
 /**
@@ -255,6 +280,13 @@ export async function resolveVerifiedCoopCaller(
     (m.roles || []).some(
       (r: string) =>
         r.toLowerCase() === 'owner' || r.toLowerCase() === 'founder'
+    )
+  ).length;
+  const rawConfirmedVotingCount = allConfirmed.filter((m: any) =>
+    (m.roles || []).some((r: string) =>
+      COOP_VIEW_AND_LOG_ROLES.includes(
+        String(r || '').trim().toLowerCase() as CoopAppwriteRole
+      )
     )
   ).length;
 
@@ -310,6 +342,7 @@ export async function resolveVerifiedCoopCaller(
     linkedPartner: linkedMember?.partner,
     rosterMembers,
     linkedMember,
+    confirmedVotingMemberCount: Math.max(1, rawConfirmedVotingCount),
   };
 }
 
@@ -664,6 +697,7 @@ function validateAndSanitizeLaborInput(body: any): {
   member: string;
   partner: 'HUCK' | 'PDXGL' | 'SWEAT';
   category: CoopLaborCategory;
+  functionTag: CoopLaborFunctionTag;
   hours: number;
   notes: string;
   deliverableRef?: string;
@@ -700,6 +734,8 @@ function validateAndSanitizeLaborInput(body: any): {
     );
   }
 
+  const functionTag = normalizeFunctionTag(body?.functionTag, categoryRaw);
+
   const member = String(body?.member || '').trim().slice(0, 120);
   if (!member) {
     throw new CoopHttpError(400, 'Worker-member name is required.', 'INVALID_MEMBER');
@@ -715,6 +751,7 @@ function validateAndSanitizeLaborInput(body: any): {
     member,
     partner,
     category: categoryRaw,
+    functionTag,
     hours,
     notes,
     deliverableRef: deliverableRefRaw || undefined,
@@ -1199,6 +1236,18 @@ export async function handleCoopLaborPost(request: Request): Promise<Response> {
         const selfFlag =
           autoApprove && isSelfTarget && caller.soleFounder ? true : undefined;
 
+        const workerRoster = caller.rosterMembers.find(
+          (m) => m.name.trim().toLowerCase() === canonicalMember.trim().toLowerCase()
+        );
+        const workerPrefix =
+          workerRoster?.inventoryPrefix ||
+          caller.linkedMember?.inventoryPrefix ||
+          (canonicalPartner !== 'SWEAT' ? `${canonicalPartner}-` : undefined);
+        const ownBarcodeCheck = detectOwnBarcodeWarning(
+          [clean.notes, clean.deliverableRef],
+          workerPrefix
+        );
+
         const newEntry: CoopLaborEntry = {
           id: `labor-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
           date: clean.date,
@@ -1206,7 +1255,9 @@ export async function handleCoopLaborPost(request: Request): Promise<Response> {
           memberUserId,
           partner: canonicalPartner,
           category: clean.category,
+          functionTag: clean.functionTag,
           hours: clean.hours,
+          ownBarcodeWarning: ownBarcodeCheck.warning || undefined,
           notes: clean.notes,
           deliverableRef: clean.deliverableRef,
           approval: autoApprove ? 'approved' : 'pending',
@@ -1374,13 +1425,26 @@ export async function handleCoopLaborPost(request: Request): Promise<Response> {
         const shouldResetApproval =
           target.approval === 'approved' && coreChanged;
 
+        const editWorkerRoster = caller.rosterMembers.find(
+          (m) => m.name.trim().toLowerCase() === clean.member.trim().toLowerCase()
+        );
+        const editPrefix =
+          editWorkerRoster?.inventoryPrefix ||
+          (clean.partner !== 'SWEAT' ? `${clean.partner}-` : undefined);
+        const editBarcodeCheck = detectOwnBarcodeWarning(
+          [clean.notes, clean.deliverableRef],
+          editPrefix
+        );
+
         const updatedEntry: CoopLaborEntry = {
           ...target,
           date: clean.date,
           member: clean.member,
           partner: clean.partner,
           category: clean.category,
+          functionTag: clean.functionTag,
           hours: clean.hours,
+          ownBarcodeWarning: editBarcodeCheck.warning || undefined,
           notes: clean.notes,
           deliverableRef: clean.deliverableRef,
           approval: shouldResetApproval ? 'pending' : target.approval || 'pending',
@@ -1722,6 +1786,931 @@ export async function handleCoopMonthLockPost(request: Request): Promise<Respons
     }
 
     throw new CoopHttpError(400, `Unsupported month-lock mode "${mode}".`, 'INVALID_MODE');
+  } catch (err) {
+    return errorResponse(err);
+  }
+}
+
+// ============================================================================
+// Co-op Task Board & Presets (`coop_tasks_board` in server-only `coop_ledger`)
+// ============================================================================
+
+export interface TasksBoardPayload {
+  presets: CoopTaskPreset[];
+  tasks: CoopTaskItem[];
+}
+
+export interface CoopTasksPendingBadges {
+  votesNeededForMe: number;
+  peerSignoffsForMe: number;
+  tiebreaksForFounder: number;
+  pendingLaborForFounder: number;
+  totalActionable: number;
+}
+
+export async function readTasksBoardDoc(ctx: CoopServerContext): Promise<{
+  exists: boolean;
+  version: number;
+  presets: CoopTaskPreset[];
+  tasks: CoopTaskItem[];
+}> {
+  try {
+    const doc: any = await ctx.databases.getDocument(
+      ctx.dbId,
+      ctx.ledgerColId,
+      COOP_TASKS_BOARD_DOC_ID
+    );
+    let parsed: Partial<TasksBoardPayload> = {};
+    if (typeof doc.payloadJson === 'string' && doc.payloadJson.trim().startsWith('{')) {
+      parsed = JSON.parse(doc.payloadJson);
+    }
+    return {
+      exists: true,
+      version: Number(doc.version || 1),
+      presets: normalizeTaskPresets(parsed.presets),
+      tasks: Array.isArray(parsed.tasks) ? parsed.tasks : [],
+    };
+  } catch (err: any) {
+    if (err?.code === 404) {
+      return {
+        exists: false,
+        version: 0,
+        presets: normalizeTaskPresets([]),
+        tasks: [],
+      };
+    }
+    throw err;
+  }
+}
+
+export async function writeTasksBoardDoc(
+  ctx: CoopServerContext,
+  presets: CoopTaskPreset[],
+  tasks: CoopTaskItem[],
+  caller: VerifiedCoopCaller,
+  expectedVersion?: number
+): Promise<number> {
+  const current = await readTasksBoardDoc(ctx);
+  if (
+    expectedVersion !== undefined &&
+    current.exists &&
+    current.version !== expectedVersion
+  ) {
+    throw new CoopHttpError(
+      409,
+      'The Task Board was just updated by another member — please refresh and try again.',
+      'VERSION_CONFLICT'
+    );
+  }
+
+  const nextVersion = current.version + 1;
+  const nowIso = new Date().toISOString();
+  const prunedTasks = pruneTasksBoardForStorage(tasks);
+  const payloadJson = JSON.stringify({
+    presets: normalizeTaskPresets(presets),
+    tasks: prunedTasks,
+  });
+
+  if (payloadJson.length > 495000) {
+    throw new CoopHttpError(
+      413,
+      'Task Board storage limit reached — archive older tasks and try again.',
+      'PAYLOAD_TOO_LARGE'
+    );
+  }
+
+  const docData = {
+    kind: 'tasks_board',
+    monthKey: 'ALL',
+    status: 'active',
+    version: nextVersion,
+    payloadJson,
+    updatedBy: `${caller.name} (${caller.userId})`.slice(0, 128),
+    updatedAt: nowIso,
+  };
+
+  if (current.exists) {
+    await ctx.databases.updateDocument(
+      ctx.dbId,
+      ctx.ledgerColId,
+      COOP_TASKS_BOARD_DOC_ID,
+      docData
+    );
+  } else {
+    await ctx.databases.createDocument(
+      ctx.dbId,
+      ctx.ledgerColId,
+      COOP_TASKS_BOARD_DOC_ID,
+      docData,
+      []
+    );
+  }
+
+  return nextVersion;
+}
+
+function computeTasksPendingBadges(
+  tasks: readonly CoopTaskItem[],
+  caller: VerifiedCoopCaller,
+  pendingLaborForFounder: number
+): CoopTasksPendingBadges {
+  const policy = resolvePeerApprovalPolicy(
+    caller.confirmedVotingMemberCount,
+    caller.soleFounder
+  );
+
+  let votesNeededForMe = 0;
+  let peerSignoffsForMe = 0;
+  let tiebreaksForFounder = 0;
+
+  for (const t of tasks || []) {
+    if (t.status === 'voting_value') {
+      const hasVoted = (t.valueVotes || []).some((v) => v.userId === caller.userId);
+      if (!hasVoted) votesNeededForMe += 1;
+    } else if (t.status === 'tiebreak_needed') {
+      if (caller.isFounder) tiebreaksForFounder += 1;
+    } else if (t.status === 'pending_approval') {
+      const alreadySigned = (t.peerApprovals || []).some(
+        (a) => a.userId === caller.userId
+      );
+      const isSelf = t.completedByUserId === caller.userId;
+      if (!alreadySigned && (!isSelf || policy.allowSoleFounderSelf)) {
+        peerSignoffsForMe += 1;
+      }
+    }
+  }
+
+  const founderLaborCount = caller.isFounder ? pendingLaborForFounder : 0;
+  return {
+    votesNeededForMe,
+    peerSignoffsForMe,
+    tiebreaksForFounder,
+    pendingLaborForFounder: founderLaborCount,
+    totalActionable:
+      votesNeededForMe + peerSignoffsForMe + tiebreaksForFounder + founderLaborCount,
+  };
+}
+
+function resolveCallerWorkerProfile(caller: VerifiedCoopCaller): {
+  memberName: string;
+  partner: 'HUCK' | 'PDXGL' | 'SWEAT';
+  prefix?: string;
+} {
+  if (caller.linkedMember) {
+    const partner = inferPartnerFromMemberName(
+      caller.linkedMember.name,
+      caller.linkedMember.partner
+    );
+    return {
+      memberName: caller.linkedMember.name,
+      partner,
+      prefix:
+        caller.linkedMember.inventoryPrefix ||
+        (partner !== 'SWEAT' ? `${partner}-` : undefined),
+    };
+  }
+
+  const byName = caller.rosterMembers.find(
+    (m) => m.name.trim().toLowerCase() === caller.name.trim().toLowerCase()
+  );
+  if (byName) {
+    const partner = inferPartnerFromMemberName(byName.name, byName.partner);
+    return {
+      memberName: byName.name,
+      partner,
+      prefix:
+        byName.inventoryPrefix || (partner !== 'SWEAT' ? `${partner}-` : undefined),
+    };
+  }
+
+  return {
+    memberName: caller.name,
+    partner: inferPartnerFromMemberName(caller.name),
+    prefix: 'HUCK-',
+  };
+}
+
+export async function handleCoopTasksGet(request: Request): Promise<Response> {
+  try {
+    const ctx = getCoopServerContext();
+    const caller = await requireCoopRole(request, ctx, COOP_VIEW_AND_LOG_ROLES);
+    const nowIso = new Date().toISOString();
+
+    const board = await readTasksBoardDoc(ctx);
+    const refreshed = refreshTaskStatusesAt(board.tasks, nowIso);
+
+    let pendingLaborForFounder = 0;
+    if (caller.isFounder) {
+      const curMonth = currentPacificMonthKey();
+      const curLabor = await readMonthlyLaborDoc(ctx, curMonth);
+      pendingLaborForFounder = curLabor.entries.filter(
+        (e) =>
+          !isDemoSeedLaborEntry(e) &&
+          isValidLaborEntryData(e) &&
+          effectiveLaborApproval(e) === 'pending'
+      ).length;
+    }
+
+    const peerPolicy = resolvePeerApprovalPolicy(
+      caller.confirmedVotingMemberCount,
+      caller.soleFounder
+    );
+    const pendingBadges = computeTasksPendingBadges(
+      refreshed.tasks,
+      caller,
+      pendingLaborForFounder
+    );
+
+    return jsonResponse({
+      presets: board.presets,
+      tasks: refreshed.tasks,
+      version: board.version,
+      eligibleVoterCount: caller.confirmedVotingMemberCount,
+      requiredPeerApprovals: peerPolicy.requiredCount,
+      allowSoleFounderSelf: peerPolicy.allowSoleFounderSelf,
+      canEditPresets: caller.roles.some((r) => COOP_PRESET_EDIT_ROLES.includes(r)),
+      pendingBadges,
+    });
+  } catch (err) {
+    return errorResponse(err);
+  }
+}
+
+export async function handleCoopTasksPost(request: Request): Promise<Response> {
+  try {
+    const ctx = getCoopServerContext();
+    let body: any = {};
+    try {
+      body = await request.json();
+    } catch {
+      throw new CoopHttpError(400, 'Invalid JSON request body.', 'INVALID_JSON');
+    }
+
+    const mode = String(body?.mode || '').trim();
+    const nowIso = new Date().toISOString();
+    const expectedVersion =
+      body?.expectedVersion !== undefined ? Number(body.expectedVersion) : undefined;
+
+    if (mode === 'save_presets') {
+      const editor = await requireCoopRole(request, ctx, COOP_PRESET_EDIT_ROLES);
+      const board = await readTasksBoardDoc(ctx);
+      const refreshed = refreshTaskStatusesAt(board.tasks, nowIso);
+      const nextPresets = normalizeTaskPresets(body?.presets);
+      const version = await writeTasksBoardDoc(
+        ctx,
+        nextPresets,
+        refreshed.tasks,
+        editor,
+        expectedVersion
+      );
+      return jsonResponse({
+        ok: true,
+        version,
+        presets: nextPresets,
+        tasks: refreshed.tasks,
+      });
+    }
+
+    if (mode === 'founder_tiebreak') {
+      const founder = await requireCoopFounder(request, ctx);
+      const board = await readTasksBoardDoc(ctx);
+      const refreshed = refreshTaskStatusesAt(board.tasks, nowIso);
+      const taskId = String(body?.taskId || '').trim();
+      const idx = refreshed.tasks.findIndex((t) => t.id === taskId);
+      if (idx < 0) {
+        throw new CoopHttpError(404, 'Task not found on the board.', 'NOT_FOUND');
+      }
+      const target = refreshed.tasks[idx];
+      if (target.status !== 'tiebreak_needed' && target.status !== 'voting_value') {
+        throw new CoopHttpError(
+          409,
+          'This task has already cleared value voting.',
+          'INVALID_STATE'
+        );
+      }
+
+      const decision = String(body?.decision || '').trim();
+      const nextPoints = clampTaskPoints(body?.points, target.proposedPoints);
+      let updated: CoopTaskItem;
+
+      if (decision === 'decide') {
+        updated = {
+          ...target,
+          points: nextPoints,
+          proposedPoints: nextPoints,
+          status: 'open',
+          tiebreakResolvedBy: founder.name,
+          updatedAt: nowIso,
+        };
+      } else if (decision === 'restart') {
+        const closesAt = new Date(
+          Date.now() + CUSTOM_TASK_VOTE_WINDOW_MS
+        ).toISOString();
+        updated = {
+          ...target,
+          points: nextPoints,
+          proposedPoints: nextPoints,
+          status: 'voting_value',
+          snapshotEligibleVoters: Math.max(1, founder.confirmedVotingMemberCount),
+          votingOpensAt: nowIso,
+          votingClosesAt: closesAt,
+          valueVotes: [],
+          tiebreakReason: undefined,
+          tiebreakResolvedBy: undefined,
+          updatedAt: nowIso,
+        };
+      } else {
+        throw new CoopHttpError(
+          400,
+          'Founder tiebreak decision must be "decide" or "restart".',
+          'INVALID_DECISION'
+        );
+      }
+
+      const nextTasks = refreshed.tasks.map((t, i) => (i === idx ? updated : t));
+      const version = await writeTasksBoardDoc(
+        ctx,
+        board.presets,
+        nextTasks,
+        founder,
+        expectedVersion
+      );
+      return jsonResponse({ ok: true, version, task: updated, tasks: nextTasks });
+    }
+
+    const caller = await requireCoopRole(request, ctx, COOP_VIEW_AND_LOG_ROLES);
+    const board = await readTasksBoardDoc(ctx);
+    const refreshed = refreshTaskStatusesAt(board.tasks, nowIso);
+
+    if (mode === 'create_from_preset') {
+      const presetId = String(body?.presetId || '').trim();
+      const preset = board.presets.find((p) => p.id === presetId && p.active);
+      if (!preset) {
+        throw new CoopHttpError(
+          404,
+          'Selected task preset was not found or is inactive.',
+          'PRESET_NOT_FOUND'
+        );
+      }
+      const claimImmediately = body?.claimImmediately === true;
+      const customNote = String(body?.description || preset.description)
+        .trim()
+        .slice(0, 600);
+      const customTitle =
+        String(body?.title || preset.title).trim().slice(0, 140) || preset.title;
+      const worker = resolveCallerWorkerProfile(caller);
+      const barcodeCheck = detectOwnBarcodeWarning(
+        [customTitle, customNote],
+        worker.prefix
+      );
+
+      const newTask: CoopTaskItem = {
+        id: `task-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+        presetId: preset.id,
+        isCustom: false,
+        title: customTitle,
+        description: customNote,
+        functionTag: preset.functionTag,
+        category: preset.category,
+        points: clampTaskPoints(preset.basePoints),
+        proposedPoints: clampTaskPoints(preset.basePoints),
+        status: claimImmediately ? 'claimed' : 'open',
+        createdByUserId: caller.userId,
+        createdByName: caller.name,
+        createdAt: nowIso,
+        updatedAt: nowIso,
+        snapshotEligibleVoters: caller.confirmedVotingMemberCount,
+        valueVotes: [],
+        claimedByUserId: claimImmediately ? caller.userId : undefined,
+        claimedByName: claimImmediately ? worker.memberName : undefined,
+        claimedPartner: claimImmediately ? worker.partner : undefined,
+        claimedPrefix: claimImmediately ? worker.prefix : undefined,
+        claimedAt: claimImmediately ? nowIso : undefined,
+        ownBarcodeWarning: barcodeCheck.warning || undefined,
+        ownBarcodeMatchedTokens: barcodeCheck.warning
+          ? barcodeCheck.matchedTokens
+          : undefined,
+        peerApprovals: [],
+      };
+
+      const nextTasks = [newTask, ...refreshed.tasks];
+      const version = await writeTasksBoardDoc(
+        ctx,
+        board.presets,
+        nextTasks,
+        caller,
+        expectedVersion
+      );
+      return jsonResponse({ ok: true, version, task: newTask, tasks: nextTasks });
+    }
+
+    if (mode === 'propose_custom') {
+      const title = String(body?.title || '').trim().slice(0, 140);
+      if (title.length < 3) {
+        throw new CoopHttpError(
+          400,
+          'Custom task title must be at least 3 characters.',
+          'INVALID_TITLE'
+        );
+      }
+      const description = String(body?.description || '').trim().slice(0, 600);
+      const categoryRaw = String(
+        body?.category || 'Booth Restock'
+      ).trim() as CoopLaborCategory;
+      const category: CoopLaborCategory = COOP_LABOR_CATEGORIES.includes(categoryRaw)
+        ? categoryRaw
+        : 'Booth Restock';
+      const functionTag = normalizeFunctionTag(body?.functionTag, category);
+      const proposedPoints = clampTaskPoints(body?.proposedPoints, 1.5);
+      const snapshotEligible = Math.max(1, caller.confirmedVotingMemberCount);
+      const closesAt = new Date(
+        Date.now() + CUSTOM_TASK_VOTE_WINDOW_MS
+      ).toISOString();
+
+      const worker = resolveCallerWorkerProfile(caller);
+      const barcodeCheck = detectOwnBarcodeWarning(
+        [title, description],
+        worker.prefix
+      );
+
+      const initialVote = {
+        userId: caller.userId,
+        name: caller.name,
+        points: proposedPoints,
+        at: nowIso,
+      };
+      const evalRes = evaluateTaskValueVote(
+        {
+          proposedPoints,
+          snapshotEligibleVoters: snapshotEligible,
+          votingClosesAt: closesAt,
+          valueVotes: [initialVote],
+        },
+        nowIso
+      );
+
+      const newTask: CoopTaskItem = {
+        id: `task-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+        isCustom: true,
+        title,
+        description,
+        functionTag,
+        category,
+        points: evalRes.resolvedPoints,
+        proposedPoints,
+        status: evalRes.nextStatus,
+        createdByUserId: caller.userId,
+        createdByName: caller.name,
+        createdAt: nowIso,
+        updatedAt: nowIso,
+        snapshotEligibleVoters: snapshotEligible,
+        votingOpensAt: nowIso,
+        votingClosesAt: closesAt,
+        valueVotes: [initialVote],
+        ownBarcodeWarning: barcodeCheck.warning || undefined,
+        ownBarcodeMatchedTokens: barcodeCheck.warning
+          ? barcodeCheck.matchedTokens
+          : undefined,
+        peerApprovals: [],
+      };
+
+      const nextTasks = [newTask, ...refreshed.tasks];
+      const version = await writeTasksBoardDoc(
+        ctx,
+        board.presets,
+        nextTasks,
+        caller,
+        expectedVersion
+      );
+      return jsonResponse({ ok: true, version, task: newTask, tasks: nextTasks });
+    }
+
+    const taskId = String(body?.taskId || '').trim();
+    const taskIdx = refreshed.tasks.findIndex((t) => t.id === taskId);
+    if (taskIdx < 0) {
+      throw new CoopHttpError(404, 'Task not found on the board.', 'NOT_FOUND');
+    }
+    const target = refreshed.tasks[taskIdx];
+
+    if (mode === 'vote_value') {
+      if (target.status !== 'voting_value') {
+        throw new CoopHttpError(
+          409,
+          'Point-value voting is closed for this task.',
+          'VOTING_CLOSED'
+        );
+      }
+      const votedPoints = clampTaskPoints(body?.points, target.proposedPoints);
+      const otherVotes = (target.valueVotes || []).filter(
+        (v) => v.userId !== caller.userId
+      );
+      const nextVotes = [
+        ...otherVotes,
+        {
+          userId: caller.userId,
+          name: caller.name,
+          points: votedPoints,
+          at: nowIso,
+        },
+      ];
+      const evalRes = evaluateTaskValueVote(
+        {
+          proposedPoints: target.proposedPoints,
+          snapshotEligibleVoters: target.snapshotEligibleVoters,
+          votingClosesAt: target.votingClosesAt,
+          valueVotes: nextVotes,
+        },
+        nowIso
+      );
+
+      const updated: CoopTaskItem = {
+        ...target,
+        valueVotes: nextVotes,
+        status: evalRes.nextStatus,
+        points:
+          evalRes.nextStatus === 'open' ? evalRes.resolvedPoints : target.points,
+        tiebreakReason: evalRes.tiebreakReason,
+        updatedAt: nowIso,
+      };
+      const nextTasks = refreshed.tasks.map((t, i) => (i === taskIdx ? updated : t));
+      const version = await writeTasksBoardDoc(
+        ctx,
+        board.presets,
+        nextTasks,
+        caller,
+        expectedVersion
+      );
+      return jsonResponse({ ok: true, version, task: updated, tasks: nextTasks });
+    }
+
+    if (mode === 'claim') {
+      if (target.status !== 'open') {
+        throw new CoopHttpError(
+          409,
+          'Only open tasks can be claimed.',
+          'NOT_OPEN'
+        );
+      }
+      const worker = resolveCallerWorkerProfile(caller);
+      const barcodeCheck = detectOwnBarcodeWarning(
+        [target.title, target.description],
+        worker.prefix
+      );
+      const updated: CoopTaskItem = {
+        ...target,
+        status: 'claimed',
+        claimedByUserId: caller.userId,
+        claimedByName: worker.memberName,
+        claimedPartner: worker.partner,
+        claimedPrefix: worker.prefix,
+        claimedAt: nowIso,
+        ownBarcodeWarning:
+          barcodeCheck.warning || target.ownBarcodeWarning || undefined,
+        ownBarcodeMatchedTokens: barcodeCheck.warning
+          ? barcodeCheck.matchedTokens
+          : target.ownBarcodeMatchedTokens,
+        updatedAt: nowIso,
+      };
+      const nextTasks = refreshed.tasks.map((t, i) => (i === taskIdx ? updated : t));
+      const version = await writeTasksBoardDoc(
+        ctx,
+        board.presets,
+        nextTasks,
+        caller,
+        expectedVersion
+      );
+      return jsonResponse({ ok: true, version, task: updated, tasks: nextTasks });
+    }
+
+    if (mode === 'unclaim') {
+      if (target.status !== 'claimed') {
+        throw new CoopHttpError(409, 'Task is not currently claimed.', 'NOT_CLAIMED');
+      }
+      if (target.claimedByUserId !== caller.userId && !caller.isFounder) {
+        throw new CoopHttpError(
+          403,
+          'Only the member who claimed this task (or a Founder) can release it.',
+          'FORBIDDEN'
+        );
+      }
+      const updated: CoopTaskItem = {
+        ...target,
+        status: 'open',
+        claimedByUserId: undefined,
+        claimedByName: undefined,
+        claimedPartner: undefined,
+        claimedPrefix: undefined,
+        claimedAt: undefined,
+        updatedAt: nowIso,
+      };
+      const nextTasks = refreshed.tasks.map((t, i) => (i === taskIdx ? updated : t));
+      const version = await writeTasksBoardDoc(
+        ctx,
+        board.presets,
+        nextTasks,
+        caller,
+        expectedVersion
+      );
+      return jsonResponse({ ok: true, version, task: updated, tasks: nextTasks });
+    }
+
+    if (mode === 'submit_completion') {
+      if (target.status !== 'open' && target.status !== 'claimed') {
+        throw new CoopHttpError(
+          409,
+          'Only open or claimed tasks can be submitted for peer sign-off.',
+          'INVALID_STATE'
+        );
+      }
+      if (
+        target.status === 'claimed' &&
+        target.claimedByUserId &&
+        target.claimedByUserId !== caller.userId &&
+        !caller.isFounder
+      ) {
+        throw new CoopHttpError(
+          403,
+          `This task is currently claimed by ${target.claimedByName || 'another member'}.`,
+          'CLAIMED_BY_OTHER'
+        );
+      }
+
+      if (!caller.isFounder && !caller.linkedMember) {
+        throw new CoopHttpError(
+          403,
+          'Ask a Founder to assign your Barcode Prefix in /coop/governance (Roster) before logging task completions.',
+          'ACCOUNT_NOT_LINKED'
+        );
+      }
+
+      const completedDate = String(body?.completedDate || pacificTodayYmd()).trim();
+      if (!/^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/.test(completedDate)) {
+        throw new CoopHttpError(
+          400,
+          'Completion date must be a valid YYYY-MM-DD calendar date.',
+          'INVALID_DATE'
+        );
+      }
+      const completedMonthKey = laborEntryMonthKey(completedDate);
+      if (!completedMonthKey) {
+        throw new CoopHttpError(400, 'Invalid completion date month.', 'INVALID_DATE');
+      }
+
+      // Check month-lock BEFORE moving into pending_approval (Audit Blocker #3)
+      await assertMonthUnlocked(ctx, completedMonthKey);
+
+      const worker = resolveCallerWorkerProfile(caller);
+      const deliverableRef =
+        String(body?.deliverableRef || '').trim().slice(0, 500) || undefined;
+      const completionNotes = String(body?.completionNotes || '')
+        .trim()
+        .slice(0, 1500);
+
+      const barcodeCheck = detectOwnBarcodeWarning(
+        [target.title, target.description, completionNotes, deliverableRef],
+        worker.prefix
+      );
+
+      const updated: CoopTaskItem = {
+        ...target,
+        status: 'pending_approval',
+        completedByUserId: caller.userId,
+        completedByName: worker.memberName,
+        completedPartner: worker.partner,
+        claimedPrefix: worker.prefix,
+        completedDate,
+        deliverableRef,
+        completionNotes: completionNotes || `${target.title} completed`,
+        submittedAt: nowIso,
+        ownBarcodeWarning: barcodeCheck.warning || undefined,
+        ownBarcodeMatchedTokens: barcodeCheck.warning
+          ? barcodeCheck.matchedTokens
+          : undefined,
+        peerApprovals: [],
+        updatedAt: nowIso,
+      };
+
+      const nextTasks = refreshed.tasks.map((t, i) => (i === taskIdx ? updated : t));
+      const version = await writeTasksBoardDoc(
+        ctx,
+        board.presets,
+        nextTasks,
+        caller,
+        expectedVersion
+      );
+      return jsonResponse({ ok: true, version, task: updated, tasks: nextTasks });
+    }
+
+    if (mode === 'approve_completion') {
+      if (target.status !== 'pending_approval') {
+        throw new CoopHttpError(
+          409,
+          'This task is not awaiting peer sign-off.',
+          'INVALID_STATE'
+        );
+      }
+
+      const policy = resolvePeerApprovalPolicy(
+        caller.confirmedVotingMemberCount,
+        caller.soleFounder
+      );
+      const isSelf = target.completedByUserId === caller.userId;
+      if (isSelf && !policy.allowSoleFounderSelf) {
+        throw new CoopHttpError(
+          403,
+          'Self-approval blocked: another Collective member must sign off on your completed task.',
+          'SELF_APPROVAL_BLOCKED'
+        );
+      }
+
+      if ((target.peerApprovals || []).some((a) => a.userId === caller.userId)) {
+        throw new CoopHttpError(
+          409,
+          'You have already signed off on this task.',
+          'ALREADY_SIGNED_OFF'
+        );
+      }
+
+      const newSignoff: CoopTaskPeerApproval = {
+        userId: caller.userId,
+        name: caller.name,
+        isFounder: caller.isFounder || undefined,
+        at: nowIso,
+      };
+      const nextApprovals = [...(target.peerApprovals || []), newSignoff];
+
+      if (nextApprovals.length < policy.requiredCount) {
+        const updatedPending: CoopTaskItem = {
+          ...target,
+          peerApprovals: nextApprovals,
+          updatedAt: nowIso,
+        };
+        const nextTasks = refreshed.tasks.map((t, i) =>
+          i === taskIdx ? updatedPending : t
+        );
+        const version = await writeTasksBoardDoc(
+          ctx,
+          board.presets,
+          nextTasks,
+          caller,
+          expectedVersion
+        );
+        return jsonResponse({
+          ok: true,
+          version,
+          task: updatedPending,
+          tasks: nextTasks,
+          remainingApprovals: policy.requiredCount - nextApprovals.length,
+        });
+      }
+
+      // Final peer sign-off reached -> verify month lock & write Official Labor Ledger first (Audit Blockers #1-#3)
+      const completedDate = String(target.completedDate || '').trim();
+      const completedMonthKey = laborEntryMonthKey(completedDate);
+      if (!completedMonthKey) {
+        throw new CoopHttpError(
+          422,
+          'Task has an invalid completion date — please re-submit.',
+          'INVALID_DATE'
+        );
+      }
+      await assertMonthUnlocked(ctx, completedMonthKey);
+
+      const founderSigner = nextApprovals.find((a) => a.isFounder === true);
+      const hasFounderAuthority = Boolean(founderSigner);
+      const laborApprovalStatus: 'approved' | 'pending' = hasFounderAuthority
+        ? 'approved'
+        : 'pending';
+      const selfFlag = isSelf && policy.allowSoleFounderSelf ? true : undefined;
+
+      const detLaborId = deterministicTaskLaborId(target.id);
+      const laborDoc = await readMonthlyLaborDoc(ctx, completedMonthKey);
+      const alreadyLogged = laborDoc.entries.some((e) => e.id === detLaborId);
+
+      if (!alreadyLogged) {
+        const peerNames = nextApprovals.map((a) => a.name).join(', ');
+        const combinedNotes = [
+          `[Task Board: ${target.title}]`,
+          target.completionNotes || '',
+          `(Signed off by: ${peerNames})`,
+        ]
+          .filter(Boolean)
+          .join(' ')
+          .slice(0, 2000);
+
+        const hours = clampTaskPoints(target.points);
+        const laborEntry: CoopLaborEntry = {
+          id: detLaborId,
+          date: completedDate,
+          member: target.completedByName || 'Member',
+          memberUserId: target.completedByUserId,
+          partner: target.completedPartner || 'HUCK',
+          category: target.category,
+          functionTag: target.functionTag,
+          hours,
+          points: hours,
+          taskId: target.id,
+          ownBarcodeWarning: target.ownBarcodeWarning,
+          peerApprovals: nextApprovals,
+          notes: combinedNotes,
+          deliverableRef: target.deliverableRef,
+          approval: laborApprovalStatus,
+          approvedBy: founderSigner?.name,
+          approvedByUserId: founderSigner?.userId,
+          approvedAt: hasFounderAuthority ? nowIso : undefined,
+          selfApproved: selfFlag,
+          loggedByUserId: target.completedByUserId,
+          loggedByName: target.completedByName,
+          updatedAt: nowIso,
+        };
+
+        const nextLaborAudit: LaborAuditEvent[] = [
+          ...laborDoc.audit,
+          {
+            at: nowIso,
+            action: 'task_board_completion',
+            entryId: detLaborId,
+            byUserId: caller.userId,
+            byName: caller.name,
+            breakGlass: caller.isBreakGlassAdmin || undefined,
+            selfApproved: selfFlag,
+            note: `${hours}h (${laborApprovalStatus}) from task "${target.title}"`,
+          },
+        ];
+
+        await writeMonthlyLaborDoc(
+          ctx,
+          completedMonthKey,
+          [laborEntry, ...laborDoc.entries],
+          nextLaborAudit,
+          caller,
+          laborDoc.version
+        );
+      }
+
+      const completedTask: CoopTaskItem = {
+        ...target,
+        status: 'completed',
+        peerApprovals: nextApprovals,
+        selfApproved: selfFlag,
+        linkedLaborEntryId: detLaborId,
+        linkedLaborApproval: laborApprovalStatus,
+        updatedAt: nowIso,
+      };
+      const nextTasks = refreshed.tasks.map((t, i) =>
+        i === taskIdx ? completedTask : t
+      );
+      const version = await writeTasksBoardDoc(
+        ctx,
+        board.presets,
+        nextTasks,
+        caller,
+        expectedVersion
+      );
+
+      return jsonResponse({
+        ok: true,
+        version,
+        task: completedTask,
+        tasks: nextTasks,
+        remainingApprovals: 0,
+        linkedLaborEntryId: detLaborId,
+        linkedLaborApproval: laborApprovalStatus,
+      });
+    }
+
+    if (mode === 'archive_task') {
+      if (target.status === 'completed') {
+        throw new CoopHttpError(
+          409,
+          'Completed tasks are already archived into the Official Labor Ledger.',
+          'ALREADY_COMPLETED'
+        );
+      }
+      if (target.createdByUserId !== caller.userId && !caller.isFounder) {
+        throw new CoopHttpError(
+          403,
+          'Only the creator or a Founder can archive this task.',
+          'FORBIDDEN'
+        );
+      }
+      const updated: CoopTaskItem = {
+        ...target,
+        status: 'archived',
+        updatedAt: nowIso,
+      };
+      const nextTasks = refreshed.tasks.map((t, i) => (i === taskIdx ? updated : t));
+      const version = await writeTasksBoardDoc(
+        ctx,
+        board.presets,
+        nextTasks,
+        caller,
+        expectedVersion
+      );
+      return jsonResponse({ ok: true, version, task: updated, tasks: nextTasks });
+    }
+
+    throw new CoopHttpError(400, `Unsupported task board mode "${mode}".`, 'INVALID_MODE');
   } catch (err) {
     return errorResponse(err);
   }

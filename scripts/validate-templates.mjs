@@ -900,6 +900,18 @@ const transportContracts = [
         ],
     },
     {
+        file: 'src/pages/api/coop/tasks.ts',
+        mustContain: [
+            { pattern: /\brequireCoopRole\b/, label: 'requireCoopRole live Appwrite Team role verification' },
+            { pattern: /\brequireCoopFounder\b/, label: 'requireCoopFounder tiebreak gate' },
+            { pattern: /\brequireCoopMember\b/, label: 'requireCoopMember member gate' },
+            { pattern: /\bassertMonthUnlocked\b/, label: 'assertMonthUnlocked month-lock check before writes' },
+        ],
+        mustNotContain: [
+            { pattern: /\btenantId\b/, label: 'client-supplied tenantId in /api/coop/tasks (must use server COOP_TEAM_ID)' },
+        ],
+    },
+    {
         file: 'src/pages/api/coop/month-lock.ts',
         mustContain: [
             { pattern: /\brequireCoopRole\b/, label: 'requireCoopRole live Appwrite Team role verification' },

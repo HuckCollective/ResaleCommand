@@ -19,6 +19,12 @@
       >
         <Icon :icon="tab.icon" class="w-4 h-4 shrink-0" />
         <span class="truncate text-xs">{{ tab.label }}</span>
+        <span
+          v-if="badgeForTab(tab.id) > 0"
+          class="badge badge-2xs badge-warning text-warning-content font-mono font-black whitespace-nowrap shrink-0"
+        >
+          {{ badgeForTab(tab.id) }}
+        </span>
       </a>
     </div>
 
@@ -51,6 +57,7 @@
 import { ref, onMounted } from 'vue';
 import { Icon } from '@iconify/vue';
 import { useMemberCapabilities } from '../../lib/memberAccess';
+import { fetchCoopTasksBoard } from '../../lib/coopLedgerClient';
 import {
   loadCoopGovernanceState,
   DEFAULT_COOP_POLICY_CONFIG,
@@ -64,6 +71,14 @@ const props = defineProps<{
 const { capabilities } = useMemberCapabilities();
 const currentPath = ref('');
 const policy = ref<CoopPolicyConfig>({ ...DEFAULT_COOP_POLICY_CONFIG });
+const activeProposalsBadge = ref(0);
+const laborActionableBadge = ref(0);
+
+function badgeForTab(id: string): number {
+  if (id === 'governance') return activeProposalsBadge.value;
+  if (id === 'labor') return laborActionableBadge.value;
+  return 0;
+}
 
 const navTabs = [
   {
@@ -126,9 +141,20 @@ onMounted(async () => {
     currentPath.value = window.location.pathname;
   }
   if (!capabilities.value.canSeeCollectiveFinancials) return;
-  const { state } = await loadCoopGovernanceState([]);
+  const [{ state }, tasksRes] = await Promise.all([
+    loadCoopGovernanceState([]),
+    fetchCoopTasksBoard().catch(() => null),
+  ]);
   if (state.policyConfig) {
     policy.value = state.policyConfig;
+  }
+  if (Array.isArray(state.proposals)) {
+    activeProposalsBadge.value = state.proposals.filter(
+      (p) => p && p.status === 'active'
+    ).length;
+  }
+  if (tasksRes?.pendingBadges) {
+    laborActionableBadge.value = tasksRes.pendingBadges.totalActionable || 0;
   }
 });
 </script>

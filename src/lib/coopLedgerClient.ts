@@ -1,5 +1,10 @@
 import { account } from './appwrite';
 import type { CoopLaborCategory, CoopLaborEntry } from './coopGovernance';
+import type {
+  CoopLaborFunctionTag,
+  CoopTaskItem,
+  CoopTaskPreset,
+} from './coopTaskBoard';
 import type { CoopMeIdentity, CoopMonthLockSnapshot } from '../types/coop';
 
 export class CoopLedgerApiError extends Error {
@@ -87,6 +92,7 @@ export type CoopLaborMutationPayload =
       member: string;
       partner: 'HUCK' | 'PDXGL' | 'SWEAT';
       category: CoopLaborCategory;
+      functionTag?: CoopLaborFunctionTag;
       hours: number;
       notes?: string;
       deliverableRef?: string;
@@ -99,6 +105,7 @@ export type CoopLaborMutationPayload =
       member: string;
       partner: 'HUCK' | 'PDXGL' | 'SWEAT';
       category: CoopLaborCategory;
+      functionTag?: CoopLaborFunctionTag;
       hours: number;
       notes?: string;
       deliverableRef?: string;
@@ -201,4 +208,110 @@ export async function unlockCoopMonth(payload: {
     }),
   });
   return parseJsonResponse<{ ok: boolean; lock: CoopMonthLockSnapshot }>(res);
+}
+
+export interface CoopTasksBoardPendingBadges {
+  votesNeededForMe: number;
+  peerSignoffsForMe: number;
+  tiebreaksForFounder: number;
+  pendingLaborForFounder: number;
+  totalActionable: number;
+}
+
+export interface CoopTasksBoardResponse {
+  presets: CoopTaskPreset[];
+  tasks: CoopTaskItem[];
+  version: number;
+  eligibleVoterCount: number;
+  requiredPeerApprovals: number;
+  allowSoleFounderSelf: boolean;
+  canEditPresets: boolean;
+  pendingBadges: CoopTasksBoardPendingBadges;
+}
+
+export async function fetchCoopTasksBoard(): Promise<CoopTasksBoardResponse> {
+  const headers = await getCoopJwtHeaders();
+  const res = await fetch('/api/coop/tasks', {
+    method: 'GET',
+    headers,
+  });
+  return parseJsonResponse<CoopTasksBoardResponse>(res);
+}
+
+export type CoopTasksMutationPayload =
+  | {
+      mode: 'save_presets';
+      presets: CoopTaskPreset[];
+      expectedVersion?: number;
+    }
+  | {
+      mode: 'create_from_preset';
+      presetId: string;
+      title?: string;
+      description?: string;
+      claimImmediately?: boolean;
+      expectedVersion?: number;
+    }
+  | {
+      mode: 'propose_custom';
+      title: string;
+      description?: string;
+      functionTag: CoopLaborFunctionTag;
+      category: CoopLaborCategory;
+      proposedPoints: number;
+      expectedVersion?: number;
+    }
+  | {
+      mode: 'vote_value';
+      taskId: string;
+      points: number;
+      expectedVersion?: number;
+    }
+  | {
+      mode: 'founder_tiebreak';
+      taskId: string;
+      decision: 'decide' | 'restart';
+      points: number;
+      expectedVersion?: number;
+    }
+  | {
+      mode: 'claim' | 'unclaim' | 'archive_task';
+      taskId: string;
+      expectedVersion?: number;
+    }
+  | {
+      mode: 'submit_completion';
+      taskId: string;
+      completedDate: string;
+      deliverableRef?: string;
+      completionNotes?: string;
+      expectedVersion?: number;
+    }
+  | {
+      mode: 'approve_completion';
+      taskId: string;
+      expectedVersion?: number;
+    };
+
+export interface CoopTasksMutationResponse {
+  ok: boolean;
+  version: number;
+  presets?: CoopTaskPreset[];
+  task?: CoopTaskItem;
+  tasks?: CoopTaskItem[];
+  remainingApprovals?: number;
+  linkedLaborEntryId?: string;
+  linkedLaborApproval?: 'approved' | 'pending';
+}
+
+export async function mutateCoopTasksBoard(
+  payload: CoopTasksMutationPayload
+): Promise<CoopTasksMutationResponse> {
+  const headers = await getCoopJwtHeaders();
+  const res = await fetch('/api/coop/tasks', {
+    method: 'POST',
+    headers,
+    body: JSON.stringify(payload),
+  });
+  return parseJsonResponse<CoopTasksMutationResponse>(res);
 }

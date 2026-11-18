@@ -4,6 +4,12 @@ import { getDatabaseId } from './appwriteEnv';
 import { cleanEscapedCurrency } from './safeMarkdown';
 import { calendarMonthKeyFromDateString, pacificMonthKey } from './salesBucketing';
 import { mutateCoopLabor } from './coopLedgerClient';
+import {
+  isCoopLaborFunctionTag,
+  normalizeFunctionTag,
+  type CoopLaborFunctionTag,
+  type CoopTaskPeerApproval,
+} from './coopTaskBoard';
 import type { SweatSalesPoolMode } from '../types/coop';
 
 export type LoomioSignal = 'agree' | 'abstain' | 'disagree' | 'block';
@@ -376,7 +382,16 @@ export interface CoopLaborEntry {
   memberUserId?: string;
   partner: 'HUCK' | 'PDXGL' | 'SWEAT';
   category: CoopLaborCategory;
+  /** Per-entry function tag (`Promoter` / `Enabler` / `Builder` / `Shift`) */
+  functionTag?: CoopLaborFunctionTag;
   hours: number;
+  /** Task Board solidarity points when created from a task (`1 pt = 1.00h`) */
+  points?: number;
+  taskId?: string;
+  /** Anti-double-dip advisory flag when notes/proof mention the worker's own barcode prefix */
+  ownBarcodeWarning?: boolean;
+  /** Peer completion sign-offs recorded on Task Board completions */
+  peerApprovals?: CoopTaskPeerApproval[];
   notes: string;
   /** Optional proof link or deliverable reference (e.g. Dropcast ID, Instagram/TikTok Reel URL, Booth Photo batch) */
   deliverableRef?: string;
@@ -741,6 +756,21 @@ export function normalizeLaborEntries(raw?: any[]): CoopLaborEntry[] {
     const category: CoopLaborCategory = COOP_LABOR_CATEGORIES.includes(catCandidate)
       ? catCandidate
       : 'Booth Restock';
+    const functionTag: CoopLaborFunctionTag = isCoopLaborFunctionTag(entry?.functionTag)
+      ? entry.functionTag
+      : normalizeFunctionTag(entry?.functionTag, category);
+    const rawPoints = Number(entry?.points);
+    const points = Number.isFinite(rawPoints) && rawPoints > 0 ? Number(rawPoints.toFixed(2)) : undefined;
+    const peerApprovals: CoopTaskPeerApproval[] | undefined = Array.isArray(entry?.peerApprovals)
+      ? entry.peerApprovals
+          .filter((p: any) => p && p.userId)
+          .map((p: any) => ({
+            userId: String(p.userId).trim(),
+            name: String(p.name || 'Member').trim(),
+            isFounder: p.isFounder === true ? true : undefined,
+            at: String(p.at || '').trim(),
+          }))
+      : undefined;
 
     return {
       id: String(entry?.id || `labor-${idx + 1}`),
@@ -749,7 +779,12 @@ export function normalizeLaborEntries(raw?: any[]): CoopLaborEntry[] {
       memberUserId: entry?.memberUserId ? String(entry.memberUserId).trim() : undefined,
       partner: inferPartnerFromMemberName(member || 'Member', entry?.partner),
       category,
+      functionTag,
       hours,
+      points,
+      taskId: entry?.taskId ? String(entry.taskId).trim() : undefined,
+      ownBarcodeWarning: entry?.ownBarcodeWarning === true ? true : undefined,
+      peerApprovals,
       notes: String(entry?.notes || ''),
       deliverableRef: entry?.deliverableRef ? String(entry.deliverableRef).trim() : undefined,
       approval,
