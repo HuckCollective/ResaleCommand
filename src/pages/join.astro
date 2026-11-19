@@ -2,29 +2,76 @@
 import Layout from "../layouts/Layout.astro";
 ---
 
-<Layout title="Joining Team...">
+<Layout title="Joining Collective...">
   <div class="flex min-h-screen items-center justify-center bg-base-200 px-4 py-12 sm:px-6 lg:px-8">
     <div class="card w-full max-w-md bg-base-100 border border-base-300 shadow-2xl rounded-3xl">
       <div class="card-body p-6 sm:p-8 space-y-6 text-center">
-        <h1 class="text-2xl sm:text-3xl font-black tracking-tight text-base-content">Joining Team...</h1>
+        <h1 class="text-2xl sm:text-3xl font-black tracking-tight text-base-content">Joining the Collective</h1>
+
         <div id="join-loading" class="flex flex-col items-center justify-center gap-3 py-4">
           <div class="skeleton h-12 w-12 rounded-2xl"></div>
           <div class="skeleton h-4 w-48"></div>
+          <p class="text-xs text-base-content/65">Confirming your membership invitation…</p>
         </div>
+
         <div id="join-error" class="hidden space-y-4">
           <div id="join-error-text" class="alert alert-error text-xs sm:text-sm font-semibold"></div>
           <div class="flex flex-wrap items-center justify-center gap-2 pt-1">
-            <a href="/login" class="btn btn-primary btn-sm h-11 md:h-9 font-black text-primary-content rounded-xl">Sign In</a>
+            <a href="/login" class="btn btn-primary btn-sm h-11 md:h-9 font-black text-primary-content rounded-xl">Sign In / Set Password</a>
             <a href="/signup" class="btn btn-outline btn-sm h-11 md:h-9 font-bold rounded-xl">Request Fresh Invite</a>
           </div>
         </div>
-        <div id="join-success" class="text-success hidden space-y-2">
-          <p class="text-xl font-bold mb-2">Successfully joined <span id="join-team-name"></span>!</p>
-          <p class="text-sm text-base-content/75 mb-4">Managed by: <span id="join-owners"></span></p>
-          <p class="text-xs text-base-content/60 pt-2 border-t border-base-300">
+
+        <div id="join-success" class="hidden space-y-4 text-left">
+          <div class="text-center space-y-1">
+            <p class="text-xl font-black text-success">Welcome to <span id="join-team-name">The Huckleberry Collective</span>!</p>
+            <p class="text-xs text-base-content/75">Stewarded by: <span id="join-owners" class="font-semibold"></span></p>
+          </div>
+
+          <div id="join-password-box" class="hidden rounded-2xl bg-base-200/60 border border-base-300 p-4 space-y-3">
+            <div class="text-xs font-black text-base-content">Choose a Password for Future Sign-Ins</div>
+            <p class="text-[11px] text-base-content/70">Set a password now (at least 8 characters), then pick your unique Curator SKU prefix on your Profile.</p>
+            <div class="form-control">
+              <input
+                id="join-new-password"
+                type="password"
+                autocomplete="new-password"
+                minlength="8"
+                placeholder="New password (8+ characters)"
+                class="input input-bordered input-sm h-11 md:h-9 w-full rounded-xl"
+              />
+            </div>
+            <div class="form-control">
+              <input
+                id="join-confirm-password"
+                type="password"
+                autocomplete="new-password"
+                minlength="8"
+                placeholder="Confirm password"
+                class="input input-bordered input-sm h-11 md:h-9 w-full rounded-xl"
+              />
+            </div>
+            <div id="join-password-error" class="text-xs text-error font-bold hidden"></div>
+            <div class="flex flex-wrap items-center justify-between gap-2 pt-1">
+              <a href="/profile" class="btn btn-ghost btn-xs font-bold">Skip to Profile ➔</a>
+              <button
+                id="join-save-password"
+                type="button"
+                class="btn btn-primary btn-sm h-11 md:h-9 font-black text-primary-content rounded-xl"
+              >
+                Save Password &amp; Continue ➔
+              </button>
+            </div>
+          </div>
+
+          <div id="join-auto-redirect" class="text-center space-y-3">
+            <p class="text-xs text-base-content/70">Taking you to your Profile to pick your unique SKU prefix…</p>
+            <a href="/profile" class="btn btn-primary btn-sm h-11 md:h-9 font-black text-primary-content rounded-xl">Open My Profile ➔</a>
+          </div>
+
+          <p class="text-xs text-base-content/60 pt-2 border-t border-base-300 text-center">
             Operates under the <a href="/coop" target="_blank" class="text-primary font-bold underline">Huckleberry Collective Charter</a>
           </p>
-          <p class="text-xs text-base-content/70">Redirecting to dashboard...</p>
         </div>
       </div>
     </div>
@@ -32,6 +79,7 @@ import Layout from "../layouts/Layout.astro";
 </Layout>
 
 <script>
+  import { account, teams } from "../lib/appwrite";
   import { auth } from "../lib/auth";
   import { toUserMessage } from "../lib/userFacingErrors";
 
@@ -39,13 +87,15 @@ import Layout from "../layouts/Layout.astro";
   const errorEl = document.getElementById('join-error') as HTMLElement;
   const errorTextEl = document.getElementById('join-error-text') as HTMLElement;
   const successEl = document.getElementById('join-success') as HTMLElement;
+  const passwordBoxEl = document.getElementById('join-password-box') as HTMLElement;
+  const autoRedirectEl = document.getElementById('join-auto-redirect') as HTMLElement;
+  const pwInput = document.getElementById('join-new-password') as HTMLInputElement;
+  const pwConfirmInput = document.getElementById('join-confirm-password') as HTMLInputElement;
+  const pwErrorEl = document.getElementById('join-password-error') as HTMLElement;
+  const pwSaveBtn = document.getElementById('join-save-password') as HTMLButtonElement;
 
   function showError(message: string) {
-    if (errorTextEl) {
-      errorTextEl.textContent = message;
-    } else {
-      errorEl.textContent = message;
-    }
+    if (errorTextEl) errorTextEl.textContent = message;
     errorEl.classList.remove('hidden');
     loadingEl.classList.add('hidden');
   }
@@ -62,39 +112,69 @@ import Layout from "../layouts/Layout.astro";
       return;
     }
 
-    // Check if user is logged in
-    const currentUser = await auth.getCurrentUser();
-    if (!currentUser) {
-      // Redirect to login preserving the current URL
-      const redirectUrl = encodeURIComponent(window.location.href);
-      window.location.href = `/login?redirect=${redirectUrl}`;
-      return;
-    }
-
     try {
+      // Accept invite FIRST so email invitees are confirmed without hitting a /login redirect wall
       await auth.acceptInvite(teamId, membershipId, userId, secret);
 
-      // Fetch Team Details to Show User
-      const { teams } = await import('../lib/appwrite'); // Dynamic import to avoid top-level issues if any
-      const team = await teams.get(teamId);
-      (document.getElementById('join-team-name') as HTMLElement).textContent = team.name;
+      const [currentUser, team, members] = await Promise.all([
+        auth.getCurrentUser(),
+        teams.get(teamId).catch(() => null),
+        teams.listMemberships(teamId).catch(() => ({ memberships: [] })),
+      ]);
 
-      // Fetch Owners
-      const members = await teams.listMemberships(teamId);
-      const owners = members.memberships.filter((m: any) => m.roles.includes('owner'));
+      if (team?.name) {
+        (document.getElementById('join-team-name') as HTMLElement).textContent = team.name;
+      }
+      const owners = (members?.memberships || []).filter((m: any) => Array.isArray(m.roles) && m.roles.includes('owner'));
       (document.getElementById('join-owners') as HTMLElement).textContent = owners
-        .map((o: any) => o.userName || o.name || o.userEmail || o.email)
+        .map((o: any) => o.userName || o.userEmail || 'Steward')
         .join(', ');
 
       loadingEl.classList.add('hidden');
       successEl.classList.remove('hidden');
 
-      setTimeout(() => {
-        window.location.href = '/';
-      }, 3000);
+      const needsPassword = Boolean(currentUser && !currentUser.passwordUpdate);
+      if (needsPassword) {
+        passwordBoxEl.classList.remove('hidden');
+        autoRedirectEl.classList.add('hidden');
+
+        pwSaveBtn?.addEventListener('click', async () => {
+          pwErrorEl.classList.add('hidden');
+          const p1 = pwInput?.value || '';
+          const p2 = pwConfirmInput?.value || '';
+          if (p1.length < 8) {
+            pwErrorEl.textContent = 'Password must be at least 8 characters long.';
+            pwErrorEl.classList.remove('hidden');
+            return;
+          }
+          if (p1 !== p2) {
+            pwErrorEl.textContent = 'Passwords do not match.';
+            pwErrorEl.classList.remove('hidden');
+            return;
+          }
+          pwSaveBtn.disabled = true;
+          pwSaveBtn.textContent = 'Saving…';
+          try {
+            await account.updatePassword({ password: p1 });
+            window.location.href = '/profile';
+          } catch (pwErr: any) {
+            pwErrorEl.textContent = toUserMessage(
+              pwErr,
+              'Could not set password automatically — click Skip to Profile or use "Forgot / Set password?" on Sign In.'
+            );
+            pwErrorEl.classList.remove('hidden');
+            pwSaveBtn.disabled = false;
+            pwSaveBtn.textContent = 'Save Password & Continue ➔';
+          }
+        });
+      } else {
+        setTimeout(() => {
+          window.location.href = currentUser ? '/profile' : '/login';
+        }, 2000);
+      }
     } catch (err: any) {
       console.error(err);
-      showError(toUserMessage(err, 'Failed to join team. Your invitation link may have expired.'));
+      showError(toUserMessage(err, 'Failed to confirm invitation. Your invitation link may have expired — ask a Steward to click Activate or Resend.'));
     }
   }
 

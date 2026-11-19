@@ -159,7 +159,7 @@
               <div class="text-[11px] font-mono text-base-content/60">{{ m.userEmail || m.userId }}</div>
             </td>
 
-            <td class="space-y-1">
+            <td class="space-y-1.5">
               <div>
                 <span
                   class="badge badge-xs font-bold whitespace-nowrap"
@@ -167,6 +167,38 @@
                 >
                   {{ m.confirm ? '✅ Active' : '⏳ Pending Invite' }}
                 </span>
+              </div>
+              <div
+                v-if="!m.confirm && canManageLinks && !hasBuiltInOwner(m)"
+                class="flex items-center gap-1 flex-wrap"
+              >
+                <button
+                  type="button"
+                  class="btn btn-2xs h-8 md:h-6 min-h-0 px-2 btn-success btn-outline rounded-lg font-black"
+                  :disabled="pendingActionRowId === m.$id"
+                  title="Confirm this member as Active immediately without waiting for an email click"
+                  @click="runPendingMembershipAction(m, 'activate')"
+                >
+                  {{ pendingActionRowId === m.$id ? '…' : '✅ Activate' }}
+                </button>
+                <button
+                  type="button"
+                  class="btn btn-2xs h-8 md:h-6 min-h-0 px-2 btn-ghost border border-base-300 rounded-lg font-bold"
+                  :disabled="pendingActionRowId === m.$id"
+                  title="Re-send a working invitation email"
+                  @click="runPendingMembershipAction(m, 'resend')"
+                >
+                  📧 Resend
+                </button>
+                <button
+                  type="button"
+                  class="btn btn-2xs h-8 md:h-6 min-h-0 px-1.5 btn-ghost text-error rounded-lg font-bold"
+                  :disabled="pendingActionRowId === m.$id"
+                  title="Cancel pending invite"
+                  @click="confirmCancelPendingInvite(m)"
+                >
+                  ✕
+                </button>
               </div>
               <div class="text-[10px] font-bold text-base-content/60">
                 {{ hasCustomRole(m, 'consignor') && !hasCustomRole(m, 'curator') ? 'Statement Only' : '1 Member = 1 Vote' }}
@@ -391,6 +423,7 @@ import { ref, computed, onMounted, watch } from 'vue';
 import { Icon } from '@iconify/vue';
 import { teams } from '../../lib/appwrite';
 import { addToast } from '../../stores/toast';
+import { askConfirm } from '../../stores/confirm';
 import { useAuth } from '../../composables/useAuth';
 import { useMemberCapabilities } from '../../lib/memberAccess';
 import { useCoopFounderGate } from '../../composables/useCoopFounderGate';
@@ -445,6 +478,7 @@ const { coopIdentity, isOwner, isFounder, soleFounder, refreshCoopIdentity } =
 const memberships = ref<any[]>([]);
 const loadingMemberships = ref(false);
 const savingMembershipId = ref('');
+const pendingActionRowId = ref('');
 const lockingRowId = ref('');
 const editingPrefixRowId = ref('');
 const cleaningRoster = ref(false);
@@ -794,6 +828,78 @@ async function toggleCustomRole(membership: any, roleId: CustomRoleId) {
   }
 }
 
+async function confirmCancelPendingInvite(m: any) {
+  const label = m.userEmail || displayNameForMembership(m);
+  const ok = await askConfirm(
+    `Cancel pending invitation for ${label}? You can always invite them again later.`,
+    'Cancel Pending Invite',
+    'Cancel Invite',
+    'Keep Pending',
+    'btn-error'
+  );
+  if (!ok) return;
+  await runPendingMembershipAction(m, 'cancel');
+}
+
+async function runPendingMembershipAction(m: any, action: 'activate' | 'resend' | 'cancel') {
+  if (!canManageLinks.value) return;
+  pendingActionRowId.value = m.$id;
+  try {
+    const headers = await getCoopJwtHeaders();
+    const res = await fetch('/api/coop/membership-action', {
+      method: 'POST',
+      headers: { ...headers, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action,
+        membershipId: m.$id,
+        origin: typeof window !== 'undefined' ? window.location.origin : undefined,
+      }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(data?.error || 'Could not update pending invitation.');
+    }
+
+    if (action === 'cancel') {
+      memberships.value = memberships.value.filter((row) => row.$id !== m.$id);
+      addToast({
+        type: 'info',
+        message: `Cancelled pending invite for ${m.userEmail || displayNameForMembership(m)}.`,
+      });
+      return;
+    }
+
+    if (data?.membership) {
+      memberships.value = memberships.value.map((row) =>
+        row.$id === m.$id ? data.membership : row
+      );
+    }
+
+    if (action === 'activate') {
+      await refreshCoopIdentity(true);
+      await refreshCapabilities();
+      addToast({
+        type: 'success',
+        message: data?.hasPassword
+          ? `Activated ${displayNameForMembership(m)}! They are now Active in the Collective.`
+          : `Activated ${displayNameForMembership(m)}! Since they haven't chosen a password yet, have them click "Forgot / Set password?" on /login.`,
+      });
+    } else {
+      addToast({
+        type: 'success',
+        message: `Sent a fresh invitation email to ${m.userEmail || displayNameForMembership(m)}.`,
+      });
+    }
+  } catch (err: any) {
+    addToast({
+      type: 'error',
+      message: toUserMessage(err, 'Could not update pending invitation.'),
+    });
+  } finally {
+    pendingActionRowId.value = '';
+  }
+}
+
 async function handleInviteMember() {
   if (!isOwner.value || !resolvedTeamId.value) return;
   const email = inviteForm.value.email.trim().toLowerCase();
@@ -809,8 +915,8 @@ async function handleInviteMember() {
   try {
     const redirectUrl =
       typeof window !== 'undefined'
-        ? `${window.location.origin}/profile`
-        : 'https://works.thehc.llc/profile';
+        ? `${window.location.origin}/join`
+        : 'https://works.thehc.llc/join';
     const created = await teams.createMembership(
       resolvedTeamId.value,
       teamRoles,
