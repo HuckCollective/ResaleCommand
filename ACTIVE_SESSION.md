@@ -8,6 +8,8 @@
   - Fast-forwarded `origin/main` (`5cae49c..2be2a82`) from `alpha-1` so Waves 1–3 + Co-op Phases 1–3 are live in production (`works.thehc.llc` / `resalecmd.com`).
 - **Antigravity Live Plan Progress Guardrail (`AGENTS.md` §2)**:
   - Added Claude-reviewed 3-stage `task.md` live progress checkpoints (`Stage 1/3: Backend` ➔ `Stage 2/3: UI` ➔ `Stage 3/3: Verify & Push`, `UserFacing: true`, `RequestFeedback: false`) strictly for `4+` file plans while preserving `run_command` Sandbox Rule 3 (`toolSummary` consistency) and zero overhead on `1–3` file edits (`AGENTS.md` `< 20,000` bytes).
+- **5-Tier Dev AI Routing: `💠 Gemini 4 Neon` + `🎛️ Antigravity Orchestrator` (`src/lib/devAiRouting.ts`, `FounderVaultView.vue`, `founderVault.ts`, `generate-vault-prompt.ts`, `AGENTS.md`, `docs/AI_STUDIO_PLAYBOOK.md`)**:
+  - Added `💠 Gemini 4 Neon` (`gemini-4-neon`, `Low`/`Medium`/`High`/`XHigh`) as Tier 2 `fast_reasoner` (`$0`-pool Red-Team audits & fast logic checks) and promoted `🎛️ Orchestrator (Neon / Argon / Carbon)` as set-and-forget Antigravity IDE defaults while keeping World 1 (`src/lib/gemini.ts`) untouched.
 
 - **Next Up**:
   1. Optional quick smoke-check on `https://works.thehc.llc/coop/labor` and `https://works.thehc.llc/coop/governance?tab=roster` (Hat-Based BCC Group Email bar) now that `main` is live.

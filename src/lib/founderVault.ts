@@ -268,14 +268,14 @@ export const PLAYBOOK_PRESETS: PlaybookPresetItem[] = [
     icon: '💻',
     title: 'Coding IDE: Surgical Bug Fix & Feature',
     summary:
-      'Turns an AI Report, UI bug, or feature note into an IDE-independent surgical prompt (VS Code Cline, Antigravity, Cursor) with Gemini 4 model pick, Claude $0-pool swap, & 3-file lock.',
+      'Turns an AI Report, UI bug, or feature note into an IDE-independent surgical prompt (Antigravity Orchestrator, VS Code Cline, Cursor) with Gemini 4 / Neon model picks, Claude $0-pool swap, & 3-file lock.',
     destination: 'antigravity_ide',
     bundles: ['rc-1-scout-vision', 'rc-2-inventory-splitter'],
     defaultGoal:
-      'Turn this issue description into an IDE-independent surgical coding prompt (with Model Pick + Best Gemini $0-Pool Swap if on Claude, ALLOWED FILES max 3, FORBIDDEN ACTIONS, and alpha-1 verify + push) that fixes the bug or builds the feature cleanly.',
+      'Turn this issue description into an IDE-independent surgical coding prompt (with Orchestrator / Model Pick + Best Gemini $0-Pool Swap if on Claude, ALLOWED FILES max 3, FORBIDDEN ACTIONS, and alpha-1 verify + push) that fixes the bug or builds the feature cleanly.',
     masterPromptBody: [
       DEV_AI_IDE_PICKER_BADGE,
-      '💡 IF CLAUDE IS SELECTED: Best $0-pool Gemini alternative is Gemini 4 Argon (Medium) for 1–3 file UI edits, or Gemini 4 Carbon (High) for Plan Mode & tricky multi-store bugs.',
+      '💡 IF CLAUDE IS SELECTED: Best $0-pool Gemini alternative is Orchestrator (Neon / Argon / Carbon) in Antigravity, or Gemini 4 Neon (High) / 4 Argon (Med) / 4 Carbon (High) in standalone IDEs.',
       '',
       'TASK: Fix or enhance the following Resale Command workflow on branch `alpha-1`:',
       '- Issue / Feature Goal: [Describe what is not saving, displaying, or working as expected — e.g., preserve Quick Scout estimated value range cards on the tracked Inventory Item so the human curator can see and play with the price range in the Item Drawer].',
@@ -571,7 +571,7 @@ export function recommendVaultTemplateAndSurface(
         'This issue describes app behavior, UI state, or scan persistence that can be fixed directly in the repo on alpha-1 in any coding IDE (VS Code Cline, Antigravity, Cursor).',
       handoffSteps: [
         '1. Click "📋 Copy IDE Prompt" below.',
-        '2. Pick the recommended model tier: "Gemini 4 Argon (Med)" for standard 1–3 file edits, "Gemini 4 Carbon (Med/High)" for Plan Mode / tricky multi-file code, or "Gemini 4 Hydrogen" for recon/verify (💡 On Claude? Swap to 4 Carbon High or 4 Argon Med for $0-pool speed).',
+        '2. Pick your model: in Antigravity IDE park on "Orchestrator (Neon / Argon)" for daily work or "Orchestrator (Carbon)" for /plan; in standalone IDEs pick "Gemini 4 Neon (Med/High)" for fast reasoning/audits, "Gemini 4 Argon (Med)" for 1–3 file UI edits, "Gemini 4 Carbon (Med/High)" for deep architecture, or "Gemini 4 Hydrogen" for recon/verify ($0 Ultra pool).',
         `3. Paste into a fresh or compacted chat (/smol or /compact) — or switch Target Surface to "🧪 AI Studio" ("${aiStudioChatLabel}") to brainstorm UX options first.`,
       ],
       recommendedBundles,
@@ -628,7 +628,7 @@ export function recommendVaultTemplateAndSurface(
         'Formats your idea into a clean, mobile-scannable Product Spec with acceptance criteria and an ordered Antigravity IDE implementation queue.',
       handoffSteps: [
         '1. Review the generated Product Spec & Acceptance Criteria in the card.',
-        '2. Copy individual tasks from the IDE Task Queue at the bottom into Antigravity IDE (`Gemini 4 Argon (Medium)` or `Gemini 4 Carbon (Medium)`).',
+        '2. Copy individual tasks from the IDE Task Queue at the bottom into Antigravity IDE (`Orchestrator (Neon / Argon / Carbon)` — or standalone `Gemini 4 Neon / Argon / Carbon`).',
         '3. Mark the card "Vetted for Dev" or "Shipped in Git" once verified on alpha-1.',
       ],
       recommendedBundles,

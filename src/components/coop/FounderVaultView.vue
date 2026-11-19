@@ -24,7 +24,7 @@
             type="button"
             class="badge badge-outline font-mono text-xs cursor-pointer hover:border-primary transition-colors whitespace-nowrap shrink-0"
             :class="devRosterFreshness.isStale ? 'badge-warning' : ''"
-            :title="`4-Tier Model Guide (last reviewed ${devRosterFreshness.lastReviewed}) — click to view 4-tier guide`"
+            :title="`5-Tier & Auto-Orchestrator Model Guide (last reviewed ${devRosterFreshness.lastReviewed}) — click to view guide`"
             @click="showGuide = !showGuide"
           >
             🛠️ {{ DEV_AI_ROSTER_SUMMARY_PILL }} • {{ devRosterFreshness.isStale ? 'Review Picker' : devRosterFreshness.reviewMonthLabel }}
@@ -110,10 +110,13 @@
 
       <div class="p-3.5 rounded-xl bg-base-200/70 border border-base-300 space-y-2 text-xs">
         <div class="flex items-center justify-between gap-2 flex-wrap">
-          <div class="font-black text-base-content">🛠️ IDE-Independent 4-Tier Model Guide</div>
+          <div class="font-black text-base-content">🛠️ 5-Tier &amp; Auto-Orchestrator Model Guide</div>
           <span class="badge badge-ghost badge-xs font-mono whitespace-nowrap shrink-0">Reviewed {{ devRosterFreshness.lastReviewed }}</span>
         </div>
-        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 text-[11px]">
+        <div class="rounded-lg bg-primary/10 border border-primary/25 px-3 py-2 text-[11px] font-semibold text-base-content">
+          {{ DEV_AI_ORCHESTRATOR_CALLOUT }}
+        </div>
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2 text-[11px]">
           <div
             v-for="tier in DEV_AI_TIERS"
             :key="tier.id"
@@ -674,6 +677,7 @@ import {
 } from '../../lib/founderVault';
 import {
   DEV_AI_TIERS,
+  DEV_AI_ORCHESTRATOR_CALLOUT,
   DEV_AI_ROSTER_SUMMARY_PILL,
   getDevAiRosterFreshness,
 } from '../../lib/devAiRouting';

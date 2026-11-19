@@ -9,10 +9,15 @@
  * while root `AGENTS.md` supplies workspace rules and architecture laws automatically.
  */
 
-export const DEV_AI_ROSTER_LAST_REVIEWED = '2026-11-12';
+export const DEV_AI_ROSTER_LAST_REVIEWED = '2026-11-18';
 export const DEV_AI_REVIEW_INTERVAL_DAYS = 30;
 
-export type DevAiTierId = 'fast_scout' | 'daily_driver' | 'deep_architect' | 'outside_fallback';
+export type DevAiTierId =
+  | 'fast_scout'
+  | 'fast_reasoner'
+  | 'daily_driver'
+  | 'deep_architect'
+  | 'outside_fallback';
 
 export interface DevAiTierRule {
   id: DevAiTierId;
@@ -32,17 +37,23 @@ export const DEV_AI_HEADER_HYDROGEN =
 /** Backward-compatible alias for Tier 1 fast scout header */
 export const DEV_AI_HEADER_FLASH = DEV_AI_HEADER_HYDROGEN;
 
+export const DEV_AI_HEADER_NEON =
+  '💠 MODEL PICK: Gemini 4 Neon (Medium / High / XHigh) — Fast Analytical Reasoning, $0 Red-Team Audits & Snappy Logic/API Edits';
+
+export const DEV_AI_ORCHESTRATOR_CALLOUT =
+  '🎛️ Antigravity Auto-Shift: Park on Orchestrator (Neon / Argon) for daily work or Orchestrator (Carbon) for /plan — auto-pairs with 4 Hydrogen at $0 pool cost!';
+
 export const DEV_AI_HEADER_ARGON =
-  '🟢 MODEL PICK: Gemini 4 Argon (Medium) — Standard 1–3 File UI & Feature Coding (💡 If on Claude Sonnet: use 4 Argon Med for $0-pool speed)';
+  '🟢 MODEL PICK: Gemini 4 Argon (Medium) — Standard 1–3 File UI & Feature Coding (💡 If on Claude Sonnet: use 4 Argon Med or 4 Neon Med for $0-pool speed)';
 
 export const DEV_AI_HEADER_CARBON =
   '🔥 MODEL PICK: Gemini 4 Carbon (Medium / High) — Plan Mode Architecture & Tricky Multi-Store Code (💡 Best $0-pool alternative to Claude Sonnet Thinking)';
 
 export const DEV_AI_HEADER_CLAUDE =
-  '🟣 MODEL PICK: Claude Sonnet 5.5 (Medium — Rare Tie-Breaker) | 💡 BEST GEMINI $0-POOL ALT: Gemini 4 Carbon (High) — switch back to 4 Argon / 4 Hydrogen right after!';
+  '🟣 MODEL PICK: Claude Sonnet 5.5 (Medium — Rare Tie-Breaker) | 💡 BEST GEMINI $0-POOL ALT: 💠 Gemini 4 Neon (High / XHigh) or 🔥 Gemini 4 Carbon (High) — switch back to 🎛️ Orchestrator right after!';
 
 export const DEV_AI_CLAUDE_PLAN_AUDIT_HEADER =
-  '🟣 MODEL PICK: Claude Sonnet 5.5 (Medium — 1-Turn Deep Plan Red-Team Audit) | 💡 SWITCH BACK TO: 🔥 Gemini 4 Carbon (Medium) or 🟢 Gemini 4 Argon (Medium) ($0 Pool) BEFORE CLICKING PROCEED!';
+  '🟣 MODEL PICK: Claude Sonnet 5.5 (Medium — 1-Turn Deep Plan Red-Team Audit) | 💡 BEST $0-POOL SWAP: 💠 Gemini 4 Neon (High / XHigh) | SWITCH BACK TO: 🎛️ Orchestrator (Neon / Argon / Carbon) BEFORE CLICKING PROCEED!';
 
 export const DEV_AI_TIERS: readonly DevAiTierRule[] = [
   {
@@ -55,7 +66,20 @@ export const DEV_AI_TIERS: readonly DevAiTierRule[] = [
     pickerHeader: DEV_AI_HEADER_HYDROGEN,
     whenToUse:
       'Fastest Gemini 4 coding scout (1M context): file recon, ACTIVE_SESSION.md & skill syncs, copy tweaks, npm run verify & git push (~8x lighter quota; succeeds 3.8 Flash).',
-    geminiAlternative: 'Already $0-pool fastest tier (fallback: Gemini 3.8 Flash if picker not refreshed).',
+    geminiAlternative: 'Already $0-pool fastest tier (auto-runs under Orchestrator modes).',
+    quotaPool: 'google_ai_ultra',
+  },
+  {
+    id: 'fast_reasoner',
+    icon: '💠',
+    shortLabel: '4 Neon Med/High',
+    pickerModel: 'Gemini 4 Neon',
+    modelCode: 'gemini-4-neon',
+    thinkingLevels: 'Low / Medium / High / XHigh',
+    pickerHeader: DEV_AI_HEADER_NEON,
+    whenToUse:
+      'High-efficiency reasoner (near-Carbon reasoning at Flash speed): $0-pool 1-Turn Plan/UX Red-Team audits (High/XHigh), logic/math checks, and fast multi-step code (Antigravity: Orchestrator (Neon)).',
+    geminiAlternative: 'Best $0-pool fast alternative to Claude Sonnet Thinking for read-only audits & logic checks.',
     quotaPool: 'google_ai_ultra',
   },
   {
@@ -67,8 +91,8 @@ export const DEV_AI_TIERS: readonly DevAiTierRule[] = [
     thinkingLevels: 'Medium',
     pickerHeader: DEV_AI_HEADER_ARGON,
     whenToUse:
-      'Everyday Act-mode coding builder: 1–3 file Vue 3.5 / DaisyUI v5 components, CSS polish, and clear feature/API refactors.',
-    geminiAlternative: 'If Claude Sonnet is selected -> swap to Gemini 4 Argon (Medium) for 0% Partner credit draw.',
+      'Everyday Act-mode coding builder: 1–3 file Vue 3.5 / DaisyUI v5 components, CSS polish, and clear feature/API refactors (Antigravity: Orchestrator (Argon)).',
+    geminiAlternative: 'If Claude Sonnet is selected -> swap to Orchestrator (Neon/Argon) or 4 Argon (Med) for $0 pool.',
     quotaPool: 'google_ai_ultra',
   },
   {
@@ -80,8 +104,8 @@ export const DEV_AI_TIERS: readonly DevAiTierRule[] = [
     thinkingLevels: 'Medium / High',
     pickerHeader: DEV_AI_HEADER_CARBON,
     whenToUse:
-      'Plan-mode frontier architect & code surgeon: multi-store/API sync adapters, complex state, and tricky bug surgery BEFORE touching Claude.',
-    geminiAlternative: 'If Claude Sonnet / Opus is selected -> use Gemini 4 Carbon (High) first at $0 Partner cost.',
+      'Plan-mode frontier architect & code surgeon: multi-store/API sync adapters, complex state, and tricky bug surgery BEFORE touching Claude (Antigravity: Orchestrator (Carbon)).',
+    geminiAlternative: 'If Claude Sonnet / Opus is selected -> use Orchestrator (Carbon) or 4 Carbon (High) at $0 Partner cost.',
     quotaPool: 'google_ai_ultra',
   },
   {
@@ -94,25 +118,28 @@ export const DEV_AI_TIERS: readonly DevAiTierRule[] = [
     pickerHeader: DEV_AI_HEADER_CLAUDE,
     whenToUse:
       'Optional 1-Turn Deep Plan Red-Team Audit (money/payout math, POS/sales sync, Appwrite schema/migrations, or 4+ file plans) OR rare outside bug tie-breaker after /smol or /compact (never Opus 5.5; keep 100% of recon & code writing on $0 Gemini 4).',
-    geminiAlternative: '💡 Best Gemini $0-Pool Swap: Gemini 4 Carbon (High) for deep plans/bugs, or 4 Argon (Med) for UI edits.',
+    geminiAlternative: '💡 Best Gemini $0-Pool Swap: 💠 4 Neon (High/XHigh) for audits/logic, 🔥 4 Carbon (High) for deep plans, or 🟢 4 Argon (Med) for UI.',
     quotaPool: 'partner_credits',
   },
 ] as const;
 
-export const DEV_AI_ROSTER_SUMMARY_PILL = '⚡ 4 Hydrogen • 🟢 4 Argon • 🔥 4 Carbon';
+export const DEV_AI_ROSTER_SUMMARY_PILL =
+  '🎛️ Orchestrator • ⚡ 4 Hydrogen • 💠 4 Neon • 🟢 4 Argon • 🔥 4 Carbon';
 
 export const DEV_AI_IDE_PICKER_BADGE =
-  '🟢 MODEL PICK: Gemini 4 Argon (Med) • 🔥 4 Carbon (Med/High) for Plan & tricky code • ⚡ 4 Hydrogen for Recon/Push (💡 On Claude? Swap to 4 Carbon High / 4 Argon Med for $0 pool)';
+  '🎛️ ANTIGRAVITY: Orchestrator (Neon / Argon / Carbon) | 🛠️ OTHER IDES: 💠 4 Neon (Med/High) • 🟢 4 Argon (Med) • 🔥 4 Carbon (Med/High) • ⚡ 4 Hydrogen (Recon/Push) — $0 Ultra Pool';
 
-export const DEV_AI_CHROME_SIDEBAR_BADGE = '🌐 CHROME GEMINI SIDEBAR (Gemini 4 Hydrogen / 4 Argon / 4 Carbon)';
+export const DEV_AI_CHROME_SIDEBAR_BADGE =
+  '🌐 CHROME GEMINI SIDEBAR (Gemini 4 Hydrogen / 4 Neon / 4 Argon / 4 Carbon)';
 
-export const DEV_AI_STUDIO_MODELS_LABEL = 'Gemini 4 Carbon / 4 Argon / 4 Hydrogen';
+export const DEV_AI_STUDIO_MODELS_LABEL =
+  'Gemini 4 Carbon / 4 Neon / 4 Argon / 4 Hydrogen';
 
 export const DEV_AI_ADHD_FOOTER =
-  '🔔 **ADHD MODEL & /compact CHECK:** ⚡ **4 Hydrogen** (recon/push) • 🟢 **4 Argon Med** (fast UI/edits) • 🔥 **4 Carbon Med/High** (/plan & tricky code — best `$0` swap for Claude!) • 🟣 **Claude Sonnet 5.5** (last resort) — **/compact** every ~8 turns!';
+  '🔔 **ADHD MODEL & /compact CHECK:** 🎛️ **Orchestrator (Neon/Argon/Carbon)** (Antigravity set-and-forget!) • ⚡ **Hydrogen** / 💠 **Neon** / 🟢 **Argon** / 🔥 **Carbon** ($0 Ultra) • 🟣 **Sonnet 5.5** (1-turn audit) — **/compact** every ~8 turns!';
 
 export const DEV_AI_CLINE_ADHD_FOOTER =
-  '🔔 **ADHD CLINE CHECK (VS Code):** 🧭 **Plan = 4 Carbon** (architect) • 🟢 **Act = 4 Argon Med** (1–3 file edits) • ⚡ **4 Hydrogen** (recon/verify/push) • 💡 **On Claude? Swap to 4 Carbon High ($0 pool)** — **/smol** every ~8 turns!';
+  '🔔 **ADHD CLINE CHECK (VS Code):** 🧭 **Plan = 4 Carbon** (architect) • 💠 **Audit/Logic = 4 Neon High** • 🟢 **Act = 4 Argon Med** (1–3 file edits) • ⚡ **4 Hydrogen** (recon/verify/push) — **/smol** every ~8 turns!';
 
 export interface DevAiRosterFreshness {
   lastReviewed: string;
