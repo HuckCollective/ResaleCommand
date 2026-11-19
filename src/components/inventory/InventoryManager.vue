@@ -257,7 +257,17 @@
 
             <div v-if="filteredInventory.length === 0 && !loading && !error" class="text-center py-12 bg-base-200 rounded-xl border-dashed border-2 border-base-300">
                 <p class="text-lg opacity-60 mb-4">No items in inventory matching your filters.</p>
-                <button class="btn btn-sm btn-outline" @click="clearAllFilters">Clear Filters</button>
+                <div class="flex flex-wrap items-center justify-center gap-2">
+                    <button
+                        v-if="filterUpcPrefix === '__mine__' && inventoryItems.length > 0"
+                        type="button"
+                        class="btn btn-sm btn-primary"
+                        @click="filterUpcPrefix = 'all'"
+                    >
+                        🌐 Browse All Collective ({{ inventoryItems.length }})
+                    </button>
+                    <button class="btn btn-sm btn-outline" @click="clearAllFilters">Clear Filters</button>
+                </div>
             </div>
             
             <div v-else>
@@ -1115,7 +1125,8 @@ const {
     orgPlacedLocations,
     knownPrefixes: knownTeamPrefixes,
     ownedPrefixes: computed(() => capabilities.value.ownedPrefixes || []),
-    currentUserId: computed(() => user.value?.$id || '')
+    currentUserId: computed(() => user.value?.$id || ''),
+    defaultToMine: computed(() => !capabilities.value.isConsignor)
 });
 
 watch(currentTeam, (n) => { 

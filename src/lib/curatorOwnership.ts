@@ -118,8 +118,8 @@ export function normalizeUpcPrefix(raw?: string | null): string {
     .toUpperCase();
   if (!clean) return '';
 
-  // Reject Ricochet booth location SKUs, pure numbers, and raw 16-32 char hex document IDs
-  if (/^0EJ/i.test(clean)) return '';
+  // Reject Ricochet booth location SKUs (0EJ or letter-O OEJ typo), pure numbers, and raw 16-32 char hex document IDs
+  if (/^[0O]EJ/i.test(clean)) return '';
   if (/^\d+$/.test(clean)) return '';
   if (/^[0-9A-F]{16,}$/.test(clean)) return '';
   if (isDraftPlaceholderUpc(clean)) return '';

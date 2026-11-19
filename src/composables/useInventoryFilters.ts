@@ -59,6 +59,7 @@ export interface UseInventoryFiltersOptions {
     knownPrefixes?: Ref<string[]>;
     ownedPrefixes?: Ref<string[]>;
     currentUserId?: Ref<string>;
+    defaultToMine?: Ref<boolean>;
     defaultPageSize?: number;
 }
 
@@ -81,7 +82,15 @@ export function useInventoryFilters(
     const hideDeconstructed = ref(true); // Excludes split/deconstructed parent lots
     const filterPlacedLocated = ref(false); // Only placed items with a storage location
     const filterInsight = ref(''); // 'ready_to_list' | 'missing_photos' | 'missing_pricing' | 'missing_cost' | 'missing_sold_price' | 'missing_description'
-    const filterBarcode = ref('all'); // 'all' | '__missing__' | '__numeric__' | '__has_barcode__' | '0EJ' | string prefix
+    const getDefaultBarcodeScope = () => (options.defaultToMine?.value ? '__mine__' : 'all');
+    const filterBarcode = ref<string>(getDefaultBarcodeScope()); // '__mine__' | 'all' | '__missing__' | '__numeric__' | '__has_barcode__' | string prefix
+    if (options.defaultToMine) {
+        watch(options.defaultToMine, (shouldMine) => {
+            if (!shouldMine && filterBarcode.value === '__mine__') {
+                filterBarcode.value = 'all';
+            }
+        });
+    }
     const filterSmartQueue = ref<SmartQueueId | ''>(''); // '' | 'md_restock' | 'dt_restock' | 'booth_bins' | 'has_booth_sku' | 'missing_booth_sku'
     const filterLotType = ref('all'); // 'all' | 'lots_only' | 'extracted_only' | 'standalone_only'
     const filterKeywords = ref<string[]>([]);
@@ -645,7 +654,18 @@ export function useInventoryFilters(
             if (bc && bc !== 'all') {
                 const code = (anyItem.upc || anyItem.locationSku || anyItem.sku || '').trim().toUpperCase();
                 if (bc === '__mine__') {
-                    if (!matchesMySkuFilter(anyItem, options.ownedPrefixes?.value || [], options.currentUserId?.value || '')) {
+                    const hasOwnerIdentity = Boolean(
+                        options.currentUserId?.value ||
+                        (options.ownedPrefixes?.value && options.ownedPrefixes.value.length > 0)
+                    );
+                    if (
+                        hasOwnerIdentity &&
+                        !matchesMySkuFilter(
+                            anyItem,
+                            options.ownedPrefixes?.value || [],
+                            options.currentUserId?.value || ''
+                        )
+                    ) {
                         return false;
                     }
                 } else if (bc === '__missing__') {
@@ -808,13 +828,15 @@ export function useInventoryFilters(
             });
         }
 
-        // Barcode chip
+        // Barcode chip (omit when on default Mine scope so toolbar stays calm)
         if (filterBarcode.value === '__mine__') {
-            chips.push({
-                id: 'barcode',
-                label: 'My SKU',
-                onRemove: () => { filterBarcode.value = 'all'; }
-            });
+            if (!options.defaultToMine?.value) {
+                chips.push({
+                    id: 'barcode',
+                    label: 'My SKU',
+                    onRemove: () => { filterBarcode.value = 'all'; }
+                });
+            }
         } else if (filterBarcode.value === '__missing__') {
             chips.push({
                 id: 'barcode-missing',
@@ -973,7 +995,8 @@ export function useInventoryFilters(
         if (!hideTracked.value && filterStatus.value !== 'tracked') c++;
         if (!hideCombined.value && filterStatus.value !== 'combined') c++;
         if (!hideDeconstructed.value && filterStatus.value !== 'deconstructed') c++;
-        if (filterBarcode.value && filterBarcode.value !== 'all') c++;
+        const defaultBc = getDefaultBarcodeScope();
+        if (filterBarcode.value && filterBarcode.value !== 'all' && filterBarcode.value !== defaultBc) c++;
         if (filterSmartQueue.value) c++;
         if (filterLocation.value && filterLocation.value !== 'all') c++;
         if (filterChannel.value && filterChannel.value !== 'all') c++;
@@ -994,7 +1017,7 @@ export function useInventoryFilters(
         filterLocation.value = 'all';
         filterChannel.value = 'all';
         filterInsight.value = '';
-        filterBarcode.value = 'all';
+        filterBarcode.value = getDefaultBarcodeScope();
         filterSmartQueue.value = '';
         filterLotType.value = 'all';
         filterPlacedLocated.value = false;
@@ -1048,7 +1071,24 @@ export function useInventoryFilters(
             filterSO.value = p.get('saleId') || '';
         }
         if (p.has('upcPrefix') || p.has('barcode')) {
-            filterBarcode.value = p.get('upcPrefix') || p.get('barcode') || '';
+            filterBarcode.value = p.get('upcPrefix') || p.get('barcode') || 'all';
+        } else if (
+            p.get('scope') === 'all' ||
+            p.has('search') ||
+            p.has('q') ||
+            p.has('upc') ||
+            p.has('purchaseId') ||
+            p.has('orderId') ||
+            p.has('po') ||
+            p.has('parentLotId') ||
+            p.has('lot') ||
+            p.has('lotId') ||
+            p.has('so') ||
+            p.has('saleId') ||
+            p.has('queue') ||
+            p.has('smartQueue')
+        ) {
+            filterBarcode.value = 'all';
         }
         if (p.has('status')) {
             filterStatus.value = p.get('status') || 'active';

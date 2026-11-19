@@ -65,7 +65,7 @@
               :class="ownerScope === 'mine' ? 'btn-primary text-primary-content' : 'btn-ghost bg-base-200/70 text-base-content/80'"
               @click="ownerScope = 'mine'; currentPage = 1"
             >
-              My Purchases
+              My Purchases ({{ myPurchasesCount }})
             </button>
             <button
               type="button"
@@ -73,7 +73,7 @@
               :class="ownerScope === 'all' ? 'btn-neutral text-neutral-content' : 'btn-ghost bg-base-200/70 text-base-content/75'"
               @click="ownerScope = 'all'; currentPage = 1"
             >
-              All Collective
+              All Collective ({{ acquiredPurchases.length }})
             </button>
           </div>
           <span class="badge badge-sm badge-ghost font-mono opacity-70">
@@ -247,13 +247,22 @@
       <Icon icon="solar:box-minimalistic-linear" class="w-12 h-12 mx-auto text-base-content/30" />
       <h3 class="font-bold text-base">No Purchases Found</h3>
       <p class="text-xs text-base-content/60">No purchases match your current status or search filter.</p>
-      <div v-if="statusFilter !== 'all' || hideEmpty || searchQuery" class="pt-1 flex items-center justify-center gap-2">
+      <div v-if="ownerScope === 'mine' || statusFilter !== 'all' || hideEmpty || searchQuery" class="pt-1 flex flex-wrap items-center justify-center gap-2">
+        <button
+          v-if="ownerScope === 'mine' && acquiredPurchases.length > 0"
+          type="button"
+          @click="ownerScope = 'all'; currentPage = 1"
+          class="btn btn-xs btn-primary font-bold rounded-lg gap-1.5"
+        >
+          <span>🌐 Show All Collective ({{ acquiredPurchases.length }})</span>
+        </button>
         <button 
+          v-if="statusFilter !== 'all' || hideEmpty || searchQuery"
           @click="statusFilter = 'all'; hideEmpty = false; searchQuery = ''" 
           class="btn btn-xs btn-outline btn-primary font-bold rounded-lg gap-1.5"
         >
           <Icon icon="solar:refresh-linear" class="w-3.5 h-3.5" />
-          <span>Reset Filters & Show All ({{ purchases.length }})</span>
+          <span>Reset Filters</span>
         </button>
       </div>
     </div>
@@ -651,7 +660,13 @@ const { user } = useAuth();
 const { purchases, loading, fetchPurchases } = usePurchases();
 const { inventoryItems, fetchInventory } = useInventory();
 const { capabilities } = useMemberCapabilities();
-const ownerScope = ref('all');
+const ownerScope = ref(capabilities.value.isConsignor ? 'all' : 'mine');
+watch(
+    () => capabilities.value.isConsignor,
+    (isCons) => {
+        if (isCons && ownerScope.value === 'mine') ownerScope.value = 'all';
+    }
+);
 
 const linkedItemsByPurchaseKey = computed(() => {
     const map = new Map();
@@ -762,8 +777,27 @@ const getItemCount = (purchase) => {
 const statusFilter = ref('all');
 const hideEmpty = ref(false);
 
-const statusCounts = computed(() => {
+const myPurchasesCount = computed(() => {
     const list = acquiredPurchases.value || [];
+    const hasIdentity = Boolean(
+        user.value?.$id || (capabilities.value.ownedPrefixes && capabilities.value.ownedPrefixes.length > 0)
+    );
+    if (!hasIdentity) return list.length;
+    return list.filter(p => getPurchaseAccess(p).isMine).length;
+});
+
+const scopedAcquiredPurchases = computed(() => {
+    const list = acquiredPurchases.value || [];
+    if (ownerScope.value !== 'mine' || capabilities.value.isConsignor) return list;
+    const hasIdentity = Boolean(
+        user.value?.$id || (capabilities.value.ownedPrefixes && capabilities.value.ownedPrefixes.length > 0)
+    );
+    if (!hasIdentity) return list;
+    return list.filter(p => getPurchaseAccess(p).isMine);
+});
+
+const statusCounts = computed(() => {
+    const list = scopedAcquiredPurchases.value || [];
     let needsAction = 0;
     let readyReceive = 0;
     let transit = 0;
@@ -875,12 +909,7 @@ const getTimestamp = (p) => {
 };
 
 const filteredPurchases = computed(() => {
-    let list = acquiredPurchases.value || [];
-
-    // 0. Owner Scope Filter (My Purchases vs All Collective)
-    if (ownerScope.value === 'mine') {
-        list = list.filter(p => getPurchaseAccess(p).isMine);
-    }
+    let list = scopedAcquiredPurchases.value || [];
     
     // 1. Status Filter Pills
     if (statusFilter.value === 'needs-action') {
@@ -1296,6 +1325,9 @@ let syncBroadcastChannel = null;
 
 onMounted(async () => {
     const params = new URLSearchParams(window.location.search);
+    if (params.get('scope') === 'all' || params.has('search') || params.has('po')) {
+        ownerScope.value = 'all';
+    }
     if (params.has('search')) {
         searchQuery.value = params.get('search') || '';
     }

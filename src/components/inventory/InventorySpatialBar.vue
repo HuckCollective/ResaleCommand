@@ -82,48 +82,23 @@
         </button>
       </div>
 
-      <!-- Right: My SKU Toggle + Dynamic Partner Select + Sort Select + Conditional Select All / Clear -->
+      <!-- Right: Single Unified Owner Scope Select + Sort Select + Conditional Select All / Clear -->
       <div class="flex items-center justify-between lg:justify-end gap-1.5 flex-wrap sm:flex-nowrap shrink-0">
-        <div
-          v-if="!isConsignor"
-          class="join border border-base-300 rounded-lg overflow-hidden shrink-0"
-        >
-          <button
-            type="button"
-            class="btn btn-xs join-item h-11 md:h-7 px-2 font-bold gap-1 cursor-pointer"
-            :class="filterBarcode === '__mine__' ? 'btn-primary text-primary-content' : 'btn-ghost bg-base-200/70 text-base-content/80'"
-            :title="myPrefix ? `Show only my SKU (${myPrefix})` : 'Show only my draft items'"
-            @click="emit('update:filterBarcode', '__mine__')"
-          >
-            <span class="text-[11px] whitespace-nowrap">🏷️ My SKU</span>
-            <span
-              v-if="myPrefix"
-              class="badge badge-2xs font-mono font-extrabold border-0 px-1 bg-base-100/25 text-current hidden sm:inline"
-            >{{ myPrefix }}</span>
-            <span class="badge badge-2xs font-mono font-extrabold border-0 px-1 bg-base-100/25 text-current">
-              {{ mySkuCount }}
-            </span>
-          </button>
-          <button
-            type="button"
-            class="btn btn-xs join-item h-11 md:h-7 px-2 font-bold cursor-pointer"
-            :class="filterBarcode !== '__mine__' ? 'btn-neutral text-neutral-content' : 'btn-ghost bg-base-200/70 text-base-content/75'"
-            title="Show all Collective items"
-            @click="emit('update:filterBarcode', 'all')"
-          >
-            <span class="text-[11px] whitespace-nowrap">All</span>
-          </button>
-        </div>
-
         <select
-          :value="currentPartnerValue"
-          aria-label="Filter by Partner Barcode Prefix"
-          title="Filter by Partner Barcode Prefix"
+          :value="currentOwnerSelectValue"
+          aria-label="Filter by Owner or Partner SKU"
+          title="Filter by Owner or Partner SKU"
           class="select select-bordered select-xs h-11 md:h-7 rounded-lg font-mono font-bold text-[11px] bg-base-200/70 border-base-300 text-base-content pr-6 pl-2 cursor-pointer"
           @change="onPartnerChange"
         >
-          <option v-for="p in dynamicPartnerOptions" :key="p.id" :value="p.id">
-            {{ p.id === 'all' ? 'All Partners' : p.label }} ({{ partnerCounts[p.id] || 0 }})
+          <option v-if="!isConsignor" value="__mine__">
+            {{ myScopeOptionLabel }} ({{ mySkuCount }})
+          </option>
+          <option value="all">
+            {{ isConsignor ? 'All Items' : '🌐 All Collective' }} ({{ activeItems.length }})
+          </option>
+          <option v-for="p in otherPartnerOptions" :key="p.id" :value="p.id">
+            {{ p.label }} ({{ partnerCounts[p.id] || 0 }})
           </option>
         </select>
 
@@ -299,6 +274,10 @@ const storageFacilities = getBackstockStorageMetas();
 const sellingBoothFacilities = getSellingBoothMetas();
 const triageTargets = getAllLocationSettingMetas();
 
+const activeItems = computed(() =>
+  (props.inventoryItems || []).filter((item) => isWorkingStockItem(item))
+);
+
 const effectiveOwnedPrefixes = computed<string[]>(() => {
   const out = new Set<string>();
   for (const p of props.ownedPrefixes || []) {
@@ -312,33 +291,84 @@ const effectiveOwnedPrefixes = computed<string[]>(() => {
   return Array.from(out);
 });
 
-const mySkuCount = computed(() =>
-  activeItems.value.filter((item) =>
+const mySkuCount = computed(() => {
+  if (!props.currentUserId && effectiveOwnedPrefixes.value.length === 0) {
+    return activeItems.value.length;
+  }
+  return activeItems.value.filter((item) =>
     matchesMySkuFilter(item, effectiveOwnedPrefixes.value, props.currentUserId || '')
-  ).length
-);
+  ).length;
+});
 
-const dynamicPartnerOptions = computed<Array<{ id: string; label: string }>>(() => {
+const myScopeOptionLabel = computed(() => {
+  const primary = normalizeUpcPrefix(props.myPrefix) || effectiveOwnedPrefixes.value[0] || '';
+  if (!primary) return '🏷️ Mine — Drafts';
+  if (effectiveOwnedPrefixes.value.length > 1) {
+    return `🏷️ Mine — ${primary} +${effectiveOwnedPrefixes.value.length - 1}`;
+  }
+  return `🏷️ Mine — ${primary}`;
+});
+
+const scopedActiveItems = computed(() => {
+  const bc = String(props.filterBarcode || 'all').trim();
+  if (!bc || bc === 'all') return activeItems.value;
+  if (bc === '__mine__') {
+    if (!props.currentUserId && effectiveOwnedPrefixes.value.length === 0) {
+      return activeItems.value;
+    }
+    return activeItems.value.filter((item) =>
+      matchesMySkuFilter(item, effectiveOwnedPrefixes.value, props.currentUserId || '')
+    );
+  }
+  if (bc === '__missing__') {
+    return activeItems.value.filter((item) => !(item.upc || item.locationSku || item.sku || '').trim());
+  }
+  if (bc === '__numeric__') {
+    return activeItems.value.filter((item) => /^\d+$/.test((item.upc || item.locationSku || item.sku || '').trim()));
+  }
+  if (bc === '__has_barcode__') {
+    return activeItems.value.filter((item) => Boolean((item.upc || item.locationSku || item.sku || '').trim()));
+  }
+  return activeItems.value.filter((item) => matchesPartnerPrefix(item, bc));
+});
+
+const otherPartnerOptions = computed<Array<{ id: string; label: string }>>(() => {
   const map = new Map<string, string>();
+  const singleOwnedPrefix =
+    !props.isConsignor && effectiveOwnedPrefixes.value.length === 1
+      ? effectiveOwnedPrefixes.value[0]
+      : '';
+
   for (const p of PARTNER_PREFIXES) {
+    if (p.id === 'all' || p.id === '0EJ') continue;
+    if (singleOwnedPrefix && p.id.toUpperCase() === singleOwnedPrefix) continue;
     map.set(p.id, p.label);
   }
   for (const pfx of effectiveOwnedPrefixes.value) {
+    if (singleOwnedPrefix && pfx === singleOwnedPrefix) continue;
     if (!map.has(pfx)) map.set(pfx, pfx);
   }
   for (const item of activeItems.value) {
     const pfx = extractItemOwnerPrefix(item);
-    if (pfx && !map.has(pfx)) {
+    if (!pfx) continue;
+    if (singleOwnedPrefix && pfx === singleOwnedPrefix) continue;
+    if (!map.has(pfx)) {
       map.set(pfx, pfx);
     }
   }
   return Array.from(map.entries()).map(([id, label]) => ({ id, label }));
 });
 
-const currentPartnerValue = computed<string>(() => {
+const currentOwnerSelectValue = computed<string>(() => {
   const raw = (props.filterBarcode || 'all').trim();
-  if (raw === '__mine__') return 'all';
-  const found = dynamicPartnerOptions.value.find(
+  if (raw === '__mine__' && !props.isConsignor) return '__mine__';
+  if (raw === 'all' || !raw) return 'all';
+  const singleOwnedPrefix =
+    !props.isConsignor && effectiveOwnedPrefixes.value.length === 1
+      ? effectiveOwnedPrefixes.value[0]
+      : '';
+  if (singleOwnedPrefix && raw.toUpperCase() === singleOwnedPrefix) return '__mine__';
+  const found = otherPartnerOptions.value.find(
     (p) => p.id.toUpperCase() === raw.toUpperCase()
   );
   return found ? found.id : 'all';
@@ -376,13 +406,9 @@ function onSortChange(e: Event) {
   }
 }
 
-const activeItems = computed(() =>
-  (props.inventoryItems || []).filter((item) => isWorkingStockItem(item))
-);
-
 const locationCounts = computed<Record<string, number>>(() => {
   const counts: Record<string, number> = {
-    all: activeItems.value.length,
+    all: scopedActiveItems.value.length,
     __unassigned__: 0,
     MD: 0,
     DT: 0,
@@ -390,7 +416,7 @@ const locationCounts = computed<Record<string, number>>(() => {
     HH: 0,
     HD: 0,
   };
-  for (const item of activeItems.value) {
+  for (const item of scopedActiveItems.value) {
     for (const loc of SPATIAL_LOCATIONS) {
       if (loc.id === 'all') continue;
       if (matchesSpatialLocation(item, loc.id)) {
@@ -405,12 +431,11 @@ const partnerCounts = computed<Record<string, number>>(() => {
   const counts: Record<string, number> = {
     all: activeItems.value.length,
   };
-  for (const p of dynamicPartnerOptions.value) {
-    if (p.id !== 'all') counts[p.id] = 0;
+  for (const p of otherPartnerOptions.value) {
+    counts[p.id] = 0;
   }
   for (const item of activeItems.value) {
-    for (const p of dynamicPartnerOptions.value) {
-      if (p.id === 'all') continue;
+    for (const p of otherPartnerOptions.value) {
       if (matchesPartnerPrefix(item, p.id)) {
         counts[p.id] = (counts[p.id] || 0) + 1;
       }

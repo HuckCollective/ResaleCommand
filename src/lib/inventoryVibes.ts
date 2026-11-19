@@ -130,8 +130,7 @@ export const PARTNER_PREFIXES: PartnerPrefixMeta[] = [
     { id: 'all', label: 'All', description: 'All co-op partners & SKUs' },
     { id: 'HUCK-', label: 'HUCK-', description: 'The Huckleberry Collective' },
     { id: 'PDXGL-', label: 'PDXGL-', description: 'PDX Game Library' },
-    { id: 'BB-', label: 'BB-', description: 'Consignor BB-' },
-    { id: '0EJ', label: '0EJ', description: 'Memory Den Ricochet Booth #0EJ SKU' }
+    { id: 'BB-', label: 'BB-', description: 'Consignor BB-' }
 ];
 
 // Pre-compiled whole-word regular expressions (matched ONLY against title, identity, and keywords)

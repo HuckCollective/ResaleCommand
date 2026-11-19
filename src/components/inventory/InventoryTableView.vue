@@ -180,7 +180,17 @@
                                 <div class="flex flex-col items-center justify-center gap-2">
                                     <Icon icon="solar:box-minimalistic-linear" class="w-10 h-10 opacity-30" />
                                     <p class="font-bold text-sm opacity-70">No items match your active filters</p>
-                                    <button class="btn btn-xs btn-outline mt-1" @click="clearFilters">Reset Filters</button>
+                                    <div class="flex flex-wrap items-center justify-center gap-2 mt-1">
+                                        <button
+                                            v-if="filterBarcode === '__mine__' && inventoryItems.length > 0"
+                                            type="button"
+                                            class="btn btn-xs btn-primary"
+                                            @click="filterBarcode = 'all'"
+                                        >
+                                            🌐 Browse All Collective ({{ inventoryItems.length }})
+                                        </button>
+                                        <button class="btn btn-xs btn-outline" @click="clearFilters">Reset Filters</button>
+                                    </div>
                                 </div>
                             </td>
                         </tr>
@@ -603,7 +613,8 @@ const {
     calculateRoi
 } = useInventoryFilters(inventoryItems, {
     ownedPrefixes: computed(() => capabilities.value.ownedPrefixes || []),
-    currentUserId: computed(() => user.value?.$id || '')
+    currentUserId: computed(() => user.value?.$id || ''),
+    defaultToMine: computed(() => !capabilities.value.isConsignor)
 });
 
 const tableKpiStats = computed(() => computeInventoryKpiStats(filteredItems.value));
