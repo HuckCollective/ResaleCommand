@@ -1,12 +1,12 @@
 <template>
   <div class="space-y-1.5">
-    <!-- Calm 1-Row Reseller Spatial Bar: All + Storage Select + Selling Select | Owner Scope + Sort -->
-    <div class="bg-base-100 border border-base-300 rounded-xl p-1.5 sm:px-2.5 sm:py-2 shadow-2xs flex flex-col lg:flex-row lg:items-center justify-between gap-2">
+    <!-- Calm 1-Row Reseller Spatial Bar: All + Storage + Selling | Owner Scope + Sort + Select All (DaisyUI v5 .select defaults to 20rem width, so w-auto is required for single-row fit) -->
+    <div class="bg-base-100 border border-base-300 rounded-xl p-1.5 sm:px-2.5 sm:py-1.5 shadow-2xs flex flex-wrap items-center justify-between gap-1.5">
       <!-- Left: All + 📦 Storage Dropdown + 🏪 Selling Dropdown + Conditional 🚨 Unassigned -->
-      <div class="flex items-center gap-1.5 flex-wrap">
+      <div class="flex items-center gap-1.5 flex-wrap sm:flex-nowrap min-w-0">
         <button
           type="button"
-          class="btn btn-xs h-11 md:h-7 px-2.5 rounded-lg font-bold gap-1 shrink-0 transition-all cursor-pointer"
+          class="btn btn-xs h-11 md:h-7 px-2 rounded-lg font-bold gap-1 shrink-0 transition-all cursor-pointer"
           :class="getLocationTabClass('all', locationCounts.all || 0)"
           title="Show all active working stock across Storage and Selling channels"
           @click="selectLocation('all')"
@@ -24,8 +24,8 @@
           :value="currentStorageSelectValue"
           aria-label="Filter by Storage Location"
           title="Backstock & Storage Locations"
-          class="select select-bordered select-xs h-11 md:h-7 rounded-lg font-bold text-[11px] pr-6 pl-2 cursor-pointer transition-all"
-          :class="currentStorageSelectValue ? 'border-primary bg-primary/15 text-primary ring-1 ring-primary/40' : 'bg-base-200/70 border-base-300 text-base-content'"
+          class="select select-bordered select-xs w-auto min-w-0 max-w-full shrink-0 h-11 md:h-7 rounded-lg font-bold text-[11px] pl-2 pr-7 cursor-pointer transition-all"
+          :class="currentStorageSelectValue ? 'select-primary border-primary ring-1 ring-primary/40' : 'border-base-300'"
           @change="onStorageSelectChange"
         >
           <option value="">📦 Storage ({{ locationCounts.__storage__ || 0 }})</option>
@@ -45,8 +45,8 @@
           :value="currentSellingSelectValue"
           aria-label="Filter by Selling Channel or Booth"
           title="Booths, Online & Pop-Up Selling Channels"
-          class="select select-bordered select-xs h-11 md:h-7 rounded-lg font-bold text-[11px] pr-6 pl-2 cursor-pointer transition-all"
-          :class="currentSellingSelectValue ? 'border-secondary bg-secondary/15 text-secondary ring-1 ring-secondary/40' : 'bg-base-200/70 border-base-300 text-base-content'"
+          class="select select-bordered select-xs w-auto min-w-0 max-w-full shrink-0 h-11 md:h-7 rounded-lg font-bold text-[11px] pl-2 pr-7 cursor-pointer transition-all"
+          :class="currentSellingSelectValue ? 'select-secondary border-secondary ring-1 ring-secondary/40' : 'border-base-300'"
           @change="onSellingSelectChange"
         >
           <option value="">🏪 Selling ({{ locationCounts.__selling__ || 0 }})</option>
@@ -66,7 +66,7 @@
         <button
           v-if="(locationCounts.__unassigned__ || 0) > 0 || filterLocation === '__unassigned__'"
           type="button"
-          class="btn btn-xs h-11 md:h-7 px-2.5 rounded-lg font-bold gap-1 shrink-0 transition-all cursor-pointer"
+          class="btn btn-xs h-11 md:h-7 px-2 rounded-lg font-bold gap-1 shrink-0 transition-all cursor-pointer"
           :class="getLocationTabClass('__unassigned__', locationCounts.__unassigned__ || 0)"
           title="Items missing a physical location (Golden Rule #1 triage)"
           @click="selectLocation('__unassigned__')"
@@ -82,12 +82,12 @@
       </div>
 
       <!-- Right: Single Unified Owner Scope Select + Sort Select + Conditional Select All / Clear -->
-      <div class="flex items-center justify-between lg:justify-end gap-1.5 flex-wrap sm:flex-nowrap shrink-0">
+      <div class="flex items-center gap-1.5 flex-wrap sm:flex-nowrap min-w-0 sm:ml-auto">
         <select
           :value="currentOwnerSelectValue"
           aria-label="Filter by Owner or Partner SKU"
           title="Filter by Owner or Partner SKU"
-          class="select select-bordered select-xs h-11 md:h-7 rounded-lg font-mono font-bold text-[11px] bg-base-200/70 border-base-300 text-base-content pr-6 pl-2 cursor-pointer"
+          class="select select-bordered select-xs w-auto min-w-0 max-w-full shrink-0 h-11 md:h-7 rounded-lg font-bold text-[11px] border-base-300 pl-2 pr-7 cursor-pointer"
           @change="onPartnerChange"
         >
           <option v-if="!isConsignor" value="__mine__">
@@ -106,40 +106,40 @@
           :value="currentSortValue"
           aria-label="Sort inventory items"
           title="Sort inventory items"
-          class="select select-bordered select-xs h-11 md:h-7 rounded-lg font-bold text-[11px] bg-base-200/70 border-base-300 text-base-content pr-6 pl-2 cursor-pointer"
+          class="select select-bordered select-xs w-auto min-w-0 max-w-full shrink-0 h-11 md:h-7 rounded-lg font-bold text-[11px] border-base-300 pl-2 pr-7 cursor-pointer"
           @change="onSortChange"
         >
           <option value="$createdAt:desc">🆕 Newest Added</option>
           <option value="$createdAt:asc">🌱 Oldest Added</option>
-          <option value="upc:desc">🔢 Barcode (High → Low)</option>
-          <option value="upc:asc">🔢 Barcode (Low → High)</option>
-          <option value="resalePrice:desc">💰 Price: High → Low</option>
-          <option value="resalePrice:asc">💸 Price: Low → High</option>
+          <option value="upc:desc">🔢 Barcode (Hi → Lo)</option>
+          <option value="upc:asc">🔢 Barcode (Lo → Hi)</option>
+          <option value="resalePrice:desc">💰 Price (Hi → Lo)</option>
+          <option value="resalePrice:asc">💸 Price (Lo → Hi)</option>
           <option value="margin:desc">📈 Highest ROI %</option>
           <option value="title:asc">🔤 Title (A → Z)</option>
-          <option value="$updatedAt:desc">🕒 Recently Edited</option>
-          <option v-if="sortColumn === 'soldDate'" value="soldDate:desc">🏷️ Sold Date (Newest)</option>
+          <option value="$updatedAt:desc">🕒 Recent Edits</option>
+          <option v-if="sortColumn === 'soldDate'" value="soldDate:desc">🏷️ Sold (Newest)</option>
         </select>
 
         <div v-if="(filteredCount || 0) > 0" class="flex items-center gap-1 shrink-0">
           <button
             v-if="(selectedCount || 0) > 0"
             type="button"
-            class="btn btn-xs h-11 md:h-7 px-2.5 rounded-lg font-bold gap-1 shrink-0 btn-warning text-warning-content"
+            class="btn btn-xs h-11 md:h-7 px-2 rounded-lg font-bold gap-1 shrink-0 btn-warning text-warning-content"
             title="Clear selected items"
             @click="$emit('clear-selection')"
           >
-            <Icon icon="solar:close-circle-bold" class="w-3.5 h-3.5" />
+            <Icon icon="solar:close-circle-bold" class="w-3 h-3" />
             <span class="text-[11px] whitespace-nowrap">Clear ({{ selectedCount }})</span>
           </button>
           <button
             v-else
             type="button"
-            class="btn btn-xs h-11 md:h-7 px-2.5 rounded-lg font-bold gap-1 shrink-0 btn-outline border-primary/40 text-primary hover:bg-primary hover:text-primary-content"
+            class="btn btn-xs h-11 md:h-7 px-2 rounded-lg font-bold gap-1 shrink-0 btn-outline border-primary/40 text-primary hover:bg-primary hover:text-primary-content"
             title="Select all items matching current filter"
             @click="$emit('select-all')"
           >
-            <Icon icon="solar:check-square-bold" class="w-3.5 h-3.5" />
+            <Icon icon="solar:check-square-bold" class="w-3 h-3" />
             <span class="text-[11px] whitespace-nowrap">Select All ({{ filteredCount }})</span>
           </button>
         </div>
