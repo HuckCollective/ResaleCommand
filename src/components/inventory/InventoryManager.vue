@@ -81,8 +81,21 @@
                                 </div>
                             </div>
 
-                            <!-- Right: ⚡ Queues & Lists + ⚙ Filters + Table|Cards + Add -->
+                            <!-- Right: 🧹 Cleanup + ⚡ Queues & Lists + ⚙ Filters + Table|Cards + Add -->
                             <div class="flex items-center gap-1.5 order-2 lg:order-3 shrink-0 ml-auto lg:ml-0">
+                                <button
+                                    v-if="healthTotalBadgeCount > 0 || isHealthAuditTrayOpen"
+                                    type="button"
+                                    @click="openHealthAuditTray"
+                                    class="btn btn-xs sm:btn-sm h-11 md:h-8 px-2.5 rounded-xl font-bold gap-1 shrink-0 transition-all"
+                                    :class="isHealthAuditTrayOpen ? 'btn-warning text-warning-content shadow-xs' : 'btn-outline border-warning/55 bg-warning/10 text-base-content hover:bg-warning/20'"
+                                    title="Review already-sold backstock twins, already-split parent lots, extra duplicate copies & stale POs"
+                                >
+                                    <span>🧹</span>
+                                    <span class="hidden sm:inline text-xs whitespace-nowrap">Cleanup</span>
+                                    <span v-if="healthTotalBadgeCount > 0" class="badge badge-2xs badge-warning text-warning-content font-mono font-black whitespace-nowrap shrink-0">{{ healthTotalBadgeCount }}</span>
+                                </button>
+
                                 <button
                                     type="button"
                                     @click="openQueuesTray"
@@ -471,6 +484,7 @@
             v-if="isEditDrawerOpen" 
             :item="activeItem" 
             :inventoryItems="inventoryItems" 
+            :health-warning="activeItem ? healthReport.byItemId.get(activeItem.$id) || null : null"
             @close="closeEditDrawer" 
             @save="saveEdit" 
             @refresh="fetchInventory"
@@ -481,6 +495,7 @@
             @open-combine="handleDrawerOpenCombine"
             @open-restock="handleDrawerOpenRestock"
             @open-splitter="handleDrawerOpenSplit"
+            @open-health-audit="openHealthAuditFromDrawer"
         />
 
         <!-- FULLSCREEN PREVIEW MODAL -->
@@ -607,6 +622,18 @@
             @inspect-item="openEdit"
         />
 
+        <!-- INTERACTIVE BOTTOM-SHEET STOCK & PO HEALTH CHECK TRAY -->
+        <StockHealthAuditTray
+            v-model="isHealthAuditTrayOpen"
+            v-model:scope="healthAuditScope"
+            :report="healthReport"
+            :dismissed-count="dismissedHealthKeys.size"
+            @inspect-item="openEdit"
+            @dismiss-pair="dismissHealthPair"
+            @reset-dismissed="resetDismissedHealthPairs"
+            @refresh-all="refreshInventoryAndPurchases"
+        />
+
         <!-- DROPCAST STAGING TRAY -->
         <DropcastStagingTray v-if="isLegacyDropcastStudio" />
 
@@ -627,6 +654,9 @@ import { marked } from 'marked';
 import BarcodeScannerModal from '../common/BarcodeScannerModal.vue';
 import InventoryValuationStrip from './InventoryValuationStrip.vue';
 import InventoryQueuesTray from './InventoryQueuesTray.vue';
+import StockHealthAuditTray from './StockHealthAuditTray.vue';
+import { auditInventoryAndPurchaseHealth } from '../../lib/inventoryHealthAudit';
+import { salesApi } from '../../lib/sales';
 import { SMART_QUEUES } from '../../lib/inventoryVibes';
 import { computeInventoryKpiStats } from '../../lib/inventoryKpiStats';
 import { useInventory } from '../../composables/useInventory';
@@ -3325,10 +3355,113 @@ const submitCombine = async () => {
 
 const showImport = ref(false); // CSV Modal
 
+// --- Stock & PO Health Check Workbench State (Placed at bottom to preserve strict TDZ order) ---
+const DISMISSED_HEALTH_STORAGE_KEY = 'rc_dismissed_health_pairs_v1';
+const loadDismissedHealthSet = () => {
+    if (typeof window === 'undefined') return new Set();
+    try {
+        const raw = localStorage.getItem(DISMISSED_HEALTH_STORAGE_KEY);
+        if (!raw) return new Set();
+        const arr = JSON.parse(raw);
+        return Array.isArray(arr) ? new Set(arr) : new Set();
+    } catch {
+        return new Set();
+    }
+};
+
+const isHealthAuditTrayOpen = ref(false);
+const healthAuditScope = ref(capabilities.value.isConsignor ? 'all' : 'mine');
+const allSalesForHealth = ref([]);
+const dismissedHealthKeys = ref(loadDismissedHealthSet());
+
+watch(
+    () => capabilities.value.isConsignor,
+    (isCons) => {
+        if (isCons && healthAuditScope.value === 'mine') {
+            healthAuditScope.value = 'all';
+        }
+    }
+);
+
+watch([isQueuesTrayOpen, isManifestTrayOpen], ([qOpen, mOpen]) => {
+    if ((qOpen || mOpen) && isHealthAuditTrayOpen.value) {
+        isHealthAuditTrayOpen.value = false;
+    }
+});
+
+const fetchSalesForHealth = async () => {
+    try {
+        const docs = await salesApi.listSales(currentTeam.value?.$id);
+        allSalesForHealth.value = Array.isArray(docs) ? docs : [];
+    } catch (e) {
+        console.warn('[InventoryManager] Could not load sales for health audit:', e);
+    }
+};
+
+const healthReport = computed(() =>
+    auditInventoryAndPurchaseHealth({
+        items: inventoryItems.value || [],
+        purchases: allPurchases.value || [],
+        sales: allSalesForHealth.value || [],
+        capabilities: capabilities.value,
+        userId: user.value?.$id || null,
+        scope: healthAuditScope.value,
+        dismissedPairKeys: dismissedHealthKeys.value,
+    })
+);
+
+const healthTotalBadgeCount = computed(
+    () => healthReport.value.totalHighConfidenceCount + healthReport.value.totalReviewCount
+);
+
+const openHealthAuditTray = () => {
+    closeAllTrays();
+    isHealthAuditTrayOpen.value = true;
+    if (allSalesForHealth.value.length === 0) {
+        fetchSalesForHealth();
+    }
+};
+
+const openHealthAuditFromDrawer = () => {
+    closeEditDrawer();
+    openHealthAuditTray();
+};
+
+const dismissHealthPair = (key) => {
+    if (!key) return;
+    const next = new Set(dismissedHealthKeys.value);
+    next.add(key);
+    dismissedHealthKeys.value = next;
+    try {
+        localStorage.setItem(DISMISSED_HEALTH_STORAGE_KEY, JSON.stringify(Array.from(next)));
+    } catch {}
+    addToast({ type: 'info', message: 'Saved on this device — warning hidden.' });
+};
+
+const resetDismissedHealthPairs = () => {
+    dismissedHealthKeys.value = new Set();
+    try {
+        localStorage.removeItem(DISMISSED_HEALTH_STORAGE_KEY);
+    } catch {}
+    addToast({ type: 'info', message: 'Restored hidden health warnings.' });
+};
+
+const refreshInventoryAndPurchases = async () => {
+    await Promise.all([
+        fetchInventory(currentTeam.value?.$id || ''),
+        fetchPurchases(),
+        fetchSalesForHealth(),
+    ]);
+};
+
 onMounted(async () => {
     initActiveDraft('MD');
     if (typeof window !== 'undefined') {
         window.addEventListener('resize', updateIsMobile);
+        const params = new URLSearchParams(window.location.search);
+        if (params.get('health') === 'audit') {
+            openHealthAuditTray();
+        }
     }
     if (inventoryItems.value.length === 0 && !loading.value) {
         await fetchInventory('');
@@ -3336,6 +3469,11 @@ onMounted(async () => {
     if (allPurchases.value.length === 0) {
         fetchPurchases();
     }
+    setTimeout(() => {
+        if (allSalesForHealth.value.length === 0) {
+            fetchSalesForHealth();
+        }
+    }, 250);
     if (currentTeam.value) {
         fetchLocations();
     }

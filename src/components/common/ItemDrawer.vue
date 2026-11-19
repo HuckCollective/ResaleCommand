@@ -137,6 +137,59 @@
           </a>
         </div>
 
+        <!-- 2C. DUPLICATE / SOLD-GHOST / SPLIT-LOT INLINE WARNING BANNER -->
+        <div
+          v-if="effectiveHealthWarning"
+          class="mx-4 sm:mx-6 mt-2 px-3.5 py-2.5 rounded-xl border flex flex-wrap items-center justify-between gap-2 text-xs"
+          :class="
+            effectiveHealthWarning.severity === 'error'
+              ? 'bg-error/10 border-error/40'
+              : 'bg-warning/15 border-warning/45'
+          "
+        >
+          <div class="space-y-0.5 min-w-0 flex-1">
+            <div class="font-black text-base-content">
+              {{ effectiveHealthWarning.headline }}
+            </div>
+            <div class="text-base-content/80">
+              {{ effectiveHealthWarning.detail }}
+            </div>
+          </div>
+          <div class="flex items-center gap-1.5 shrink-0">
+            <button
+              v-if="
+                itemAccess.canEditFull &&
+                effectiveHealthWarning.recommendedAction === 'mark_deconstructed'
+              "
+              type="button"
+              class="btn btn-xs h-8 btn-primary text-primary-content font-black rounded-lg"
+              :disabled="resolvingHealthWarning"
+              @click="resolveInlineHealthWarning('deconstructed')"
+            >
+              ✂️ Mark Split
+            </button>
+            <button
+              v-else-if="
+                itemAccess.canEditFull &&
+                effectiveHealthWarning.recommendedAction === 'archive_duplicate'
+              "
+              type="button"
+              class="btn btn-xs h-8 btn-primary text-primary-content font-black rounded-lg"
+              :disabled="resolvingHealthWarning"
+              @click="resolveInlineHealthWarning('archived')"
+            >
+              📥 Archive Duplicate
+            </button>
+            <button
+              type="button"
+              class="btn btn-xs h-8 btn-ghost border border-base-300 font-bold rounded-lg"
+              @click="emit('open-health-audit')"
+            >
+              🧹 Health Check
+            </button>
+          </div>
+        </div>
+
         <!-- 3. LISTING DETAILS TAB (Extracted Subcomponent) -->
         <div
           class="flex-1 overflow-y-auto p-4 sm:p-6 space-y-6"
@@ -483,6 +536,9 @@ import { useLoader } from '../../composables/useLoader';
 import { warehousesApi } from '../../lib/warehouses';
 import { cleanTagTitle, condenseTitleForTag } from '../../lib/exportUtils';
 import { mergeAppraisalHistory } from '../../lib/appraisalCalibration';
+import { normalizeInventoryStatus } from '../../lib/inventoryStatus';
+import { cleanCatalogSku } from '../../lib/salesBucketing';
+import { toUserMessage } from '../../lib/userFacingErrors';
 
 const { user, currentTeam } = useAuth();
 const { capabilities } = useMemberCapabilities();
@@ -560,12 +616,16 @@ const props = defineProps({
     inventoryItems: {
         type: Array,
         default: () => []
+    },
+    healthWarning: {
+        type: Object,
+        default: null
     }
 });
 
 const emit = defineEmits([
     'close', 'save', 'saved', 'uncombined', 'deconstruct', 'selectItem', 'refresh',
-    'open-bundle', 'open-combine', 'open-restock', 'open-splitter'
+    'open-bundle', 'open-combine', 'open-restock', 'open-splitter', 'open-health-audit'
 ]);
 
 const mergedInventoryItems = computed(() => {
@@ -1411,6 +1471,97 @@ const handleRefreshLot = async () => {
         } catch (e) {
             console.warn('[ItemDrawer] Failed to reload item after lot refresh:', e);
         }
+    }
+};
+
+const resolvingHealthWarning = ref(false);
+
+const effectiveHealthWarning = computed(() => {
+    if (props.healthWarning) return props.healthWarning;
+    const it = props.item;
+    if (!it?.$id) return null;
+    const norm = normalizeInventoryStatus(it.status);
+    if (!['received', 'acquired', 'placed'].includes(norm)) return null;
+    if (Number(it.quantity || 1) > 1 || Boolean(cleanCatalogSku(it.locationSku))) return null;
+
+    const extractedKids = (lotChildren.value || []).filter(c => {
+        const cSt = String(c?.status || '').toLowerCase();
+        if (cSt === 'archived' || cSt === 'deleted') return false;
+        return normalizeInventoryStatus(c?.status) !== 'combined';
+    });
+    if (extractedKids.length === 0) return null;
+
+    const soldCount = extractedKids.filter(k => normalizeInventoryStatus(k.status) === 'sold').length;
+    const placedCount = extractedKids.filter(k => normalizeInventoryStatus(k.status) === 'placed').length;
+    return {
+        kind: 'split_parent',
+        severity: 'warning',
+        headline: `✂️ Already-Split Parent Lot (${extractedKids.length} extracted item${extractedKids.length === 1 ? '' : 's'})`,
+        detail: `This lot already has ${extractedKids.length} split child item${extractedKids.length === 1 ? '' : 's'} (${soldCount} sold, ${placedCount} placed). Mark the parent lot Split so it leaves Unplaced Backstock.`,
+        recommendedAction: 'mark_deconstructed',
+    };
+});
+
+const resolveInlineHealthWarning = async (targetStatus) => {
+    if (!props.item?.$id || !itemAccess.value.canEditFull) return;
+    resolvingHealthWarning.value = true;
+    try {
+        const stamp = new Date().toISOString().slice(0, 10);
+        const w = effectiveHealthWarning.value;
+        if (
+            targetStatus === 'archived' &&
+            w?.keeperItem?.$id &&
+            w?.provenanceToCarry
+        ) {
+            await fetch('/api/inventory/bulk-update', {
+                method: 'POST',
+                headers: await getCoopJwtHeaders(),
+                body: JSON.stringify({
+                    itemIds: [w.keeperItem.$id],
+                    updates: { backfillIfMissing: w.provenanceToCarry },
+                    collectionId: getCollectionId(),
+                    dbId: DB_ID,
+                }),
+            }).catch(() => {});
+        }
+
+        const resp = await fetch('/api/inventory/bulk-update', {
+            method: 'POST',
+            headers: await getCoopJwtHeaders(),
+            body: JSON.stringify({
+                itemIds: [props.item.$id],
+                updates: {
+                    status: targetStatus,
+                    appendAuditNote:
+                        targetStatus === 'deconstructed'
+                            ? `[Marked Split/Deconstructed from Item Drawer • ${stamp}]`
+                            : `[Archived Duplicate from Item Drawer • ${stamp}]`,
+                },
+                collectionId: getCollectionId(),
+                dbId: DB_ID,
+            }),
+        });
+        const data = await resp.json().catch(() => ({}));
+        if (!resp.ok) {
+            throw new Error(data?.error || 'Unable to update item status.');
+        }
+        addToast({
+            type: 'success',
+            message:
+                targetStatus === 'deconstructed'
+                    ? '✅ Parent lot marked Split (Deconstructed).'
+                    : '✅ Duplicate backstock item archived.',
+        });
+        emit('refresh');
+        emit('close');
+    } catch (err) {
+        console.error('[ItemDrawer] resolveInlineHealthWarning error:', err);
+        addToast({
+            type: 'error',
+            message: toUserMessage(err, "Couldn't save right now — please try again."),
+        });
+    } finally {
+        resolvingHealthWarning.value = false;
     }
 };
 

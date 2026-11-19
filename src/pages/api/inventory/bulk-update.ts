@@ -18,6 +18,9 @@ import {
   normalizeCoCurationRecord,
   type CoCurationRecord,
 } from '../../../lib/onlineCoCuration';
+import { normalizeInventoryStatus } from '../../../lib/inventoryStatus';
+import { cleanCatalogSku } from '../../../lib/salesBucketing';
+import { getSellingBoothMetas, resolveCanonicalLocationCode } from '../../../lib/warehouses';
 
 export const prerender = false;
 
@@ -69,8 +72,106 @@ export const POST: APIRoute = async ({ request }) => {
       safeData.sellingLocations = updates.sellingLocations;
     }
     if (updates.conditionNotes !== undefined) {
-      safeData.conditionNotes = updates.conditionNotes;
+      safeData.conditionNotes = String(updates.conditionNotes).slice(0, 990);
     }
+
+    const appendAuditNote =
+      typeof updates.appendAuditNote === 'string' && updates.appendAuditNote.trim()
+        ? updates.appendAuditNote.trim()
+        : '';
+    const backfillIfMissing =
+      updates.backfillIfMissing && typeof updates.backfillIfMissing === 'object'
+        ? updates.backfillIfMissing
+        : null;
+    const isBatchMode = itemIds.length > 1;
+    const boothCodeSet = new Set(getSellingBoothMetas().map((m) => m.code));
+
+    const checkPhysicalBoothTagSafety = (doc: any): string | null => {
+      if (!doc) return null;
+      const existingSku = cleanCatalogSku(doc.locationSku);
+      const locCode = resolveCanonicalLocationCode(doc.storageLocation);
+      const isAtBooth = Boolean(locCode && boothCodeSet.has(locCode));
+      const normStatus = normalizeInventoryStatus(doc.status);
+      const isProtectedBooth = Boolean(existingSku) || (normStatus === 'placed' && isAtBooth);
+
+      if (!isProtectedBooth) return null;
+
+      if (
+        safeData.status === 'archived' &&
+        (isBatchMode || (Boolean(existingSku) && !updates.allowSingleBoothArchive))
+      ) {
+        return 'Active booth items with physical shelf tags are protected and cannot be archived in batch.';
+      }
+      if (isBatchMode && safeData.status === 'deconstructed' && Boolean(existingSku)) {
+        return 'Booth items with physical shelf tags cannot be marked split in batch.';
+      }
+      if (isBatchMode && safeData.upc !== undefined) {
+        return 'Booth items with physical shelf tags keep their printed barcode and cannot be re-barcoded in batch.';
+      }
+      return null;
+    };
+
+    const buildPerItemPayload = (
+      doc: any,
+      basePayload: Record<string, any>
+    ): Record<string, any> => {
+      const next: Record<string, any> = { ...basePayload };
+      if (appendAuditNote && doc) {
+        const existingNotes = String(doc.conditionNotes || '').trim();
+        if (!existingNotes.includes(appendAuditNote)) {
+          const combined = existingNotes
+            ? `${existingNotes}\n${appendAuditNote}`
+            : appendAuditNote;
+          next.conditionNotes =
+            combined.length > 990 ? combined.slice(combined.length - 990) : combined;
+        }
+      }
+      if (backfillIfMissing && doc) {
+        const currentCost = Number(doc.cost || 0);
+        const nextCost = Number(backfillIfMissing.cost || 0);
+        if (currentCost <= 0 && nextCost > 0) {
+          next.cost = nextCost;
+        }
+        if (!String(doc.orderId || '').trim() && String(backfillIfMissing.orderId || '').trim()) {
+          next.orderId = String(backfillIfMissing.orderId).trim();
+        }
+        if (
+          !String(doc.sourcingLocation || '').trim() &&
+          String(backfillIfMissing.sourcingLocation || '').trim()
+        ) {
+          next.sourcingLocation = String(backfillIfMissing.sourcingLocation).trim();
+        }
+        if (
+          'purchaseId' in doc &&
+          !String(doc.purchaseId || '').trim() &&
+          String(backfillIfMissing.purchaseId || '').trim()
+        ) {
+          next.purchaseId = String(backfillIfMissing.purchaseId).trim();
+        }
+      }
+      return next;
+    };
+
+    const updateDocSafe = async (
+      colId: string,
+      docId: string,
+      payload: Record<string, any>
+    ) => {
+      try {
+        await db.updateDocument(targetDbId, colId, docId, payload);
+      } catch (err: any) {
+        const msg = String(err?.message || '');
+        if ('purchaseId' in payload && msg.toLowerCase().includes('unknown attribute')) {
+          const retryPayload = { ...payload };
+          delete retryPayload.purchaseId;
+          if (Object.keys(retryPayload).length > 0) {
+            await db.updateDocument(targetDbId, colId, docId, retryPayload);
+          }
+          return;
+        }
+        throw err;
+      }
+    };
 
     const callerCaps: Partial<MemberCapabilities> = {
       role: caller.isFounder ? 'founder' : 'curator',
@@ -152,10 +253,26 @@ export const POST: APIRoute = async ({ request }) => {
       const chunk = itemIds.slice(i, i + CHUNK_SIZE);
       const promises = chunk.map(async (id: string) => {
         try {
+          const needsExistingInspect =
+            !caller.isFounder ||
+            wantPlacement ||
+            Boolean(appendAuditNote) ||
+            Boolean(backfillIfMissing) ||
+            safeData.status === 'archived' ||
+            safeData.status === 'deconstructed' ||
+            (isBatchMode && safeData.upc !== undefined);
+
           if (caller.isFounder) {
-            if (wantPlacement) {
+            if (needsExistingInspect) {
               const found = await fetchExistingItem(id);
-              if (found) {
+              if (!found) {
+                return { success: false, id, error: 'Item could not be found.' };
+              }
+              const boothBlock = checkPhysicalBoothTagSafety(found.doc);
+              if (boothBlock) {
+                return { success: false, blocked: true, id, error: boothBlock };
+              }
+              if (wantPlacement) {
                 const projected = { ...found.doc, ...safeData };
                 const placementCheck = canItemBePlacedOrPrinted(projected, callerCaps, {
                   userId: caller.userId,
@@ -169,15 +286,21 @@ export const POST: APIRoute = async ({ request }) => {
                   };
                 }
               }
+              const perItemData = buildPerItemPayload(found.doc, safeData);
+              if (Object.keys(perItemData).length === 0) {
+                return { success: true, id };
+              }
+              await updateDocSafe(found.colId, id, perItemData);
+              return { success: true, id };
             }
             try {
-              await db.updateDocument(targetDbId, targetCollectionId, id, safeData);
+              await updateDocSafe(targetCollectionId, id, safeData);
               return { success: true, id };
             } catch (err: any) {
               if (err?.code === 404 || err?.message?.includes('not be found')) {
                 const altCollectionId =
                   targetCollectionId === 'items' ? 'items_dev' : 'items';
-                await db.updateDocument(targetDbId, altCollectionId, id, safeData);
+                await updateDocSafe(altCollectionId, id, safeData);
                 return { success: true, id };
               }
               throw err;
@@ -190,6 +313,11 @@ export const POST: APIRoute = async ({ request }) => {
             return { success: false, id, error: 'Item could not be found.' };
           }
           const { doc, colId } = found;
+          const boothBlock = checkPhysicalBoothTagSafety(doc);
+          if (boothBlock) {
+            return { success: false, blocked: true, id, error: boothBlock };
+          }
+
           const purchaseBuyerId = await resolvePurchaseBuyerId(doc?.purchaseId);
 
           let decision = evaluateItemAccess(doc, callerCaps, {
@@ -216,11 +344,31 @@ export const POST: APIRoute = async ({ request }) => {
             };
           }
 
-          const effectiveData = decision.canEditFull
+          if (
+            !decision.canEditFull &&
+            (safeData.status === 'archived' ||
+              safeData.status === 'deconstructed' ||
+              Boolean(backfillIfMissing))
+          ) {
+            return {
+              success: false,
+              blocked: true,
+              id,
+              error: 'Only the item owner or an Account Steward can archive or split items.',
+            };
+          }
+
+          const baseAllowed = decision.canEditFull
             ? safeData
             : sanitizeCoCuratorUpdatePayload(safeData, doc);
+          const effectiveData = decision.canEditFull
+            ? buildPerItemPayload(doc, baseAllowed)
+            : baseAllowed;
 
           if (Object.keys(effectiveData).length === 0) {
+            if (decision.canEditFull && backfillIfMissing) {
+              return { success: true, id };
+            }
             return {
               success: false,
               blocked: true,
@@ -247,7 +395,7 @@ export const POST: APIRoute = async ({ request }) => {
             }
           }
 
-          await db.updateDocument(targetDbId, colId, id, effectiveData);
+          await updateDocSafe(colId, id, effectiveData);
           return { success: true, id };
         } catch (err: any) {
           if (err instanceof CoopHttpError) {

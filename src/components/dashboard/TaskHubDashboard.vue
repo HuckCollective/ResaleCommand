@@ -214,6 +214,30 @@
             </p>
           </a>
         </div>
+
+        <!-- Live Duplicate & Sold-Ghost Health Check Callout -->
+        <a
+          v-if="healthTotalFlaggedCount > 0"
+          href="/inventory?health=audit"
+          class="rounded-2xl border-2 border-warning/45 bg-warning/10 p-3.5 sm:p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:border-warning transition-all"
+        >
+          <div class="space-y-0.5 min-w-0">
+            <div class="flex items-center gap-2 flex-wrap">
+              <span class="text-xs sm:text-sm font-black text-base-content">
+                🧹 Stock &amp; PO Health Check
+              </span>
+              <span class="badge badge-xs sm:badge-sm badge-warning text-warning-content font-mono font-black">
+                {{ healthTotalFlaggedCount }} spotted
+              </span>
+            </div>
+            <p class="text-xs text-base-content/80">
+              {{ healthBreakdownSummary }} — review &amp; archive duplicates safely without deleting history.
+            </p>
+          </div>
+          <span class="btn btn-sm h-11 md:h-9 btn-warning text-warning-content rounded-xl font-black shrink-0">
+            Review &amp; Clean Up ➔
+          </span>
+        </a>
       </div>
 
       <!-- TAB 2: 🏪 BOOTHS & ONLINE -->
@@ -433,6 +457,8 @@ import { useUrlTab } from '../../composables/useUrlTab';
 import { useDashboardSource } from '../../composables/dashboard/useDashboardSource';
 import { useDashboardMetrics } from '../../composables/dashboard/useDashboardMetrics';
 import { isActiveInventory, itemsOwnedBy, parseItemValue } from '../../lib/dashboardAlerts';
+import { normalizeInventoryStatus } from '../../lib/inventoryStatus';
+import { auditInventoryAndPurchaseHealth } from '../../lib/inventoryHealthAudit';
 
 defineEmits<{
   (e: 'open-join-queue'): void;
@@ -503,9 +529,10 @@ const myOwnedItems = computed(() => {
 const myActiveItems = computed(() => myOwnedItems.value.filter(isActiveInventory));
 const myUnplacedCount = computed(
   () =>
-    myActiveItems.value.filter(
-      (i: any) => i.status === 'received' || i.status === 'acquired'
-    ).length
+    myActiveItems.value.filter((i: any) => {
+      const norm = normalizeInventoryStatus(i?.status);
+      return norm === 'received' || norm === 'acquired';
+    }).length
 );
 
 const totalActiveItemsCount = computed(
@@ -522,12 +549,73 @@ const myHoursThisMonth = computed(() => {
     .reduce((sum: number, e: any) => sum + (Number(e?.hours) || 0), 0);
 });
 
-const openPurchasesCount = computed(
-  () =>
-    snapshot.value.purchases.filter(
-      (p: any) => String(p?.status || '').toLowerCase() !== 'received'
-    ).length
+const dashboardSalesForAudit = computed(() =>
+  snapshot.value.sales.map((s) => ({
+    $id: s.id,
+    orderId: s.title ? `Ticket • ${s.title}` : '',
+    saleDate: s.soldAt,
+    grossAmount: s.amount,
+  }))
 );
+
+const dashboardCapabilities = computed(() => {
+  const prefixes = Array.from(
+    new Set(
+      [effectivePrefix.value, ...(member.value.historicalPrefixes || [])]
+        .map((p) => String(p || '').trim().toUpperCase())
+        .filter(Boolean)
+    )
+  );
+  const isConsignor =
+    member.value.hats.includes('consignor') &&
+    !isFounderAdmin.value &&
+    !member.value.hats.includes('curator');
+  return {
+    role: isFounderAdmin.value ? ('founder' as const) : ('curator' as const),
+    prefix: effectivePrefix.value,
+    prefixStatus: effectivePrefixStatus.value,
+    ownedPrefixes: prefixes,
+    isConsignor,
+  };
+});
+
+const healthReport = computed(() =>
+  auditInventoryAndPurchaseHealth({
+    items: snapshot.value.items,
+    purchases: snapshot.value.purchases,
+    sales: dashboardSalesForAudit.value,
+    capabilities: dashboardCapabilities.value,
+    userId: null,
+    scope: dashboardCapabilities.value.isConsignor ? 'all' : 'mine',
+  })
+);
+
+const openPurchasesCount = computed(() => healthReport.value.actionableOpenPurchasesCount);
+
+const healthTotalFlaggedCount = computed(
+  () => healthReport.value.totalHighConfidenceCount + healthReport.value.totalReviewCount
+);
+
+const healthBreakdownSummary = computed(() => {
+  const r = healthReport.value;
+  const parts: string[] = [];
+  if (r.unclosedSplitLots.length > 0) {
+    parts.push(`${r.unclosedSplitLots.length} already-split parent lot${r.unclosedSplitLots.length === 1 ? '' : 's'}`);
+  }
+  if (r.soldTwinGhosts.length > 0) {
+    parts.push(`${r.soldTwinGhosts.length} sold/split backstock twin${r.soldTwinGhosts.length === 1 ? '' : 's'}`);
+  }
+  if (r.activeDuplicateClusters.length > 0) {
+    parts.push(`${r.extraActiveClonesCount} extra duplicate cop${r.extraActiveClonesCount === 1 ? 'y' : 'ies'}`);
+  }
+  if (r.barcodeCollisions.length > 0) {
+    parts.push(`${r.barcodeCollisions.length} barcode clash${r.barcodeCollisions.length === 1 ? '' : 'es'}`);
+  }
+  if (r.staleOpenPurchases.length > 0) {
+    parts.push(`${r.staleOpenPurchases.length} ready-to-close PO${r.staleOpenPurchases.length === 1 ? '' : 's'}`);
+  }
+  return parts.join(' · ');
+});
 const openVotesCount = computed(
   () => snapshot.value.proposals.filter((p) => p.status === 'active').length
 );
