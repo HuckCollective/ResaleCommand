@@ -797,9 +797,9 @@ export function useInventoryFilters(
             if (filterLocation.value === '__unassigned__') {
                 display = '🚨 Unassigned';
             } else if (filterLocation.value === '__storage__') {
-                display = '📦 All Storage';
+                display = '📦 Storage';
             } else if (filterLocation.value === '__selling__') {
-                display = '🏪 All Selling';
+                display = '🏪 Selling';
             } else if (filterLocation.value === '__online__') {
                 display = '🌐 Online';
             } else if (filterLocation.value === '__events__') {

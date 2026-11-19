@@ -51,7 +51,7 @@
           :value="filterStatus"
           aria-label="Filter by inventory status"
           title="Filter by inventory status"
-          class="hidden md:inline-flex select select-bordered select-xs h-8 rounded-xl font-bold text-xs bg-base-200/70 border-base-300 pr-6 pl-2.5 cursor-pointer"
+          class="hidden md:inline-flex select select-bordered select-xs w-auto min-w-0 max-w-full shrink-0 h-8 rounded-xl font-bold text-xs bg-base-200/70 border-base-300 pl-2.5 pr-7 cursor-pointer"
           @change="$emit('update:filterStatus', ($event.target as HTMLSelectElement).value)"
         >
           <option value="active">Active Stock ({{ getStatusCount('active') }})</option>

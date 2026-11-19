@@ -1,7 +1,10 @@
 <template>
   <div class="space-y-1.5">
-    <!-- Calm 1-Row Reseller Spatial Bar: All + Storage + Selling | Owner Scope + Sort + Select All (DaisyUI v5 .select defaults to 20rem width, so w-auto is required for single-row fit) -->
-    <div class="bg-base-100 border border-base-300 rounded-xl p-1.5 sm:px-2.5 sm:py-1.5 shadow-2xs flex flex-wrap items-center justify-between gap-1.5">
+    <!-- Calm 1-Row Reseller Spatial Bar: All + Storage + Selling | Owner Scope + Sort + Select All -->
+    <div
+      ref="barRef"
+      class="relative bg-base-100 border border-base-300 rounded-xl p-1.5 sm:px-2.5 sm:py-1.5 shadow-2xs flex flex-wrap items-center justify-between gap-1.5"
+    >
       <!-- Left: All + 📦 Storage Dropdown + 🏪 Selling Dropdown + Conditional 🚨 Unassigned -->
       <div class="flex items-center gap-1.5 flex-wrap sm:flex-nowrap min-w-0">
         <button
@@ -20,48 +23,186 @@
           </span>
         </button>
 
-        <select
-          :value="currentStorageSelectValue"
-          aria-label="Filter by Storage Location"
-          title="Backstock & Storage Locations"
-          class="select select-bordered select-xs w-auto min-w-0 max-w-full shrink-0 h-11 md:h-7 rounded-lg font-bold text-[11px] pl-2 pr-7 cursor-pointer transition-all"
-          :class="currentStorageSelectValue ? 'select-primary border-primary ring-1 ring-primary/40' : 'border-base-300'"
-          @change="onStorageSelectChange"
-        >
-          <option value="">📦 Storage ({{ locationCounts.__storage__ || 0 }})</option>
-          <option value="__storage__">📦 All Storage ({{ locationCounts.__storage__ || 0 }})</option>
-          <option v-for="loc in storageFacilities" :key="loc.code" :value="loc.code">
-            {{ loc.icon }} {{ loc.shortName }} ({{ locationCounts[loc.code] || 0 }})
-          </option>
-          <option
-            v-if="(locationCounts.__unassigned__ || 0) > 0 || filterLocation === '__unassigned__'"
-            value="__unassigned__"
+        <!-- Storage Dropdown (Compact DaisyUI Popover — Zero Duplicates) -->
+        <div class="sm:relative shrink-0">
+          <button
+            type="button"
+            class="btn btn-xs h-11 md:h-7 px-2 rounded-lg font-bold gap-1 shrink-0 transition-all cursor-pointer"
+            :class="
+              storageTriggerMeta.isActive
+                ? 'btn-primary text-primary-content shadow-xs ring-1 ring-primary'
+                : 'btn-ghost bg-base-200/60 hover:bg-base-200 text-base-content/85 border border-base-300/60'
+            "
+            aria-haspopup="menu"
+            :aria-expanded="openMenu === 'storage'"
+            aria-label="Filter by Storage Location"
+            title="Backstock & Storage Locations"
+            @click.stop="toggleMenu('storage')"
           >
-            🚨 Unassigned ({{ locationCounts.__unassigned__ || 0 }})
-          </option>
-        </select>
+            <span class="whitespace-nowrap text-[11px] sm:text-xs">{{ storageTriggerMeta.label }}</span>
+            <span
+              class="badge badge-2xs font-mono font-extrabold border-0 px-1.5 whitespace-nowrap shrink-0"
+              :class="storageTriggerMeta.isActive ? 'bg-base-100/25 text-current' : 'bg-base-300 text-base-content/75'"
+            >
+              {{ storageTriggerMeta.count }}
+            </span>
+            <Icon
+              icon="solar:alt-arrow-down-linear"
+              class="w-3 h-3 shrink-0 transition-transform"
+              :class="openMenu === 'storage' ? 'rotate-180' : ''"
+            />
+          </button>
 
-        <select
-          :value="currentSellingSelectValue"
-          aria-label="Filter by Selling Channel or Booth"
-          title="Booths, Online & Pop-Up Selling Channels"
-          class="select select-bordered select-xs w-auto min-w-0 max-w-full shrink-0 h-11 md:h-7 rounded-lg font-bold text-[11px] pl-2 pr-7 cursor-pointer transition-all"
-          :class="currentSellingSelectValue ? 'select-secondary border-secondary ring-1 ring-secondary/40' : 'border-base-300'"
-          @change="onSellingSelectChange"
-        >
-          <option value="">🏪 Selling ({{ locationCounts.__selling__ || 0 }})</option>
-          <option value="__selling__">🏪 All Selling ({{ locationCounts.__selling__ || 0 }})</option>
-          <option v-for="loc in sellingBoothFacilities" :key="loc.code" :value="loc.code">
-            {{ loc.icon }} {{ loc.shortName }} ({{ locationCounts[loc.code] || 0 }})
-          </option>
-          <option value="__online__">🌐 Online ({{ locationCounts.__online__ || 0 }})</option>
-          <option
-            v-if="(locationCounts.__events__ || 0) > 0 || filterLocation === '__events__'"
-            value="__events__"
+          <div
+            v-if="openMenu === 'storage'"
+            role="menu"
+            aria-label="Storage Locations"
+            class="absolute left-1.5 right-1.5 sm:left-0 sm:right-auto top-full mt-1 z-50 sm:w-max sm:min-w-[215px] max-w-[calc(100vw-2rem)] bg-base-100 border border-base-300 rounded-xl shadow-lg p-1 space-y-0.5"
           >
-            🎪 Events / Pop-Ups ({{ locationCounts.__events__ || 0 }})
-          </option>
-        </select>
+            <button
+              type="button"
+              role="menuitem"
+              class="w-full flex items-center justify-between gap-2 px-2.5 py-2 md:py-1.5 min-h-10 md:min-h-0 rounded-lg text-xs font-bold transition-colors cursor-pointer"
+              :class="currentStorageSelectValue === '__storage__' ? 'bg-primary text-primary-content' : 'text-base-content hover:bg-base-200'"
+              @click="chooseMenuLocation('__storage__')"
+            >
+              <span class="flex-1 min-w-0 truncate text-left">📦 Storage</span>
+              <span
+                class="badge badge-2xs font-mono font-extrabold border-0 px-1.5 whitespace-nowrap shrink-0"
+                :class="currentStorageSelectValue === '__storage__' ? 'bg-base-100/25 text-current' : 'bg-base-200 text-base-content/75'"
+              >
+                {{ locationCounts.__storage__ || 0 }}
+              </span>
+            </button>
+
+            <div class="border-t border-base-200 my-0.5"></div>
+
+            <button
+              v-for="loc in storageFacilities"
+              :key="loc.code"
+              type="button"
+              role="menuitem"
+              class="w-full flex items-center justify-between gap-2 px-2.5 py-2 md:py-1.5 min-h-10 md:min-h-0 rounded-lg text-xs font-bold transition-colors cursor-pointer"
+              :class="currentStorageSelectValue === loc.code.toUpperCase() ? 'bg-primary text-primary-content' : 'text-base-content hover:bg-base-200'"
+              @click="chooseMenuLocation(loc.code)"
+            >
+              <span class="flex-1 min-w-0 truncate text-left">{{ loc.icon }} {{ loc.shortName }}</span>
+              <span
+                class="badge badge-2xs font-mono font-extrabold border-0 px-1.5 whitespace-nowrap shrink-0"
+                :class="currentStorageSelectValue === loc.code.toUpperCase() ? 'bg-base-100/25 text-current' : 'bg-base-200 text-base-content/75'"
+              >
+                {{ locationCounts[loc.code] || 0 }}
+              </span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Selling Dropdown (Compact DaisyUI Popover — Zero Duplicates) -->
+        <div class="sm:relative shrink-0">
+          <button
+            type="button"
+            class="btn btn-xs h-11 md:h-7 px-2 rounded-lg font-bold gap-1 shrink-0 transition-all cursor-pointer"
+            :class="
+              sellingTriggerMeta.isActive
+                ? 'btn-secondary text-secondary-content shadow-xs ring-1 ring-secondary'
+                : 'btn-ghost bg-base-200/60 hover:bg-base-200 text-base-content/85 border border-base-300/60'
+            "
+            aria-haspopup="menu"
+            :aria-expanded="openMenu === 'selling'"
+            aria-label="Filter by Selling Channel or Booth"
+            title="Booths, Online & Pop-Up Selling Channels"
+            @click.stop="toggleMenu('selling')"
+          >
+            <span class="whitespace-nowrap text-[11px] sm:text-xs">{{ sellingTriggerMeta.label }}</span>
+            <span
+              class="badge badge-2xs font-mono font-extrabold border-0 px-1.5 whitespace-nowrap shrink-0"
+              :class="sellingTriggerMeta.isActive ? 'bg-base-100/25 text-current' : 'bg-base-300 text-base-content/75'"
+            >
+              {{ sellingTriggerMeta.count }}
+            </span>
+            <Icon
+              icon="solar:alt-arrow-down-linear"
+              class="w-3 h-3 shrink-0 transition-transform"
+              :class="openMenu === 'selling' ? 'rotate-180' : ''"
+            />
+          </button>
+
+          <div
+            v-if="openMenu === 'selling'"
+            role="menu"
+            aria-label="Selling Channels & Booths"
+            class="absolute left-1.5 right-1.5 sm:left-0 sm:right-auto top-full mt-1 z-50 sm:w-max sm:min-w-[215px] max-w-[calc(100vw-2rem)] bg-base-100 border border-base-300 rounded-xl shadow-lg p-1 space-y-0.5"
+          >
+            <button
+              type="button"
+              role="menuitem"
+              class="w-full flex items-center justify-between gap-2 px-2.5 py-2 md:py-1.5 min-h-10 md:min-h-0 rounded-lg text-xs font-bold transition-colors cursor-pointer"
+              :class="currentSellingSelectValue === '__selling__' ? 'bg-secondary text-secondary-content' : 'text-base-content hover:bg-base-200'"
+              @click="chooseMenuLocation('__selling__')"
+            >
+              <span class="flex-1 min-w-0 truncate text-left">🏪 Selling</span>
+              <span
+                class="badge badge-2xs font-mono font-extrabold border-0 px-1.5 whitespace-nowrap shrink-0"
+                :class="currentSellingSelectValue === '__selling__' ? 'bg-base-100/25 text-current' : 'bg-base-200 text-base-content/75'"
+              >
+                {{ locationCounts.__selling__ || 0 }}
+              </span>
+            </button>
+
+            <div class="border-t border-base-200 my-0.5"></div>
+
+            <button
+              v-for="loc in sellingBoothFacilities"
+              :key="loc.code"
+              type="button"
+              role="menuitem"
+              class="w-full flex items-center justify-between gap-2 px-2.5 py-2 md:py-1.5 min-h-10 md:min-h-0 rounded-lg text-xs font-bold transition-colors cursor-pointer"
+              :class="currentSellingSelectValue === loc.code.toUpperCase() ? 'bg-secondary text-secondary-content' : 'text-base-content hover:bg-base-200'"
+              @click="chooseMenuLocation(loc.code)"
+            >
+              <span class="flex-1 min-w-0 truncate text-left">{{ loc.icon }} {{ loc.shortName }}</span>
+              <span
+                class="badge badge-2xs font-mono font-extrabold border-0 px-1.5 whitespace-nowrap shrink-0"
+                :class="currentSellingSelectValue === loc.code.toUpperCase() ? 'bg-base-100/25 text-current' : 'bg-base-200 text-base-content/75'"
+              >
+                {{ locationCounts[loc.code] || 0 }}
+              </span>
+            </button>
+
+            <button
+              type="button"
+              role="menuitem"
+              class="w-full flex items-center justify-between gap-2 px-2.5 py-2 md:py-1.5 min-h-10 md:min-h-0 rounded-lg text-xs font-bold transition-colors cursor-pointer"
+              :class="currentSellingSelectValue === '__online__' ? 'bg-secondary text-secondary-content' : 'text-base-content hover:bg-base-200'"
+              @click="chooseMenuLocation('__online__')"
+            >
+              <span class="flex-1 min-w-0 truncate text-left">🌐 Online</span>
+              <span
+                class="badge badge-2xs font-mono font-extrabold border-0 px-1.5 whitespace-nowrap shrink-0"
+                :class="currentSellingSelectValue === '__online__' ? 'bg-base-100/25 text-current' : 'bg-base-200 text-base-content/75'"
+              >
+                {{ locationCounts.__online__ || 0 }}
+              </span>
+            </button>
+
+            <button
+              v-if="(locationCounts.__events__ || 0) > 0 || filterLocation === '__events__'"
+              type="button"
+              role="menuitem"
+              class="w-full flex items-center justify-between gap-2 px-2.5 py-2 md:py-1.5 min-h-10 md:min-h-0 rounded-lg text-xs font-bold transition-colors cursor-pointer"
+              :class="currentSellingSelectValue === '__events__' ? 'bg-secondary text-secondary-content' : 'text-base-content hover:bg-base-200'"
+              @click="chooseMenuLocation('__events__')"
+            >
+              <span class="flex-1 min-w-0 truncate text-left">🎪 Events / Pop-Ups</span>
+              <span
+                class="badge badge-2xs font-mono font-extrabold border-0 px-1.5 whitespace-nowrap shrink-0"
+                :class="currentSellingSelectValue === '__events__' ? 'bg-base-100/25 text-current' : 'bg-base-200 text-base-content/75'"
+              >
+                {{ locationCounts.__events__ || 0 }}
+              </span>
+            </button>
+          </div>
+        </div>
 
         <button
           v-if="(locationCounts.__unassigned__ || 0) > 0 || filterLocation === '__unassigned__'"
@@ -211,7 +352,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import { Icon } from '@iconify/vue';
 import {
   SPATIAL_LOCATIONS,
@@ -408,12 +549,47 @@ function onSortChange(e: Event) {
   }
 }
 
+const barRef = ref<HTMLElement | null>(null);
+const openMenu = ref<'storage' | 'selling' | null>(null);
+
+function toggleMenu(menu: 'storage' | 'selling') {
+  openMenu.value = openMenu.value === menu ? null : menu;
+}
+
+function chooseMenuLocation(locId: SpatialLocationId) {
+  openMenu.value = null;
+  emit('update:filterLocation', locId);
+}
+
+function handleDocumentPointerDown(e: PointerEvent) {
+  if (!openMenu.value) return;
+  const target = e.target as Node | null;
+  if (barRef.value && target && barRef.value.contains(target)) return;
+  openMenu.value = null;
+}
+
+function handleDocumentKeyDown(e: KeyboardEvent) {
+  if (e.key === 'Escape' && openMenu.value) {
+    openMenu.value = null;
+  }
+}
+
+onMounted(() => {
+  document.addEventListener('pointerdown', handleDocumentPointerDown);
+  document.addEventListener('keydown', handleDocumentKeyDown);
+});
+
+onBeforeUnmount(() => {
+  document.removeEventListener('pointerdown', handleDocumentPointerDown);
+  document.removeEventListener('keydown', handleDocumentKeyDown);
+});
+
 const storageCodeSet = new Set(storageFacilities.map((f) => f.code.toUpperCase()));
 const sellingBoothCodeSet = new Set(sellingBoothFacilities.map((f) => f.code.toUpperCase()));
 
 const currentStorageSelectValue = computed<string>(() => {
   const raw = (props.filterLocation || 'all').trim();
-  if (raw === '__storage__' || raw === '__unassigned__') return raw;
+  if (raw === '__storage__') return raw;
   const upper = raw.toUpperCase();
   if (storageCodeSet.has(upper) || upper === 'HD') return upper;
   return '';
@@ -426,16 +602,6 @@ const currentSellingSelectValue = computed<string>(() => {
   if (sellingBoothCodeSet.has(upper)) return upper;
   return '';
 });
-
-function onStorageSelectChange(e: Event) {
-  const val = (e.target as HTMLSelectElement).value;
-  emit('update:filterLocation', val || 'all');
-}
-
-function onSellingSelectChange(e: Event) {
-  const val = (e.target as HTMLSelectElement).value;
-  emit('update:filterLocation', val || 'all');
-}
 
 const locationCounts = computed<Record<string, number>>(() => {
   const counts: Record<string, number> = {
@@ -466,6 +632,51 @@ const locationCounts = computed<Record<string, number>>(() => {
   return counts;
 });
 
+const storageTriggerMeta = computed(() => {
+  const sel = currentStorageSelectValue.value;
+  if (sel === '__storage__') {
+    return { isActive: true, label: '📦 Storage', count: locationCounts.value.__storage__ || 0 };
+  }
+  if (sel === 'HD') {
+    return { isActive: true, label: '🛋️ HD', count: locationCounts.value.HD || 0 };
+  }
+  if (sel) {
+    const match = storageFacilities.find((f) => f.code.toUpperCase() === sel);
+    if (match) {
+      return {
+        isActive: true,
+        label: `${match.icon} ${match.shortName}`,
+        count: locationCounts.value[match.code] || 0,
+      };
+    }
+  }
+  return { isActive: false, label: '📦 Storage', count: locationCounts.value.__storage__ || 0 };
+});
+
+const sellingTriggerMeta = computed(() => {
+  const sel = currentSellingSelectValue.value;
+  if (sel === '__selling__') {
+    return { isActive: true, label: '🏪 Selling', count: locationCounts.value.__selling__ || 0 };
+  }
+  if (sel === '__online__') {
+    return { isActive: true, label: '🌐 Online', count: locationCounts.value.__online__ || 0 };
+  }
+  if (sel === '__events__') {
+    return { isActive: true, label: '🎪 Events', count: locationCounts.value.__events__ || 0 };
+  }
+  if (sel) {
+    const match = sellingBoothFacilities.find((f) => f.code.toUpperCase() === sel);
+    if (match) {
+      return {
+        isActive: true,
+        label: `${match.icon} ${match.shortName}`,
+        count: locationCounts.value[match.code] || 0,
+      };
+    }
+  }
+  return { isActive: false, label: '🏪 Selling', count: locationCounts.value.__selling__ || 0 };
+});
+
 const partnerCounts = computed<Record<string, number>>(() => {
   const counts: Record<string, number> = {
     all: activeItems.value.length,
@@ -489,6 +700,7 @@ const activeQueueMeta = computed(() => {
 });
 
 function selectLocation(locId: SpatialLocationId) {
+  openMenu.value = null;
   if (props.filterLocation === locId && locId !== 'all') {
     emit('update:filterLocation', 'all');
   } else {
