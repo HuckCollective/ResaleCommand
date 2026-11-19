@@ -273,7 +273,7 @@
                   <span>Collective &amp; Location Settings</span>
                 </a>
                 <a
-                  href="/coop/governance?tab=roster"
+                  href="/coop/governance#roster"
                   class="flex items-center rounded-xl py-2 px-3 gap-2 text-xs font-semibold hover:bg-base-200"
                   @click="closeDropdownFocus"
                 >
@@ -283,7 +283,7 @@
               </template>
               <a
                 v-else-if="capabilities.role === 'curator'"
-                href="/settings?tab=hardware"
+                href="/settings#hardware"
                 class="flex items-center rounded-xl py-2 px-3 gap-2 text-xs font-semibold hover:bg-base-200"
                 @click="closeDropdownFocus"
               >
@@ -583,7 +583,7 @@
                 </a>
                 <a
                   v-else-if="capabilities.role === 'curator'"
-                  href="/settings?tab=hardware"
+                  href="/settings#hardware"
                   class="btn btn-outline btn-sm h-11 rounded-xl font-semibold"
                   @click="openMobile = false"
                 >

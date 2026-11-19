@@ -220,6 +220,7 @@
     </SlideOverDrawer>
 
     <!-- SERVER-RENDERED CHARTER SECTIONS + INTERACTIVE PAYOUT SIMULATOR -->
+    <div ref="tabSectionRef" class="scroll-mt-20 space-y-6">
     <div
       v-for="section in sections"
       :key="`panel-${section.id}`"
@@ -268,6 +269,7 @@
         </div>
       </article>
     </div>
+    </div>
 
     <!-- Bottom Call-to-Action -->
     <div class="rounded-3xl bg-base-200 p-6 sm:p-8 border border-base-300 flex flex-col sm:flex-row items-center justify-between gap-4 print:hidden">
@@ -298,10 +300,11 @@
 </template>
 
 <script setup lang="ts">
-import { computed, defineAsyncComponent, onMounted, ref } from 'vue';
+import { computed, defineAsyncComponent, ref } from 'vue';
 import { Icon } from '@iconify/vue';
 import { addToast } from '../../stores/toast';
 import { useAuth } from '../../composables/useAuth';
+import { useUrlTab } from '../../composables/useUrlTab';
 import { resolveDefaultRicochetLocationMeta } from '../../lib/warehouses';
 import SlideOverDrawer from '../common/SlideOverDrawer.vue';
 import CoopSubNav from './CoopSubNav.vue';
@@ -333,27 +336,23 @@ const props = withDefaults(
 const { isAuthenticated, loading } = useAuth();
 const showMemberActions = computed(() => isAuthenticated.value || (loading.value && props.initialAuthenticated));
 
-const activeSection = ref<CharterSectionId>(props.initialSection || 'payouts');
+const {
+  activeTab: activeSection,
+  setTab: setCharterTab,
+  tabSectionRef,
+} = useUrlTab<CharterSectionId>({
+  tabs: () => (props.sections.length > 0 ? props.sections.map((s) => s.id) : VALID_SECTION_IDS),
+  defaultTab: 'payouts',
+  initialTab: props.initialSection || 'payouts',
+  legacyQueryParams: ['section', 'tab'],
+});
 const showConnectModal = ref(false);
 const copiedLink = ref(false);
 
 const joinRoleCards = computed(() => props.roleCards.filter((r) => r.showInJoinGrid));
 
 const selectSection = (id: CharterSectionId) => {
-  activeSection.value = id;
-  if (typeof window === 'undefined') return;
-  try {
-    const url = new URL(window.location.href);
-    url.searchParams.delete('tab');
-    if (id === 'payouts') {
-      url.searchParams.delete('section');
-    } else {
-      url.searchParams.set('section', id);
-    }
-    window.history.replaceState(null, '', url.pathname + url.search + url.hash);
-  } catch {
-    // Ignore history API errors in embedded contexts
-  }
+  setCharterTab(id, { scroll: true });
 };
 
 const handlePrint = () => {
@@ -364,7 +363,7 @@ const handlePrint = () => {
 
 const copyShareLink = async () => {
   try {
-    const suffix = activeSection.value !== 'payouts' ? `?section=${activeSection.value}` : '';
+    const suffix = activeSection.value !== 'payouts' ? `#${activeSection.value}` : '';
     const url = `${window.location.origin}/coop${suffix}`;
     await navigator.clipboard.writeText(url);
     copiedLink.value = true;
@@ -376,18 +375,6 @@ const copyShareLink = async () => {
     addToast({ type: 'error', message: 'Could not copy link' });
   }
 };
-
-onMounted(() => {
-  try {
-    const params = new URLSearchParams(window.location.search);
-    const sec = params.get('section') || params.get('tab');
-    if (sec && (VALID_SECTION_IDS as readonly string[]).includes(sec)) {
-      activeSection.value = sec as CharterSectionId;
-    }
-  } catch {
-    // Keep initialSection from SSR
-  }
-});
 </script>
 
 <style scoped>

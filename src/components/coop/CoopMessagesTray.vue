@@ -75,7 +75,7 @@
               <span>Report Bug / Msg</span>
             </button>
             <a
-              href="/coop/vault?tab=reports"
+              href="/coop/vault#reports"
               class="btn btn-xs sm:btn-sm btn-ghost rounded-xl font-bold hidden sm:inline-flex gap-1"
               title="Open full AI Vault & Prompt Maker"
             >
@@ -298,7 +298,7 @@
 
           <div class="px-4 sm:px-6 py-3 border-t border-base-200 bg-base-100 flex items-center justify-between gap-2">
             <a
-              href="/coop/vault?tab=reports"
+              href="/coop/vault#reports"
               class="btn btn-xs sm:btn-sm btn-outline btn-secondary rounded-xl font-bold gap-1.5"
             >
               <Icon icon="solar:magic-stick-3-bold-duotone" class="w-4 h-4" />

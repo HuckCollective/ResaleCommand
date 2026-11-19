@@ -87,7 +87,7 @@
     </section>
 
     <!-- FILTER TABS (<= 4 Pills) -->
-    <div class="flex flex-wrap items-center justify-between gap-2.5">
+    <div ref="tabSectionRef" class="scroll-mt-20 flex flex-wrap items-center justify-between gap-2.5">
       <div role="tablist" class="join bg-base-200/70 p-1 rounded-2xl border border-base-300 flex-wrap">
         <button
           v-for="tab in filterTabs"
@@ -96,7 +96,7 @@
           role="tab"
           class="join-item btn btn-sm h-11 md:h-9 rounded-xl font-bold gap-1.5"
           :class="activeFilter === tab.id ? 'btn-neutral text-neutral-content shadow-xs' : 'btn-ghost'"
-          @click="activeFilter = tab.id"
+          @click="setFilter(tab.id)"
         >
           <span>{{ tab.label }}</span>
           <span class="badge badge-xs font-mono font-bold whitespace-nowrap shrink-0">
@@ -609,6 +609,7 @@ import BottomActionDock from '../common/BottomActionDock.vue';
 import KpiStatGrid, { type KpiStatItem } from '../common/KpiStatGrid.vue';
 import SlideOverDrawer from '../common/SlideOverDrawer.vue';
 import { useAuth } from '../../composables/useAuth';
+import { useUrlTab } from '../../composables/useUrlTab';
 import { useMemberCapabilities } from '../../lib/memberAccess';
 import { logSweatEquityLaborEntry, pacificTodayYmd } from '../../lib/coopGovernance';
 import { getCoopJwtHeaders } from '../../lib/coopLedgerClient';
@@ -639,7 +640,15 @@ const loadError = ref('');
 const trackerVersion = ref(1);
 const campaigns = ref<SocialPromoCampaign[]>([]);
 const scheduledEvents = ref<CoopPublicEvent[]>([]);
-const activeFilter = ref<'all' | 'needs_post' | 'complete' | 'events'>('all');
+const {
+  activeTab: activeFilter,
+  setTab: setFilter,
+  tabSectionRef,
+} = useUrlTab<'all' | 'needs_post' | 'complete' | 'events'>({
+  tabs: ['all', 'needs_post', 'complete', 'events'],
+  defaultTab: 'all',
+  legacyQueryParams: ['tab'],
+});
 
 // Drawer 1: Campaign create/edit
 const campaignDrawerOpen = ref(false);

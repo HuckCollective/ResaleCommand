@@ -406,7 +406,7 @@
           <div class="space-y-1">
             <div class="flex items-center gap-2 flex-wrap">
               <a
-                href="/coop/governance?tab=rules"
+                href="/coop/governance#rules"
                 class="badge badge-sm badge-secondary text-secondary-content font-bold gap-1 hover:brightness-110 whitespace-nowrap shrink-0"
               >
                 <Icon icon="solar:user-hand-up-bold" class="w-3 h-3" />

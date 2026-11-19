@@ -74,14 +74,14 @@
     <KpiStatGrid :items="kpiStats" :columns="4" />
 
     <!-- 3-Tab Segmented Workbench Bar -->
-    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 border-b border-base-300 pb-3">
+    <div ref="tabSectionRef" class="scroll-mt-20 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 border-b border-base-300 pb-3">
       <div role="tablist" class="tabs tabs-box bg-base-200/80 p-1 rounded-2xl w-full sm:w-auto">
         <button
           type="button"
           role="tab"
           class="tab text-xs sm:text-sm font-black gap-1.5 rounded-xl px-3 sm:px-4 transition-all"
           :class="activeTab === 'scorecard' ? 'tab-active bg-primary text-primary-content shadow-xs' : 'text-base-content/75'"
-          @click="activeTab = 'scorecard'"
+          @click="setTab('scorecard')"
         >
           <span>🎯 Truth Scorecard</span>
           <span
@@ -98,7 +98,7 @@
           role="tab"
           class="tab text-xs sm:text-sm font-black gap-1.5 rounded-xl px-3 sm:px-4 transition-all"
           :class="activeTab === 'rules' ? 'tab-active bg-primary text-primary-content shadow-xs' : 'text-base-content/75'"
-          @click="activeTab = 'rules'"
+          @click="setTab('rules')"
         >
           <span>⚙️ Rules &amp; Test</span>
           <span
@@ -114,7 +114,7 @@
           role="tab"
           class="tab text-xs sm:text-sm font-black gap-1.5 rounded-xl px-3 sm:px-4 transition-all"
           :class="activeTab === 'telemetry' ? 'tab-active bg-primary text-primary-content shadow-xs' : 'text-base-content/75'"
-          @click="activeTab = 'telemetry'"
+          @click="setTab('telemetry')"
         >
           <span>📊 AI Spend &amp; Credits</span>
           <span class="badge badge-xs badge-success text-success-content font-mono font-bold whitespace-nowrap">
@@ -127,7 +127,7 @@
           role="tab"
           class="tab text-xs sm:text-sm font-black gap-1.5 rounded-xl px-3 sm:px-4 transition-all"
           :class="activeTab === 'bookmarklets' ? 'tab-active bg-primary text-primary-content shadow-xs' : 'text-base-content/75'"
-          @click="activeTab = 'bookmarklets'"
+          @click="setTab('bookmarklets')"
         >
           <span>🔖 Bookmarklets</span>
           <span
@@ -1541,6 +1541,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, defineAsyncComponent } from 'vue';
 import { Icon } from '@iconify/vue';
+import { useUrlTab } from '../../composables/useUrlTab';
 import KpiStatGrid, { type KpiStatItem } from '../common/KpiStatGrid.vue';
 import PaginationDock from '../common/PaginationDock.vue';
 import ItemThumbnail from '../common/ItemThumbnail.vue';
@@ -1574,7 +1575,11 @@ type ScorecardFilterKey =
   | 'booth_bins';
 
 // Core State (Declared strictly above computed/lifecycle to prevent TDZ)
-const activeTab = ref<LabTab>('scorecard');
+const { activeTab, setTab, tabSectionRef } = useUrlTab<LabTab>({
+  tabs: ['scorecard', 'rules', 'telemetry', 'bookmarklets'],
+  defaultTab: 'scorecard',
+  legacyQueryParams: ['tab'],
+});
 const windowDays = ref<number>(180);
 const loadingLab = ref<boolean>(true);
 const loadError = ref<string | null>(null);

@@ -7,6 +7,11 @@ import CoopGovernanceView from '../../../components/coop/CoopGovernanceView.vue'
 export const prerender = false;
 
 const { id } = Astro.params;
+const slug = String(id || '').trim().toLowerCase();
+if (slug === 'proposals' || slug === 'rules' || slug === 'roster' || slug === 'docs') {
+  return Astro.redirect(slug === 'proposals' ? '/coop/governance' : `/coop/governance#${slug}`, 302);
+}
+
 const rawDocs = await getCollection('coopDocs');
 const strategyDocs = rawDocs
   .sort((a, b) => (a.data.order ?? 10) - (b.data.order ?? 10))

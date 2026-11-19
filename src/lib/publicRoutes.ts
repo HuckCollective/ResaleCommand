@@ -40,6 +40,7 @@ export function isPublicPagePath(pathname: string): boolean {
   return STATIC_FILE_RE.test(clean);
 }
 
-export function buildLoginRedirect(pathname: string, search = ''): string {
-  return `/login?redirect=${encodeURIComponent(pathname + search)}`;
+export function buildLoginRedirect(pathname: string, search = '', hash = ''): string {
+  const safeHash = hash && hash.startsWith('#') ? hash : '';
+  return `/login?redirect=${encodeURIComponent(pathname + search)}${safeHash}`;
 }

@@ -59,7 +59,7 @@ export function getRoleActionsForHat(hat: MemberHat, prefix: string): RoleAction
       ];
     case 'builder':
       return [
-        { label: 'Idea & Prompt Vault', hint: 'Bug reports, specs & AI prompts', icon: 'solar:notebook-bold-duotone', href: '/coop/vault?tab=reports' },
+        { label: 'Idea & Prompt Vault', hint: 'Bug reports, specs & AI prompts', icon: 'solar:notebook-bold-duotone', href: '/coop/vault#reports' },
         { label: 'Flagship & Events CMS', hint: 'thehc.llc/#works copy & channels', icon: 'solar:globus-bold-duotone', href: '/coop/cms' },
         { label: 'Thermal Label Studio', hint: 'Signage, shelf cards & barcode tags', icon: 'solar:printer-bold-duotone', href: '/labels/studio' },
         { label: 'Locations & Booth Sync', hint: 'Booth fixtures, SKUs & floor setup', icon: 'solar:shop-2-bold-duotone', href: '/warehouse' },
@@ -82,7 +82,7 @@ export function getRolePrimaryCpa(hat: MemberHat): RolePrimaryCpa {
     case 'promoter':
       return { label: 'Dropcast Studio', shortLabel: 'Dropcast', icon: 'solar:broadcast-bold', href: '/social' };
     case 'builder':
-      return { label: 'Builder Vault', shortLabel: 'Vault', icon: 'solar:code-square-bold', href: '/coop/vault?tab=reports' };
+      return { label: 'Builder Vault', shortLabel: 'Vault', icon: 'solar:code-square-bold', href: '/coop/vault#reports' };
     case 'consignor':
       return { label: 'My Statement', shortLabel: 'Statement', icon: 'solar:document-text-bold', href: '/coop/settlements' };
     case 'curator':

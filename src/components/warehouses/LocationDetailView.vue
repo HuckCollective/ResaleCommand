@@ -115,11 +115,12 @@
       </div>
 
       <!-- Navigation Tabs (Drops & Manifests vs In-Stock Catalog vs Settings) -->
-      <div class="tabs tabs-bordered font-bold text-sm border-b border-base-300">
+      <div ref="tabSectionRef" role="tablist" class="scroll-mt-20 tabs tabs-bordered font-bold text-sm border-b border-base-300">
         <a 
+          role="tab"
           class="tab gap-2 pb-3"
           :class="{'tab-active !border-primary text-primary': activeTab === 'manifests'}"
-          @click="activeTab = 'manifests'"
+          @click="setTab('manifests')"
         >
           <Icon icon="solar:box-minimalistic-bold" class="w-4 h-4" />
           <span>Outbound Drops &amp; Manifests</span>
@@ -129,9 +130,10 @@
         </a>
 
         <a 
+          role="tab"
           class="tab gap-2 pb-3"
           :class="{'tab-active !border-primary text-primary': activeTab === 'catalog'}"
-          @click="activeTab = 'catalog'"
+          @click="setTab('catalog')"
         >
           <Icon icon="solar:tag-bold" class="w-4 h-4" />
           <span>In-Stock Catalog</span>
@@ -141,9 +143,10 @@
         </a>
 
         <a 
+          role="tab"
           class="tab gap-2 pb-3"
           :class="{'tab-active !border-primary text-primary': activeTab === 'expenses'}"
-          @click="activeTab = 'expenses'"
+          @click="setTab('expenses')"
         >
           <Icon icon="solar:wallet-money-bold" class="w-4 h-4" />
           <span>Rent &amp; Expenses</span>
@@ -153,9 +156,10 @@
         </a>
 
         <a 
+          role="tab"
           class="tab gap-2 pb-3"
           :class="{'tab-active !border-primary text-primary': activeTab === 'settings'}"
-          @click="activeTab = 'settings'"
+          @click="setTab('settings')"
         >
           <Icon icon="solar:settings-bold" class="w-4 h-4" />
           <span>Booth Settings &amp; Economics</span>
@@ -1163,6 +1167,7 @@
 import { ref, computed, onMounted, watch, defineAsyncComponent } from 'vue';
 import { Icon } from '@iconify/vue';
 import { useAuth } from '../../composables/useAuth';
+import { useUrlTab } from '../../composables/useUrlTab';
 import { useInventory } from '../../composables/useInventory';
 import { warehousesApi, type WarehouseDocument, matchesLocationFilter, resolveCanonicalLocationCode, getLocationSettingMeta, buildRicochetBookmarkletHref } from '../../lib/warehouses';
 import {
@@ -1317,7 +1322,13 @@ const bookmarkletBarLabel = computed(() =>
 const locationManifests = ref<ManifestDocument[]>([]);
 const loading = ref(true);
 const error = ref('');
-const activeTab = ref<'manifests' | 'catalog' | 'expenses' | 'settings'>('manifests');
+const { activeTab, setTab, tabSectionRef } = useUrlTab<
+  'manifests' | 'catalog' | 'expenses' | 'settings'
+>({
+  tabs: ['manifests', 'catalog', 'expenses', 'settings'],
+  defaultTab: 'manifests',
+  legacyQueryParams: ['tab'],
+});
 
 const DB_ID = import.meta.env.PUBLIC_APPWRITE_DB_ID || 'resale_db';
 

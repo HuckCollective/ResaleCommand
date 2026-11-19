@@ -82,7 +82,7 @@
                     </p>
                 </div>
             </div>
-            <a href="/coop/governance?tab=roster" class="btn btn-sm h-11 md:h-9 btn-primary rounded-xl font-black gap-1.5 shrink-0">
+            <a href="/coop/governance#roster" class="btn btn-sm h-11 md:h-9 btn-primary rounded-xl font-black gap-1.5 shrink-0">
                 <span>Open Unified Collective Roster</span>
                 <Icon icon="solar:arrow-right-linear" class="w-4 h-4" />
             </a>

@@ -67,7 +67,7 @@
             <span>Joined: {{ new Date(user?.$createdAt || '').toLocaleDateString() }}</span>
             <a
               v-if="capabilitiesResolved && capabilities.canViewCollectiveTools"
-              href="/coop/governance?tab=roster"
+              href="/coop/governance#roster"
               class="link link-primary font-bold"
             >
               View Collective Roster &amp; Member Hats ➔

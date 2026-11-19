@@ -282,9 +282,12 @@ const submit = async () => {
         await auth.login(email.value.trim().toLowerCase(), password.value);
 
         const urlParams = new URLSearchParams(window.location.search);
-        const redirect = urlParams.get('redirect');
-        if (redirect) {
-            window.location.href = redirect;
+        const rawRedirect = urlParams.get('redirect') || '';
+        const safeRedirect = rawRedirect.startsWith('/') && !rawRedirect.startsWith('//') ? rawRedirect : '';
+        if (safeRedirect) {
+            const currentHash = window.location.hash || '';
+            const target = currentHash && !safeRedirect.includes('#') ? `${safeRedirect}${currentHash}` : safeRedirect;
+            window.location.href = target;
         } else {
             window.location.href = '/dashboard';
         }

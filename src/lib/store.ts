@@ -126,9 +126,9 @@ export async function initAuth() {
 // (expired / cleared) while on a member-only page, send the visitor to /login.
 function redirectGuestToLogin() {
     if (typeof window === 'undefined') return;
-    const { pathname, search } = window.location;
+    const { pathname, search, hash } = window.location;
     if (!isPublicPagePath(pathname)) {
-        window.location.replace(buildLoginRedirect(pathname, search));
+        window.location.replace(buildLoginRedirect(pathname, search, hash));
     }
 }
 

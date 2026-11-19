@@ -92,7 +92,7 @@
     </section>
 
     <!-- 4 PLAIN-ENGLISH JOB TABS ("What are you trying to do right now?") -->
-    <section class="card bg-base-100 border border-base-300/85 shadow-sm rounded-3xl p-3.5 sm:p-5 space-y-4">
+    <section ref="tabSectionRef" class="scroll-mt-20 card bg-base-100 border border-base-300/85 shadow-sm rounded-3xl p-3.5 sm:p-5 space-y-4">
       <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
         <div class="text-xs font-extrabold uppercase tracking-wider text-base-content/60">
           What are you working on right now?
@@ -339,7 +339,7 @@
 
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
             <a
-              href="/coop/governance?tab=roster"
+              href="/coop/governance#roster"
               class="rounded-xl bg-base-100 border border-base-300 px-3 py-2.5 flex items-center justify-between gap-2 hover:border-primary/50"
             >
               <div class="space-y-0.5">
@@ -427,8 +427,9 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue';
+import { computed } from 'vue';
 import { Icon } from '@iconify/vue';
+import { useUrlTab } from '../../composables/useUrlTab';
 import { useDashboardSource } from '../../composables/dashboard/useDashboardSource';
 import { useDashboardMetrics } from '../../composables/dashboard/useDashboardMetrics';
 import { isActiveInventory, itemsOwnedBy, parseItemValue } from '../../lib/dashboardAlerts';
@@ -444,25 +445,17 @@ const TAB_STORAGE_KEY = 'rc_task_hub_tab_v1';
 const source = useDashboardSource();
 const { globalProfit } = useDashboardMetrics();
 
-const activeTab = ref<TaskTabId>('stuff');
-
-onMounted(() => {
-  if (typeof window === 'undefined') return;
-  try {
-    const saved = sessionStorage.getItem(TAB_STORAGE_KEY) as TaskTabId | null;
-    if (saved === 'stuff' || saved === 'booths' || saved === 'promote' || saved === 'steward') {
-      activeTab.value = saved;
-    }
-  } catch {}
+const {
+  activeTab,
+  setTab: selectTab,
+  tabSectionRef,
+} = useUrlTab<TaskTabId>({
+  tabs: ['stuff', 'booths', 'promote', 'steward'],
+  defaultTab: 'stuff',
+  legacyQueryParams: ['tab'],
+  aliases: { build: 'steward', approvals: 'steward', tasks: 'steward' },
+  fallbackStorageKey: TAB_STORAGE_KEY,
 });
-
-function selectTab(id: TaskTabId) {
-  activeTab.value = id;
-  if (typeof window === 'undefined') return;
-  try {
-    sessionStorage.setItem(TAB_STORAGE_KEY, id);
-  } catch {}
-}
 
 const snapshot = computed(() => source.snapshot.value);
 const member = computed(() => source.member.value);

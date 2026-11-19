@@ -169,7 +169,7 @@
         <span class="font-extrabold uppercase tracking-wider text-base-content/60">
           Individual Worker-Member Sweat-Equity Shares (Approved Hours Feed Gate 4B Payouts)
         </span>
-        <a href="/coop/governance?tab=roster" class="link link-primary font-bold text-[11px]">
+        <a href="/coop/governance#roster" class="link link-primary font-bold text-[11px]">
           + Manage Roles &amp; Account Links in Roster ➔
         </a>
       </div>
@@ -203,10 +203,11 @@
     </div>
 
     <!-- Top Segmented View Switcher: Task Board vs. Hours & Shifts Ledger -->
-    <div class="bg-base-100 border border-base-300 rounded-2xl p-2 shadow-2xs flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2">
+    <div ref="tabSectionRef" role="tablist" class="scroll-mt-20 bg-base-100 border border-base-300 rounded-2xl p-2 shadow-2xs flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2">
       <div class="grid grid-cols-2 gap-1.5 flex-1 sm:max-w-xl">
         <button
           type="button"
+          role="tab"
           class="btn btn-sm h-11 md:h-9 rounded-xl font-black gap-1.5"
           :class="activeLaborView === 'tasks' ? 'btn-primary text-primary-content shadow-2xs' : 'btn-ghost text-base-content/75'"
           @click="setLaborView('tasks')"
@@ -221,6 +222,7 @@
         </button>
         <button
           type="button"
+          role="tab"
           class="btn btn-sm h-11 md:h-9 rounded-xl font-black gap-1.5"
           :class="activeLaborView === 'ledger' ? 'btn-primary text-primary-content shadow-2xs' : 'btn-ghost text-base-content/75'"
           @click="setLaborView('ledger')"
@@ -295,7 +297,7 @@
         >
           <div class="font-black text-warning">🔗 Account Link Needed</div>
           <p class="text-[11px] opacity-80">
-            Ask a Founder to link your account in <a href="/coop/governance?tab=roster" class="link font-bold">/coop/governance (Roster)</a> before logging hours.
+            Ask a Founder to link your account in <a href="/coop/governance#roster" class="link font-bold">/coop/governance#roster</a> before logging hours.
           </p>
         </div>
 
@@ -1083,6 +1085,7 @@ import { askConfirm } from '../../stores/confirm';
 import { toUserMessage } from '../../lib/userFacingErrors';
 import { parsePriceValue } from '../../lib/lot-strategy';
 import { useAuth } from '../../composables/useAuth';
+import { useUrlTab } from '../../composables/useUrlTab';
 import { useMemberCapabilities } from '../../lib/memberAccess';
 import { useCoopFounderGate } from '../../composables/useCoopFounderGate';
 import {
@@ -1138,7 +1141,16 @@ const isCloudSynced = ref(false);
 const isLoadingLedger = ref(false);
 const isLoadingTasks = ref(false);
 const isSaving = ref(false);
-const activeLaborView = ref<'tasks' | 'ledger'>('tasks');
+const {
+  activeTab: activeLaborView,
+  setTab: setLaborView,
+  tabSectionRef,
+  hasExplicitUrlTab,
+} = useUrlTab<'tasks' | 'ledger'>({
+  tabs: ['tasks', 'ledger'],
+  defaultTab: 'tasks',
+  legacyQueryParams: ['view', 'tab'],
+});
 const selectedMonth = ref<string>('all');
 const statusFilter = ref<'all' | 'pending' | 'approved' | 'rejected'>('all');
 const selectedMemberIdx = ref<number>(0);
@@ -1168,16 +1180,6 @@ const taskActionableBadgeCount = computed(
     taskPendingBadges.value.peerSignoffsForMe +
     taskPendingBadges.value.tiebreaksForFounder
 );
-
-function setLaborView(view: 'tasks' | 'ledger') {
-  activeLaborView.value = view;
-  if (typeof window !== 'undefined') {
-    const url = new URL(window.location.href);
-    if (view === 'tasks') url.searchParams.delete('view');
-    else url.searchParams.set('view', 'ledger');
-    window.history.replaceState({}, '', url.toString());
-  }
-}
 
 const form = ref<{
   date: string;
@@ -2097,7 +2099,6 @@ onMounted(async () => {
 
   if (typeof window !== 'undefined') {
     const params = new URLSearchParams(window.location.search);
-    const viewParam = params.get('view');
     const monthParam = params.get('month');
     const statusParam = params.get('status');
     const refParam = params.get('deliverableRef') || params.get('ref');
@@ -2106,16 +2107,10 @@ onMounted(async () => {
     const partnerParam = (params.get('partner') || '').toUpperCase();
 
     if (
-      viewParam === 'ledger' ||
-      monthParam ||
-      statusParam ||
-      refParam ||
-      hrsParam > 0 ||
-      notesParam
+      !hasExplicitUrlTab.value &&
+      (monthParam || statusParam || refParam || hrsParam > 0 || notesParam)
     ) {
-      activeLaborView.value = 'ledger';
-    } else if (viewParam === 'tasks') {
-      activeLaborView.value = 'tasks';
+      setLaborView('ledger', { scroll: true });
     }
 
     if (monthParam && /^\d{4}-(0[1-9]|1[0-2])$/.test(monthParam)) {

@@ -47,11 +47,12 @@
     </div>
 
     <!-- Tab Switcher -->
-    <div class="grid grid-cols-2 lg:grid-cols-4 gap-2 p-1.5 bg-base-200/80 border border-base-300 rounded-2xl">
+    <div ref="tabSectionRef" role="tablist" class="scroll-mt-20 grid grid-cols-2 lg:grid-cols-4 gap-2 p-1.5 bg-base-200/80 border border-base-300 rounded-2xl">
       <button
         v-for="t in tabs"
         :key="t.id"
         type="button"
+        role="tab"
         @click="setTab(t.id)"
         class="btn btn-sm h-10 rounded-xl font-bold gap-2"
         :class="activeTab === t.id ? 'btn-primary shadow-xs' : 'btn-ghost text-base-content/75'"
@@ -147,7 +148,7 @@
             <span class="badge badge-ghost badge-sm font-mono font-bold">
               {{ policy.members.length }} Roster Profile{{ policy.members.length === 1 ? '' : 's' }}
             </span>
-            <a href="/coop/governance?tab=roster" class="btn btn-sm h-11 md:h-8 btn-primary text-primary-content rounded-xl font-black gap-1.5">
+            <a href="/coop/governance#roster" class="btn btn-sm h-11 md:h-8 btn-primary text-primary-content rounded-xl font-black gap-1.5">
               <span>Open Unified Roster &amp; SKU Locks</span>
               <span>➔</span>
             </a>
@@ -393,6 +394,7 @@
 import { ref, computed, onMounted, watch } from 'vue';
 import { Icon } from '@iconify/vue';
 import { useAuth } from '../../composables/useAuth';
+import { useUrlTab } from '../../composables/useUrlTab';
 import { useMemberCapabilities } from '../../lib/memberAccess';
 import { askConfirm } from '../../stores/confirm';
 import { toUserMessage } from '../../lib/userFacingErrors';
@@ -436,17 +438,16 @@ const tabs: { id: SettingsTab; label: string; icon: string }[] = [
   { id: 'team', label: 'Team, Storefront & API', icon: 'solar:users-group-two-rounded-bold-duotone' },
   { id: 'hardware', label: 'Bookmarklets & Thermal', icon: 'solar:printer-bold-duotone' },
 ];
-const activeTab = ref<SettingsTab>('personas');
-
-const setTab = (tab: SettingsTab) => {
-  activeTab.value = tab;
-  if (typeof window !== 'undefined') {
-    const url = new URL(window.location.href);
-    if (tab === 'personas') url.searchParams.delete('tab');
-    else url.searchParams.set('tab', tab);
-    window.history.replaceState({}, '', url.toString());
-  }
-};
+const {
+  activeTab,
+  setTab,
+  tabSectionRef,
+} = useUrlTab<SettingsTab>({
+  tabs: ['personas', 'locations', 'team', 'hardware'],
+  defaultTab: 'personas',
+  legacyQueryParams: ['tab'],
+  aliases: { bookmarklets: 'hardware', members: 'team' },
+});
 
 interface PrefixRow {
   prefix: string;
@@ -671,12 +672,6 @@ const saveSettings = async () => {
 
 onMounted(async () => {
   if (!capabilities.value.canSeeCollectiveFinancials) return;
-  if (typeof window !== 'undefined') {
-    const tab = new URLSearchParams(window.location.search).get('tab');
-    if (tab === 'personas' || tab === 'locations' || tab === 'team' || tab === 'hardware') activeTab.value = tab;
-    if (tab === 'bookmarklets') activeTab.value = 'hardware';
-    if (tab === 'members') activeTab.value = 'team';
-  }
   await Promise.all([loadSettings(), loadWarehouses()]);
 });
 

@@ -141,12 +141,13 @@
     <!-- ===================================================== -->
     <!-- 3. UNIFIED GLOBAL SCOPE BAR (/sales Archetype)        -->
     <!-- ===================================================== -->
-    <div class="bg-base-100 border border-base-200 rounded-2xl p-3 sm:p-4 shadow-xs space-y-3">
+    <div ref="tabSectionRef" class="scroll-mt-20 bg-base-100 border border-base-200 rounded-2xl p-3 sm:p-4 shadow-xs space-y-3">
       <!-- Top Row: 4-Tab Segmented Navigation + Inline Voter Selector -->
       <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
-        <div class="grid grid-cols-2 sm:grid-cols-4 gap-1.5 p-1 bg-base-200/80 border border-base-300 rounded-xl flex-1">
+        <div role="tablist" class="grid grid-cols-2 sm:grid-cols-4 gap-1.5 p-1 bg-base-200/80 border border-base-300 rounded-xl flex-1">
           <button
             type="button"
+            role="tab"
             class="btn btn-xs sm:btn-sm h-9 rounded-lg font-bold gap-1.5"
             :class="activeGovTab === 'proposals' ? 'btn-primary shadow-2xs' : 'btn-ghost text-base-content/75'"
             @click="setGovTab('proposals')"
@@ -155,6 +156,7 @@
           </button>
           <button
             type="button"
+            role="tab"
             class="btn btn-xs sm:btn-sm h-9 rounded-lg font-bold gap-1.5"
             :class="activeGovTab === 'rules' ? 'btn-primary shadow-2xs' : 'btn-ghost text-base-content/75'"
             @click="setGovTab('rules')"
@@ -163,6 +165,7 @@
           </button>
           <button
             type="button"
+            role="tab"
             class="btn btn-xs sm:btn-sm h-9 rounded-lg font-bold gap-1.5"
             :class="activeGovTab === 'roster' ? 'btn-primary shadow-2xs' : 'btn-ghost text-base-content/75'"
             @click="setGovTab('roster')"
@@ -171,6 +174,7 @@
           </button>
           <button
             type="button"
+            role="tab"
             class="btn btn-xs sm:btn-sm h-9 rounded-lg font-bold gap-1.5"
             :class="activeGovTab === 'docs' ? 'btn-primary shadow-2xs' : 'btn-ghost text-base-content/75'"
             @click="setGovTab('docs')"
@@ -899,6 +903,7 @@ import { Icon } from '@iconify/vue';
 import { addToast } from '../../stores/toast';
 import { askConfirm } from '../../stores/confirm';
 import { useAuth } from '../../composables/useAuth';
+import { useUrlTab } from '../../composables/useUrlTab';
 import { useMemberCapabilities } from '../../lib/memberAccess';
 import { useCoopFounderGate, matchRosterMemberStrict } from '../../composables/useCoopFounderGate';
 import CollectiveAccessGate from '../common/CollectiveAccessGate.vue';
@@ -954,7 +959,15 @@ const { capabilities } = useMemberCapabilities();
 type GovTab = 'proposals' | 'rules' | 'roster' | 'docs';
 type ProposalBucket = 'all' | 'active' | 'consensus' | 'blocked';
 
-const activeGovTab = ref<GovTab>('proposals');
+const {
+  activeTab: activeGovTab,
+  setTab: setGovTab,
+  tabSectionRef,
+} = useUrlTab<GovTab>({
+  tabs: ['proposals', 'rules', 'roster', 'docs'],
+  defaultTab: 'proposals',
+  legacyQueryParams: ['tab'],
+});
 const statusFilter = ref<ProposalBucket>('all');
 const categoryFilter = ref<string>('all');
 const searchQuery = ref('');
@@ -1167,8 +1180,8 @@ const filteredProposals = computed(() => {
 });
 
 function selectProposalFilter(filter: ProposalBucket) {
-  activeGovTab.value = 'proposals';
   statusFilter.value = filter;
+  setGovTab('proposals', { scroll: true });
 }
 
 function openProposalDrawer(p: { id: string }) {
@@ -1201,28 +1214,11 @@ function onMessagesUpdated(ev: Event) {
   }
 }
 
-const setGovTab = (tab: GovTab) => {
-  activeGovTab.value = tab;
-  if (typeof window !== 'undefined') {
-    const url = new URL(window.location.href);
-    if (tab === 'proposals') {
-      url.searchParams.delete('tab');
-    } else {
-      url.searchParams.set('tab', tab);
-    }
-    window.history.replaceState({}, '', url.toString());
-  }
-};
-
 onMounted(async () => {
   if (!capabilities.value.canSeeCollectiveFinancials) return;
   if (typeof window !== 'undefined') {
     window.addEventListener('coop-messages-updated', onMessagesUpdated as EventListener);
     const params = new URLSearchParams(window.location.search);
-    const tab = params.get('tab');
-    if (tab === 'rules' || tab === 'roster' || tab === 'proposals' || tab === 'docs') {
-      activeGovTab.value = tab;
-    }
     const draftTitle = params.get('draftTitle');
     const draftFromDoc = params.get('draftFromDoc');
     if (draftTitle || draftFromDoc) {

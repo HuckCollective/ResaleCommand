@@ -31,7 +31,7 @@
     <!-- Live Democratic Policy Badges -->
     <div class="flex flex-wrap items-center justify-between lg:justify-end gap-1.5 px-1">
       <a
-        href="/coop/governance?tab=rules"
+        href="/coop/governance#rules"
         class="badge badge-sm badge-outline border-primary/40 text-primary font-mono font-bold gap-1 py-2.5 px-2.5 hover:bg-primary/10 transition-colors"
         title="Click to configure Gate 3 & Gate 4B Co-op Waterfall Rules"
       >
@@ -41,7 +41,7 @@
         </span>
       </a>
       <a
-        href="/coop/governance?tab=rules"
+        href="/coop/governance#rules"
         class="badge badge-sm badge-ghost font-mono font-semibold gap-1 py-2.5 px-2.5 text-[11px] hover:bg-base-200 transition-colors"
         title="Gate 4B Excess Surplus WSDE Split: Reserve / Sales Patronage / Promoter &amp; Enabler Labor"
       >

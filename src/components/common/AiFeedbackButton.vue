@@ -210,7 +210,7 @@
 
           <!-- Modal Footer -->
           <div class="px-4 sm:px-6 py-3.5 border-t border-base-200 bg-base-100 flex items-center justify-between gap-2">
-            <a href="/coop/vault?tab=reports" class="link link-hover text-xs font-bold text-primary">
+            <a href="/coop/vault#reports" class="link link-hover text-xs font-bold text-primary">
               Open Review Queue →
             </a>
             <div class="flex items-center gap-2">

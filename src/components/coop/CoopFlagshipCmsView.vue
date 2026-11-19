@@ -70,14 +70,14 @@
 
     <template v-else>
       <!-- 3 STUDIO TABS (<= 7 Pills per Choice Overload) -->
-      <div class="flex flex-wrap items-center justify-between gap-2.5">
+      <div ref="tabSectionRef" class="scroll-mt-20 flex flex-wrap items-center justify-between gap-2.5">
         <div role="tablist" class="join bg-base-200/70 p-1 rounded-2xl border border-base-300 flex-wrap">
           <button
             type="button"
             role="tab"
             class="join-item btn btn-sm h-11 md:h-9 rounded-xl font-bold gap-1.5"
             :class="activeTab === 'events' ? 'btn-neutral text-neutral-content shadow-xs' : 'btn-ghost'"
-            @click="activeTab = 'events'"
+            @click="setTab('events')"
           >
             <Icon icon="solar:calendar-mark-bold-duotone" class="w-4 h-4 shrink-0" />
             <span>Pop-Ups &amp; Live Events ({{ draft.events.length }})</span>
@@ -87,7 +87,7 @@
             role="tab"
             class="join-item btn btn-sm h-11 md:h-9 rounded-xl font-bold gap-1.5"
             :class="activeTab === 'spotlight' ? 'btn-neutral text-neutral-content shadow-xs' : 'btn-ghost'"
-            @click="activeTab = 'spotlight'"
+            @click="setTab('spotlight')"
           >
             <Icon icon="solar:magic-stick-3-bold-duotone" class="w-4 h-4 shrink-0" />
             <span>thehc.llc/#works Copy</span>
@@ -97,7 +97,7 @@
             role="tab"
             class="join-item btn btn-sm h-11 md:h-9 rounded-xl font-bold gap-1.5"
             :class="activeTab === 'channels' ? 'btn-neutral text-neutral-content shadow-xs' : 'btn-ghost'"
-            @click="activeTab = 'channels'"
+            @click="setTab('channels')"
           >
             <Icon icon="solar:shop-2-bold-duotone" class="w-4 h-4 shrink-0" />
             <span>Sales Channels ({{ draft.channels.length }})</span>
@@ -820,6 +820,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue';
 import { Icon } from '@iconify/vue';
+import { useUrlTab } from '../../composables/useUrlTab';
 import BottomActionDock from '../common/BottomActionDock.vue';
 import KpiStatGrid, { type KpiStatItem } from '../common/KpiStatGrid.vue';
 import SlideOverDrawer from '../common/SlideOverDrawer.vue';
@@ -849,7 +850,11 @@ const loading = ref(true);
 const saving = ref(false);
 const loadError = ref('');
 const canPublish = ref(false);
-const activeTab = ref<'events' | 'spotlight' | 'channels'>('events');
+const { activeTab, setTab, tabSectionRef } = useUrlTab<'events' | 'spotlight' | 'channels'>({
+  tabs: ['events', 'spotlight', 'channels'],
+  defaultTab: 'events',
+  legacyQueryParams: ['tab'],
+});
 
 const savedSnapshot = ref<FlagshipCmsContent>(cloneCms(DEFAULT_FLAGSHIP_CMS_CONTENT));
 const draft = ref<FlagshipCmsContent>(cloneCms(DEFAULT_FLAGSHIP_CMS_CONTENT));

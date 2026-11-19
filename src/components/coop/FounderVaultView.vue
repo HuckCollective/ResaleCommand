@@ -271,7 +271,7 @@
     </div>
 
     <!-- 4. OMNIBOX SEARCH + PIPELINE FILTER PILLS + VIEW SWITCHER (Catalog Archetype) -->
-    <div class="card bg-base-100 border border-base-200 shadow-sm rounded-2xl p-3.5 sm:p-4 space-y-3">
+    <div ref="tabSectionRef" class="scroll-mt-20 card bg-base-100 border border-base-200 shadow-sm rounded-2xl p-3.5 sm:p-4 space-y-3">
       <div class="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3">
         <!-- Omnibox Search -->
         <div class="relative flex-1">
@@ -322,14 +322,15 @@
       </div>
 
       <!-- Horizontal Pipeline Filter Pills (<= 7 inline chips per Hick's Law) -->
-      <div class="flex items-center gap-1.5 overflow-x-auto pb-0.5 no-scrollbar">
+      <div role="tablist" class="flex items-center gap-1.5 overflow-x-auto pb-0.5 no-scrollbar">
         <button
           v-for="f in PIPELINE_FILTERS"
           :key="f.key"
           type="button"
+          role="tab"
           class="btn btn-sm h-11 md:h-8 rounded-xl font-bold shrink-0 gap-1.5 px-3"
           :class="activeFilter === f.key ? 'btn-primary shadow-2xs' : 'btn-ghost bg-base-200/60 hover:bg-base-200 text-base-content/80'"
-          @click="activeFilter = f.key"
+          @click="setFilter(f.key)"
         >
           <span>{{ f.label }}</span>
           <span class="badge badge-xs font-mono whitespace-nowrap shrink-0" :class="activeFilter === f.key ? 'badge-neutral' : 'badge-ghost'">
@@ -593,7 +594,7 @@
             type="button"
             class="btn btn-xs rounded-lg font-bold"
             :class="activeFilter === qf.key ? 'btn-primary' : 'btn-ghost'"
-            @click="activeFilter = qf.key"
+            @click="setFilter(qf.key, { scroll: true })"
           >
             {{ qf.label }}
           </button>
@@ -646,6 +647,7 @@
 import { ref, computed, onMounted } from 'vue';
 import { Icon } from '@iconify/vue';
 import { useAuth } from '../../composables/useAuth';
+import { useUrlTab } from '../../composables/useUrlTab';
 import { useMemberCapabilities } from '../../lib/memberAccess';
 import { addToast } from '../../stores/toast';
 import { askConfirm } from '../../stores/confirm';
@@ -726,7 +728,16 @@ const loading = ref(true);
 const savingCard = ref(false);
 const showGuide = ref(false);
 const viewMode = ref<'cards' | 'table'>('cards');
-const activeFilter = ref<FilterKey>('all');
+const {
+  activeTab: activeFilter,
+  setTab: setFilter,
+  tabSectionRef,
+} = useUrlTab<FilterKey>({
+  tabs: ['all', 'prompt', 'idea', 'spec', 'report', 'pending_review', 'vetted', 'done'],
+  defaultTab: 'all',
+  legacyQueryParams: ['tab'],
+  aliases: { reports: 'report', pending: 'pending_review' },
+});
 const searchQuery = ref('');
 
 const isDrawerOpen = ref(false);
@@ -868,8 +879,8 @@ async function refreshVault(switchFilter?: 'reports' | 'pending_review') {
   const res = await loadVaultNotes();
   notes.value = res.notes;
   synced.value = res.synced;
-  if (switchFilter === 'reports') activeFilter.value = 'report';
-  if (switchFilter === 'pending_review') activeFilter.value = 'pending_review';
+  if (switchFilter === 'reports') setFilter('report', { scroll: true });
+  if (switchFilter === 'pending_review') setFilter('pending_review', { scroll: true });
 }
 
 async function handleSaveFromDrawer(updated: VaultNote) {
@@ -938,11 +949,6 @@ const { capabilities } = useMemberCapabilities();
 
 onMounted(async () => {
   if (!capabilities.value.canSeeCollectiveFinancials) return;
-  const params = new URLSearchParams(window.location.search);
-  const tabParam = params.get('tab');
-  if (tabParam === 'reports') {
-    activeFilter.value = 'report';
-  }
 
   const res = await loadVaultNotes();
   notes.value = res.notes;

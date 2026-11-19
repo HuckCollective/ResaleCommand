@@ -27,6 +27,7 @@ Whenever you are about to create or modify UI, consult this decision matrix:
 | **Slide up deep filters, manifest lists, or PO item batch operations** | **Interactive Bottom Sheet / Detent Tray** | [`LocationManifestTray.vue`](file:///c:/Users/15034/Projects/ResaleCommand/src/components/inventory/LocationManifestTray.vue), [`ScoutPurchaseTray.vue`](file:///c:/Users/15034/Projects/ResaleCommand/src/components/scout/ScoutPurchaseTray.vue), [`PurchaseItemsTray.vue`](file:///c:/Users/15034/Projects/ResaleCommand/src/components/purchases/PurchaseItemsTray.vue) | Slides **UP from the bottom** (`rounded-t-3xl max-w-5xl mx-auto w-full max-h-[82dvh]`), drag pill, 4-card KPI strip, wide horizontal item table, sticky bottom action bar. |
 | **Full-bleed visual editing or media previews** | **Fullscreen Studio Workspace** | `SlideImageEditorModal.vue` pattern | Header filmstrip toolbar, centered preview canvas, sticky `BottomActionDock`. |
 | **Match CSV / POS rows to existing inventory items** | **Slide-Over Inventory Match Drawer** | [`LocationSyncView.vue`](file:///c:/Users/15034/Projects/ResaleCommand/src/components/warehouses/LocationSyncView.vue) & [`SalesImporter.vue`](file:///c:/Users/15034/Projects/ResaleCommand/src/components/sales/SalesImporter.vue) + [`getUnclaimedMatchCandidatesForRow`](file:///c:/Users/15034/Projects/ResaleCommand/src/lib/salesBucketing.ts) | Pinned target row banner, strict exclusion of items with other `0EJ` SKUs, top 5–8 suggested unclaimed matches before typing, photo thumbnails, full untruncated titles, and 1-click `🔗 Link & Save to MD`. |
+| **Deep-link to any page tab & smooth-scroll past KPIs/headers** | **Hash-Synced Tab Strip (`useUrlTab`)** | [`useUrlTab.ts`](file:///c:/Users/15034/Projects/ResaleCommand/src/composables/useUrlTab.ts) | Clean `/page#tab` URLs, auto-upgrades legacy `?tab=`/`?view=`/`?section=` links, waits for auth gates/skeletons before smooth-scrolling (`scroll-mt-20`), preserves `#hash` across login redirects, and stays pure-Vue (§14D safe). |
 
 ### ⚠️ Opportunity Radar (Code Smell Detection):
 Watch out for these red flags in existing or new code, and refactor them to use the catalog:
@@ -57,6 +58,8 @@ Watch out for these red flags in existing or new code, and refactor them to use 
    👉 *STRICT OVERLAY HIERARCHY INVARIANT (`validate-templates.mjs` §16)*:
    - **Never stack right-edge on right-edge** (causes double scrims, double `Esc` traps, and body scroll-unlock races). Inside `ItemDrawer.vue`, mount focused workflows as a lazy `v-if` tab (`ItemOnlineTab.vue`, `ItemVerifyTab.vue`, `ItemLotTab.vue`); across sibling right-edge drawers, enforce mutual exclusivity (`openDrawerA` closes `drawerB`).
    - **Bottom-Sheet Tray (`z-400`) under Right-Edge `ItemDrawer` (`z-450`) IS sanctioned** (Red Flag #6), and all overlays (`SlideOverDrawer`, `ItemDrawer`, Bottom-Sheet Trays) MUST share the ref-counted [`useBodyScrollLock.ts`](file:///c:/Users/15034/Projects/ResaleCommand/src/composables/useBodyScrollLock.ts) composable so closing `ItemDrawer` never prematurely unlocks `document.body` scroll while a Bottom-Sheet Tray remains open underneath.
+10. **Red Flag: Hand-rolling `?tab=foo` / `?view=bar` / `?section=baz` URL listeners or calling `window.history.replaceState` directly for page-level tabs**
+   👉 *Refactor To*: [`useUrlTab()`](file:///c:/Users/15034/Projects/ResaleCommand/src/composables/useUrlTab.ts) + `ref="tabSectionRef"` + `scroll-mt-20` on the tab container (canonical `/page#tab` links). Legacy query parameters should only be listed in `legacyQueryParams` for transparent upgrade—never linked in new templates.
 
 ---
 
@@ -373,4 +376,32 @@ Approved invites leave the queue automatically when the applicant creates their 
 4. **Astro 6 Markdown Content Collections (`src/content.config.ts` ➔ `src/content/{charter,tax,roles,coop}/`)**:
    - Static collective prose (Charter sections in `src/content/charter/*.md`, IRS Schedule C Tax Playbook in `src/content/tax/rules.md`, Role Playbooks in `src/content/roles/*.md`, and Strategy Docs in `src/content/coop/*.md`) lives in Markdown so non-developer members can edit living policy docs without touching Vue components.
    - Server loaders (`src/lib/charterCms.ts`, `src/lib/taxCms.ts`) compile Markdown at SSR time and interpolate dynamic location fees/rents (`{{PRIMARY_BOOTH_FEE}}`, `{{PRIMARY_BOOTH_RENT}}`) from `src/lib/warehouses.ts`—keeping client JS bundles lean and preserving Golden Rule #2 (Zero Hardcoded Locations).
+
+---
+
+## 11. Canonical Tab Deep-Link & Smooth-Scroll Pattern (`useUrlTab` — `/page#tab`)
+
+Whenever a top-level page contains multiple tabs or switchable workspace sections beneath a header/KPI strip, link directly with **`/page#tab`** and manage state through [`src/composables/useUrlTab.ts`](file:///c:/Users/15034/Projects/ResaleCommand/src/composables/useUrlTab.ts):
+- **Behavior:** Reads `#hash` first (falling back to optional `legacyQueryParams` like `['tab']` and auto-upgrading them to `#hash` via `replaceState`), stays at top of page on default visits without a hash, and **smooth-scrolls straight to `ref="tabSectionRef"` (`scroll-mt-20` = `80px` sticky navbar clearance)** when landing on a deep link—even after `<CollectiveAccessGate>` or loading skeletons finish mounting.
+- **Auth Preservation:** [`buildLoginRedirect`](file:///c:/Users/15034/Projects/ResaleCommand/src/lib/publicRoutes.ts), [`redirectGuestToLogin`](file:///c:/Users/15034/Projects/ResaleCommand/src/lib/store.ts), and [`LoginView.vue`](file:///c:/Users/15034/Projects/ResaleCommand/src/components/auth/LoginView.vue) preserve `#hash` through the `/login?redirect=...` round-trip.
+
+### Where to Use (`10` Adopted Page-Level Tabbed Views)
+- `/coop/governance` ➔ `#rules`, `#roster`, `#docs` ([`CoopGovernanceView.vue`](file:///c:/Users/15034/Projects/ResaleCommand/src/components/coop/CoopGovernanceView.vue) + `/coop/governance/[id].astro` slug redirects)
+- `/settings` ➔ `#locations`, `#team`, `#hardware` ([`SettingsManager.vue`](file:///c:/Users/15034/Projects/ResaleCommand/src/components/settings/SettingsManager.vue))
+- `/coop/vault` ➔ `#prompt`, `#idea`, `#spec`, `#report` / `#reports`, `#pending_review`, `#done` ([`FounderVaultView.vue`](file:///c:/Users/15034/Projects/ResaleCommand/src/components/coop/FounderVaultView.vue))
+- `/coop/labor` ➔ `#ledger` ([`CoopLaborView.vue`](file:///c:/Users/15034/Projects/ResaleCommand/src/components/coop/CoopLaborView.vue))
+- `/coop` & `/coop/charter` ➔ `#monthly`, `#expenses`, `#governance`, `#legal` ([`CoopCharterView.vue`](file:///c:/Users/15034/Projects/ResaleCommand/src/components/coop/CoopCharterView.vue))
+- `/dashboard` & `/demo` ➔ `#booths`, `#promote`, `#steward` ([`TaskHubDashboard.vue`](file:///c:/Users/15034/Projects/ResaleCommand/src/components/dashboard/TaskHubDashboard.vue))
+- `/coop/cms` ➔ `#spotlight`, `#channels` ([`CoopFlagshipCmsView.vue`](file:///c:/Users/15034/Projects/ResaleCommand/src/components/coop/CoopFlagshipCmsView.vue))
+- `/warehouse/[id]` ➔ `#catalog`, `#expenses`, `#settings` ([`LocationDetailView.vue`](file:///c:/Users/15034/Projects/ResaleCommand/src/components/warehouses/LocationDetailView.vue))
+- `/social` ➔ `#needs_post`, `#complete`, `#events` ([`SocialCrossPostView.vue`](file:///c:/Users/15034/Projects/ResaleCommand/src/components/social/SocialCrossPostView.vue))
+- `/studios/appraisal` ➔ `#rules`, `#telemetry`, `#bookmarklets` ([`AppraisalPricingLabView.vue`](file:///c:/Users/15034/Projects/ResaleCommand/src/components/studios/AppraisalPricingLabView.vue))
+
+### Where NOT to Use (Intentional Exclusions)
+- **Transient Modals, Drawers & Trays** (`ItemDrawer.vue`, `VaultNoteDrawer.vue`, `InventoryPaginationDock.vue`, `InventoryQueuesTray.vue`, `LotSplitterWizard.vue`, `SlideImageEditorModal.vue`): internal overlay steps should stay local component state and must not pollute browser history/anchors.
+- **Reusable Multi-Instance Cards** (`AiUsageCard.vue`, `MarkdownMediaComposer.vue`): multiple instances on one page would fight over `window.location.hash`.
+- **Path-Routed Multi-Screen Workflows** (`/warehouse/sync/MD`, `/sales/import/MD`, `/scout/trackers`): keep clean RESTful subpaths rather than fragments.
+
+### Future Adoption Rule
+Whenever adding tabs or navigable section pills to a new or expanded page (for example, if `/profile`, `/expenses`, or `/coop/settlements` ever gains multi-section tabs), wire `useUrlTab()` + `ref="tabSectionRef"` + `scroll-mt-20` on day one rather than introducing `?tab=` or custom scroll handlers.
 
