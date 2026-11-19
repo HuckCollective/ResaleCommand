@@ -133,68 +133,63 @@
         </div>
       </div>
 
-      <!-- Roster with Hats -->
-      <div class="card bg-base-100 border border-base-200 shadow-sm rounded-3xl p-5 sm:p-6 space-y-4">
-        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div>
-            <div class="text-xs font-extrabold uppercase tracking-wider text-secondary">Member Roster</div>
-            <h3 class="text-lg font-black">Everyone wears the hats that fit. Hats can be combined.</h3>
+      <!-- Unified Collective Roster Link + PO Receipt Auto-Approve Cap -->
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <div class="card bg-base-100 border border-base-200 shadow-sm rounded-3xl p-5 sm:p-6 flex flex-col justify-between gap-4">
+          <div class="space-y-1.5">
+            <div class="text-xs font-extrabold uppercase tracking-wider text-secondary">Unified Member Roster &amp; SKUs</div>
+            <h3 class="text-lg font-black">Everyone is a Curator with their own unique barcode prefix</h3>
+            <p class="text-xs text-base-content/70 leading-relaxed">
+              Manage Member Hats, invites, and locked Curator SKU prefixes in one unified Collective Roster so accounts never get duplicated.
+            </p>
           </div>
-          <div class="flex items-center gap-2 flex-wrap">
-            <input v-model="newMemberName" type="text" placeholder="New member name" class="input input-bordered input-sm h-11 md:h-8 rounded-xl w-44" />
-            <button type="button" class="btn btn-sm h-11 md:h-8 btn-outline rounded-xl font-bold" :disabled="!canEditGlobal" @click="addMember">+ Add Member</button>
+          <div class="flex items-center justify-between gap-2 flex-wrap pt-2 border-t border-base-200">
+            <span class="badge badge-ghost badge-sm font-mono font-bold">
+              {{ policy.members.length }} Roster Profile{{ policy.members.length === 1 ? '' : 's' }}
+            </span>
+            <a href="/coop/governance?tab=roster" class="btn btn-sm h-11 md:h-8 btn-primary text-primary-content rounded-xl font-black gap-1.5">
+              <span>Open Unified Roster &amp; SKU Locks</span>
+              <span>➔</span>
+            </a>
           </div>
         </div>
 
-        <div class="grid grid-cols-1 xl:grid-cols-2 gap-3">
-          <div v-for="(m, idx) in policy.members" :key="m.name + idx" class="p-4 rounded-2xl bg-base-200/40 border border-base-300 space-y-3">
-            <div class="flex items-center justify-between gap-2">
-              <div class="font-black text-sm truncate">{{ m.name }}</div>
-              <button v-if="canEditGlobal && policy.members.length > 1" type="button" class="btn btn-ghost btn-xs text-error" @click="removeMemberFromSettings(idx)">Remove</button>
-            </div>
-            <div class="flex flex-wrap gap-1.5">
-              <button
-                v-for="hat in hatList"
-                :key="hat.id"
-                type="button"
-                :disabled="!canEditGlobal"
-                @click="toggleHat(m, hat.id)"
-                class="btn btn-xs h-7 min-h-0 rounded-lg gap-1 font-bold"
-                :class="m.hats?.includes(hat.id) ? 'btn-primary' : 'btn-ghost border border-base-300 opacity-70'"
-                :title="hat.pitch"
-              >
-                <span>{{ hat.icon }}</span>
-                <span>{{ hat.label }}</span>
-              </button>
-            </div>
-            <div class="text-[11px] flex items-center gap-2 min-h-5 flex-wrap">
-              <span class="opacity-60 font-bold">Barcode prefix:</span>
-              <select v-model="m.inventoryPrefix" :disabled="!canEditGlobal" class="select select-bordered select-xs h-11 md:h-7 rounded-lg font-mono font-bold">
-                <option v-if="!m.inventoryPrefix" :value="undefined" disabled>Pick a prefix…</option>
-                <option v-for="px in allPrefixes" :key="px" :value="px">🔒 {{ px }}</option>
-              </select>
-              <span v-if="!memberUsesInventory(m)" class="text-success font-bold">✨ Inventory optional. Earns from the Labor &amp; Surplus Pool.</span>
-            </div>
+        <div class="card bg-base-100 border border-base-200 shadow-sm rounded-3xl p-5 sm:p-6 space-y-3">
+          <div>
+            <div class="text-xs font-extrabold uppercase tracking-wider text-primary">Cost-Basis Recoupment Policy</div>
+            <h3 class="text-lg font-black">PO Receipt Auto-Approve Threshold</h3>
+            <p class="text-xs text-base-content/70 mt-0.5 leading-relaxed">
+              Receipt-backed Purchase Orders at or below this dollar amount auto-approve for Gate 2 cost recoupment. Set to <strong>$0</strong> to require Founder sign-off on every PO.
+            </p>
+          </div>
+          <div class="flex items-center gap-3 flex-wrap pt-1">
+            <label class="text-xs font-bold text-base-content/75">Auto-Approve Cap ($ USD)</label>
+            <input
+              v-model.number="policy.autoApproveReceiptPoMaxUsd"
+              type="number"
+              min="0"
+              max="5000"
+              step="5"
+              :disabled="!canEditGlobal"
+              class="input input-bordered input-sm h-11 md:h-9 w-32 rounded-xl font-mono font-black text-right"
+            />
+            <span class="badge badge-outline badge-sm font-mono font-bold">
+              {{ Number(policy.autoApproveReceiptPoMaxUsd || 0) <= 0 ? 'Manual on every PO' : `Auto ≤ $${Number(policy.autoApproveReceiptPoMaxUsd || 0)}` }}
+            </span>
           </div>
         </div>
       </div>
 
-      <!-- Consignor Contracts -->
+      <!-- Legacy Consignor Contracts (BB- Preserved; New Consignors Paused) -->
       <div class="card bg-base-100 border border-base-200 shadow-sm rounded-3xl p-5 sm:p-6 space-y-4">
         <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
-            <div class="text-xs font-extrabold uppercase tracking-wider text-warning">Consignor Contracts</div>
+            <div class="text-xs font-extrabold uppercase tracking-wider text-warning">Legacy Consignor Contract</div>
             <h3 class="text-lg font-black">Straight % split, fixed shelf rent, or pro-rata booth rent</h3>
           </div>
-          <div class="flex items-center gap-2 flex-wrap">
-            <select v-model="newConsignorPrefix" class="select select-bordered select-sm h-11 md:h-8 rounded-xl font-mono font-bold text-xs">
-              <option value="">Pick a prefix...</option>
-              <option v-for="px in availableConsignorPrefixes" :key="px" :value="px">{{ px }}</option>
-            </select>
-            <button type="button" class="btn btn-sm h-11 md:h-8 btn-outline rounded-xl font-bold" :disabled="!canEditGlobal || !newConsignorPrefix" @click="addConsignorContract">
-              + Add Consignor Contract
-            </button>
-          </div>
+          <span class="badge badge-warning badge-outline font-bold text-xs whitespace-nowrap">
+            🔒 Legacy BB- Only (New Consignors Paused)
+          </span>
         </div>
 
         <!-- Shared example inputs -->
@@ -420,12 +415,10 @@ import {
   canMemberEditGlobalFinancials,
   isProtectedPrefix,
   DEFAULT_COOP_POLICY_CONFIG,
-  MEMBER_HAT_META,
   type ConsignorAgreementConfig,
   type ConsignorDealMode,
   type CoopMemberProfile,
   type CoopPolicyConfig,
-  type MemberHat,
 } from '../../lib/coopGovernance';
 
 type SettingsTab = 'personas' | 'locations' | 'team' | 'hardware';
@@ -471,9 +464,6 @@ const policy = ref<CoopPolicyConfig>(normalizePolicyConfig(DEFAULT_COOP_POLICY_C
 const warehouses = ref<WarehouseDocument[]>([]);
 const persistedPrefixes = ref<string[]>([]);
 
-const hatList = Object.values(MEMBER_HAT_META);
-const newMemberName = ref('');
-const newConsignorPrefix = ref('');
 const sampleGross = ref(250);
 
 const locationMetas = computed(() => getAllLocationSettingMetas(warehouses.value));
@@ -494,62 +484,19 @@ const currentMember = computed(() => {
 
 const canEditGlobal = computed(() => canMemberEditGlobalFinancials(currentMember.value, isTeamOwner.value));
 
-const allPrefixes = computed(() => {
-  const list = [form.value.upcPrefix, ...form.value.partnerPrefixes.map((p) => p.prefix)];
-  return Array.from(new Set(list.map((p) => String(p || '').trim().toUpperCase()).filter(Boolean)));
-});
-
-const availableConsignorPrefixes = computed(() =>
-  form.value.partnerPrefixes
-    .map((p) => p.prefix.trim().toUpperCase())
-    .filter((px) => px && !policy.value.consignors.some((c) => c.prefix === px))
-);
-
-const memberUsesPrefix = (m: CoopMemberProfile) => (m.hats || []).some((h) => MEMBER_HAT_META[h].usesPrefix);
-// Everyone has a barcode prefix; only Curators and Consignors are expected to bring inventory.
-const memberUsesInventory = (m: CoopMemberProfile) => (m.hats || []).some((h) => h === 'curator' || h === 'consignor');
-
-const toggleHat = (m: CoopMemberProfile, hat: MemberHat) => {
-  const hats = new Set(m.hats || []);
-  if (hats.has(hat)) {
-    if (hats.size === 1) return; // always keep at least one hat
-    hats.delete(hat);
-  } else {
-    hats.add(hat);
-  }
-  m.hats = Array.from(hats);
-  if (memberUsesPrefix(m) && !m.inventoryPrefix) m.inventoryPrefix = allPrefixes.value[0];
-  if (!memberUsesPrefix(m)) m.inventoryPrefix = undefined;
-};
-
-const derivePartnerCode = (m: CoopMemberProfile): CoopMemberProfile['partner'] => {
+const derivePartnerCode = (m: CoopMemberProfile): string => {
   const hats = m.hats || [];
   if (hats.length === 1 && hats[0] === 'consignor') return 'BB';
-  // Legacy members keep their old bucket until a prefix is picked for them.
-  if (!m.inventoryPrefix && m.partner === 'SWEAT') return 'SWEAT';
-  if (!hats.some((h) => MEMBER_HAT_META[h].usesPrefix)) return 'SWEAT';
-  return m.inventoryPrefix?.toUpperCase().startsWith('PDXGL') ? 'PDXGL' : 'HUCK';
+  if (m.inventoryPrefix) {
+    return m.inventoryPrefix.trim().toUpperCase().replace(/[-_]+$/, '');
+  }
+  return m.partner || 'CURATOR';
 };
 
 const deriveRoleLabel = (m: CoopMemberProfile): CoopMemberProfile['role'] => {
   const hats = m.hats || [];
   if (hats.length === 1 && hats[0] === 'consignor') return 'Consignor';
-  if (!hats.some((h) => MEMBER_HAT_META[h].usesPrefix)) return 'Marketing & Social Enabler';
   return hats.includes('founder') ? 'Co-op Member' : 'Partner Curator';
-};
-
-const removeMemberFromSettings = async (idx: number) => {
-  const target = policy.value.members[idx];
-  if (!target) return;
-  const ok = await askConfirm(
-    `Remove ${target.name} from the Collective Roster? (Click Save Settings to enact.)`,
-    'Remove Roster Member',
-    'Remove Member',
-    'Cancel',
-    'btn-error'
-  );
-  if (!ok) return;
-  policy.value.members.splice(idx, 1);
 };
 
 const removeConsignorFromSettings = async (idx: number) => {
@@ -566,37 +513,8 @@ const removeConsignorFromSettings = async (idx: number) => {
   policy.value.consignors.splice(idx, 1);
 };
 
-const addMember = () => {
-  const name = newMemberName.value.trim();
-  if (!name) return;
-  policy.value.members.push({
-    name,
-    partner: 'SWEAT',
-    role: 'Marketing & Social Enabler',
-    canVote: true,
-    hats: ['promoter'],
-  });
-  newMemberName.value = '';
-};
-
 const addPrefixRow = () => {
   form.value.partnerPrefixes.push({ prefix: '', name: '', linkedTeamId: '', isNew: true });
-};
-
-const addConsignorContract = () => {
-  const prefix = newConsignorPrefix.value;
-  if (!prefix) return;
-  const row = form.value.partnerPrefixes.find((p) => p.prefix.toUpperCase() === prefix);
-  const templateConsignor = DEFAULT_COOP_POLICY_CONFIG.consignors[0];
-  policy.value.consignors.push({
-    prefix,
-    displayName: row?.name || `${prefix.replace(/-$/, '')} Consignor`,
-    mode: templateConsignor?.mode || 'flat_commission',
-    coopCommissionPct: Number(templateConsignor?.coopCommissionPct ?? 0),
-    fixedMonthlyRent: Number(templateConsignor?.fixedMonthlyRent ?? 0),
-    capRentAtNetSales: true,
-  });
-  newConsignorPrefix.value = '';
 };
 
 const consignorCards = (c: ConsignorAgreementConfig) => {
@@ -657,8 +575,10 @@ const validatePrefixRows = (): string | null => {
   const seen = new Set<string>([form.value.upcPrefix.toUpperCase()]);
   for (const row of form.value.partnerPrefixes) {
     if (!row.isNew && !row.prefix.trim()) continue;
-    let px = row.prefix.trim().toUpperCase().replace(/[-_]+$/, '');
-    if (!/^[A-Z]{2,6}$/.test(px)) return `Prefix "${row.prefix}" must be 2–6 letters (e.g. CON-).`;
+    let px = row.prefix.trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
+    if (!/^(?=.*[A-Z])[A-Z0-9]{2,6}$/.test(px)) {
+      return `Prefix "${row.prefix}" must be 2–6 letters/numbers (hyphen added automatically).`;
+    }
     px += '-';
     if (seen.has(px)) return `Prefix ${px} is already registered.`;
     seen.add(px);

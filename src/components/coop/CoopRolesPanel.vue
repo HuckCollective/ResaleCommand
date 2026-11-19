@@ -6,7 +6,7 @@
           <span class="badge badge-primary text-primary-content badge-xs font-black">Member Hats &amp; Access</span>
           <span class="badge badge-outline badge-xs font-mono font-bold">🔒 Steward-Verified</span>
           <span
-            v-if="isOwner"
+            v-if="isOwner || isFounder"
             class="badge badge-success text-success-content badge-xs font-bold"
           >
             👑 Account Steward Active
@@ -15,37 +15,65 @@
             v-else
             class="badge badge-ghost badge-xs font-semibold"
           >
-            👁️ Read-Only (Account Steward Edits Hats)
+            👁️ Read-Only (Account Steward Edits Hats &amp; Locks SKUs)
           </span>
         </div>
         <h4 class="text-base font-black text-base-content">
-          Member Hats &amp; Account Linking
+          Unified Collective Roster &amp; Unique Curator SKUs
         </h4>
         <p class="text-xs text-base-content/70">
-          Assign Collective Hats (<code>founder</code>, <code>curator</code>, <code>promoter</code>, <code>enabler</code>, <code>builder</code>, <code>consignor</code>) for verified permissions on labor approvals &amp; month locks, and link each account to a Roster profile.
+          Every voting member is a Curator with their own unique barcode prefix (hyphen added automatically) and open-book financial visibility.
         </p>
       </div>
 
-      <button
-        type="button"
-        class="btn btn-xs h-11 min-h-11 md:h-7 md:min-h-0 btn-outline rounded-xl font-bold gap-1.5 self-start sm:self-auto"
-        :disabled="loadingMemberships"
-        @click="loadMemberships"
-      >
-        <Icon icon="solar:refresh-bold" class="w-3.5 h-3.5" :class="{ 'animate-spin': loadingMemberships }" />
-        <span>Refresh Roles</span>
-      </button>
+      <div class="flex items-center gap-2 flex-wrap self-start sm:self-auto">
+        <button
+          v-if="canManageLinks && hasStaleOrSharedRows"
+          type="button"
+          class="btn btn-xs h-11 min-h-11 md:h-8 md:min-h-0 btn-warning text-warning-content rounded-xl font-black gap-1.5"
+          :disabled="cleaningRoster"
+          @click="handleCleanupPlaceholders"
+        >
+          <span v-if="cleaningRoster" class="loading loading-spinner loading-xs"></span>
+          <span v-else>🧹 Clean Up Stale Rows</span>
+        </button>
+
+        <button
+          type="button"
+          class="btn btn-xs h-11 min-h-11 md:h-8 md:min-h-0 btn-outline rounded-xl font-bold gap-1.5"
+          :disabled="loadingMemberships"
+          @click="loadMemberships"
+        >
+          <Icon icon="solar:refresh-bold" class="w-3.5 h-3.5" :class="{ 'animate-spin': loadingMemberships }" />
+          <span>Refresh Roster</span>
+        </button>
+      </div>
     </div>
 
-    <!-- Invite New Team Member Bar (Owner Only) -->
+    <!-- Stale Placeholder / Shared HUCK- Repair Notice -->
+    <div
+      v-if="canManageLinks && hasStaleOrSharedRows"
+      class="alert alert-warning py-2.5 px-3.5 rounded-xl text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-2"
+    >
+      <span>
+        <strong>Roster Sync Ready:</strong> Older placeholder rows or shared <code>HUCK-</code> defaults were detected. Click <strong>Clean Up Stale Rows</strong> or lock each member's unique SKU prefix below.
+      </span>
+    </div>
+
+    <!-- Invite New Collective Member Bar (Steward Only; Consignor Frozen) -->
     <form
       v-if="isOwner && resolvedTeamId"
       class="rounded-xl bg-base-100 border border-base-300 p-3.5 space-y-2.5"
       @submit.prevent="handleInviteMember"
     >
-      <div class="text-xs font-black text-base-content flex items-center gap-1.5">
-        <Icon icon="solar:user-plus-bold-duotone" class="w-4 h-4 text-primary" />
-        <span>Invite to the Collective</span>
+      <div class="text-xs font-black text-base-content flex items-center justify-between gap-2 flex-wrap">
+        <span class="flex items-center gap-1.5">
+          <Icon icon="solar:user-plus-bold-duotone" class="w-4 h-4 text-primary" />
+          <span>Invite Real Member to the Collective</span>
+        </span>
+        <span class="text-[11px] font-semibold text-base-content/60">
+          Every member joins as a Curator and chooses their own unique SKU prefix
+        </span>
       </div>
       <div class="grid grid-cols-1 sm:grid-cols-12 gap-2.5 items-end">
         <div class="sm:col-span-4 form-control">
@@ -54,7 +82,7 @@
             v-model="inviteForm.name"
             type="text"
             autocomplete="name"
-            placeholder="e.g. Jesse (Social & Ops)"
+            placeholder="e.g. Alex Rivera"
             class="input input-bordered input-xs h-11 md:h-8 rounded-lg text-xs"
             required
           />
@@ -66,7 +94,7 @@
             type="email"
             autocomplete="email"
             autocapitalize="none"
-            placeholder="partner@example.com"
+            placeholder="member@example.com"
             class="input input-bordered input-xs h-11 md:h-8 rounded-lg text-xs font-mono"
             required
           />
@@ -74,14 +102,14 @@
         <div class="sm:col-span-4 flex items-center justify-between sm:justify-end gap-2 flex-wrap">
           <select
             v-model="inviteForm.initialRole"
+            aria-label="Initial Member Role"
             class="select select-bordered select-xs h-11 md:h-8 rounded-lg font-bold text-xs"
           >
-            <option value="enabler">🔥 Enabler ($0 Inv + Curator)</option>
-            <option value="promoter">📣 Promoter ($0 Inv + Curator)</option>
-            <option value="builder">🛠️ Builder ($0 Inv + Curator)</option>
-            <option value="curator">💎 Curator Partner</option>
-            <option value="founder">👑 Co-Founder (+ Curator)</option>
-            <option value="consignor">🏷️ Consignor (Isolated)</option>
+            <option value="curator">💎 Curator Member</option>
+            <option value="promoter">📣 Curator + Promoter</option>
+            <option value="enabler">🔥 Curator + Floor Ops</option>
+            <option value="builder">🛠️ Curator + Builder</option>
+            <option value="founder">👑 Co-Founder + Curator</option>
           </select>
           <button
             type="submit"
@@ -100,15 +128,15 @@
       <span>{{ errorMessage }}</span>
     </div>
 
-    <!-- Live Appwrite Team Memberships Table -->
-    <div v-if="memberships.length > 0" class="overflow-x-auto bg-base-100 border border-base-200 rounded-2xl">
+    <!-- Single Unified Roster & Unique Barcode Prefix Table -->
+    <div v-if="memberships.length > 0 || legacyConsignors.length > 0" class="overflow-x-auto bg-base-100 border border-base-200 rounded-2xl">
       <table class="table table-sm">
         <thead>
           <tr class="bg-base-200/60 text-[11px] font-extrabold uppercase text-base-content/70">
-            <th>Account</th>
-            <th>Status</th>
-            <th>Work &amp; Security Roles</th>
-            <th>🏷️ Barcode Prefix</th>
+            <th>Member &amp; Account</th>
+            <th>Status &amp; Vote</th>
+            <th>Collective Hats &amp; Permissions</th>
+            <th>🏷️ Unique SKU Prefix</th>
           </tr>
         </thead>
         <tbody>
@@ -119,7 +147,7 @@
           >
             <td class="text-xs">
               <div class="font-bold text-base-content flex items-center gap-1.5 flex-wrap">
-                <span>{{ m.userName || 'Invited Member' }}</span>
+                <span>{{ displayNameForMembership(m) }}</span>
                 <span
                   v-if="hasBuiltInOwner(m)"
                   class="badge badge-warning text-warning-content badge-xs font-black"
@@ -131,19 +159,24 @@
               <div class="text-[11px] font-mono text-base-content/60">{{ m.userEmail || m.userId }}</div>
             </td>
 
-            <td>
-              <span
-                class="badge badge-xs font-bold"
-                :class="m.confirm ? 'badge-success' : 'badge-warning badge-outline'"
-              >
-                {{ m.confirm ? '✅ Active' : '⏳ Pending Invite' }}
-              </span>
+            <td class="space-y-1">
+              <div>
+                <span
+                  class="badge badge-xs font-bold whitespace-nowrap"
+                  :class="m.confirm ? 'badge-success text-success-content' : 'badge-warning badge-outline'"
+                >
+                  {{ m.confirm ? '✅ Active' : '⏳ Pending Invite' }}
+                </span>
+              </div>
+              <div class="text-[10px] font-bold text-base-content/60">
+                {{ hasCustomRole(m, 'consignor') && !hasCustomRole(m, 'curator') ? 'Statement Only' : '1 Member = 1 Vote' }}
+              </div>
             </td>
 
             <td>
               <div class="flex items-center gap-1.5 flex-wrap">
                 <label
-                  v-for="roleOpt in customRoleOptions"
+                  v-for="roleOpt in visibleRoleOptionsForRow(m)"
                   :key="roleOpt.id"
                   class="inline-flex items-center gap-1 px-2 py-1 rounded-lg border text-[11px] font-bold transition-colors"
                   :class="[
@@ -167,16 +200,123 @@
               </div>
             </td>
 
-            <td class="min-w-48">
-              <select
-                class="select select-bordered select-xs h-11 md:h-7 rounded-lg font-mono font-bold text-xs w-full max-w-56"
-                :value="prefixForUser(m)"
-                :disabled="!canManageLinks"
-                @change="handlePrefixSelect(m, ($event.target as HTMLSelectElement).value)"
+            <td class="min-w-60">
+              <!-- Case 1: Requested prefix waiting on Steward Lock -->
+              <div
+                v-if="requestedPrefixForRow(m) && editingPrefixRowId !== m.$id"
+                class="flex items-center gap-1.5 flex-wrap"
               >
-                <option v-if="!prefixForUser(m)" value="" disabled>Pick a prefix…</option>
-                <option v-for="px in prefixOptions" :key="px" :value="px">🔒 {{ px }}</option>
-              </select>
+                <span class="badge badge-warning text-warning-content font-mono font-black badge-sm whitespace-nowrap">
+                  ⏳ Requested: {{ requestedPrefixForRow(m) }}
+                </span>
+                <button
+                  v-if="canManageLinks"
+                  type="button"
+                  class="btn btn-xs h-9 md:h-7 btn-success text-success-content rounded-lg font-black"
+                  :disabled="lockingRowId === m.$id"
+                  @click="lockPrefixForMembership(m, requestedPrefixForRow(m))"
+                >
+                  {{ lockingRowId === m.$id ? 'Locking…' : `✅ Lock ${requestedPrefixForRow(m)}` }}
+                </button>
+                <button
+                  v-if="canManageLinks"
+                  type="button"
+                  class="btn btn-xs h-9 md:h-7 btn-ghost rounded-lg font-bold"
+                  @click="openInlinePrefixEditor(m)"
+                >
+                  Edit
+                </button>
+              </div>
+
+              <!-- Case 2: Uniquely Locked Prefix (not a duplicate placeholder HUCK-) -->
+              <div
+                v-else-if="uniqueLockedPrefixForRow(m) && editingPrefixRowId !== m.$id"
+                class="flex items-center gap-1.5 flex-wrap"
+              >
+                <span class="badge badge-outline font-mono font-black badge-sm py-2.5 px-2.5 whitespace-nowrap">
+                  🔒 {{ uniqueLockedPrefixForRow(m) }}
+                </span>
+                <button
+                  v-if="canManageLinks"
+                  type="button"
+                  class="btn btn-xs h-9 md:h-7 btn-ghost text-base-content/65 rounded-lg font-semibold"
+                  title="Issue a new future SKU prefix (printed booth stickers keep their existing code)"
+                  @click="openInlinePrefixEditor(m)"
+                >
+                  Change
+                </button>
+              </div>
+
+              <!-- Case 3: Unset, Shared HUCK- Warning, or Inline Editor Open -->
+              <div v-else class="space-y-1">
+                <div
+                  v-if="hasSharedPlaceholderPrefix(m) && editingPrefixRowId !== m.$id"
+                  class="text-[11px] font-bold text-warning"
+                >
+                  ⚠️ Shared <code>HUCK-</code> — assign own SKU:
+                </div>
+                <div v-if="canManageLinks" class="flex items-center gap-1.5 flex-wrap">
+                  <div class="join">
+                    <input
+                      :value="prefixDrafts[m.$id] || ''"
+                      type="text"
+                      maxlength="6"
+                      placeholder="DOM"
+                      aria-label="Member SKU Prefix Root"
+                      class="input input-bordered input-xs join-item h-10 md:h-7 w-20 font-mono font-black uppercase text-xs"
+                      :disabled="lockingRowId === m.$id"
+                      @input="onRowDraftInput(m.$id, ($event.target as HTMLInputElement).value)"
+                      @keydown.enter.prevent="submitInlinePrefixLock(m)"
+                    />
+                    <span class="btn btn-xs btn-neutral no-animation pointer-events-none join-item h-10 md:h-7 px-2 font-mono font-black">
+                      -
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    class="btn btn-xs h-10 md:h-7 btn-primary text-primary-content rounded-lg font-black px-2.5"
+                    :disabled="lockingRowId === m.$id || (prefixDrafts[m.$id] || '').length < 2"
+                    @click="submitInlinePrefixLock(m)"
+                  >
+                    {{ lockingRowId === m.$id ? '…' : '🔒 Lock' }}
+                  </button>
+                  <button
+                    v-if="editingPrefixRowId === m.$id"
+                    type="button"
+                    class="btn btn-xs h-10 md:h-7 btn-ghost rounded-lg"
+                    @click="editingPrefixRowId = ''"
+                  >
+                    ✕
+                  </button>
+                </div>
+                <span v-else class="badge badge-ghost badge-xs font-semibold">
+                  ⚡ Member Picking SKU
+                </span>
+              </div>
+            </td>
+          </tr>
+
+          <!-- Legacy External Consignor Row(s) (BB- Preserved; New Consignors Paused) -->
+          <tr
+            v-for="c in legacyConsignors"
+            :key="`consignor-${c.prefix}`"
+            class="bg-warning/5 align-middle"
+          >
+            <td class="text-xs">
+              <div class="font-bold text-base-content flex items-center gap-1.5 flex-wrap">
+                <span>{{ c.displayName }}</span>
+                <span class="badge badge-warning badge-outline badge-xs font-bold">Legacy Consignor</span>
+              </div>
+              <div class="text-[11px] text-base-content/60">External consignment contract (new consignors paused)</div>
+            </td>
+            <td>
+              <span class="badge badge-ghost badge-xs font-semibold">Contract Only (No Vote)</span>
+            </td>
+            <td>
+              <span class="badge badge-warning text-warning-content badge-xs font-bold">🏷️ Consignor</span>
+            </td>
+            <td>
+              <span class="badge badge-outline font-mono font-black badge-sm py-2.5 px-2.5">🔒 {{ c.prefix }}</span>
             </td>
           </tr>
         </tbody>
@@ -235,9 +375,9 @@
 
     <div class="text-[11px] text-base-content/65 flex items-center justify-between gap-2 flex-wrap">
       <span>
-        <strong>Founder power:</strong> <code>owner</code> or <code>founder</code> (approves labor, locks/unlocks months).
-        <strong>Voting/Labor roles:</strong> <code>curator</code>, <code>promoter</code>, <code>enabler</code>, <code>builder</code>.
-        <strong>Consignor:</strong> own statement only (no labor access).
+        <strong>Founder power:</strong> approves SKU locks, PO receipts, expenses, labor &amp; month locks.
+        <strong>Curators:</strong> all real members — open-book financials + own-SKU inventory control.
+        <strong>Legacy BB-:</strong> own statement only.
       </span>
       <span v-if="soleFounder" class="badge badge-info badge-outline badge-xs font-mono">
         Sole Founder Active (self-approval audited)
@@ -252,22 +392,33 @@ import { Icon } from '@iconify/vue';
 import { teams } from '../../lib/appwrite';
 import { addToast } from '../../stores/toast';
 import { useAuth } from '../../composables/useAuth';
+import { useMemberCapabilities } from '../../lib/memberAccess';
 import { useCoopFounderGate } from '../../composables/useCoopFounderGate';
+import { getCoopJwtHeaders } from '../../lib/coopLedgerClient';
 import {
   deriveMemberHatsFromRoles,
   ensureCuratorBaseRoles,
+  formatAutoHyphenPrefix,
   MEMBER_HAT_META,
-  PROTECTED_BARCODE_PREFIXES,
+  sanitizePrefixRootInput,
+  type ConsignorAgreementConfig,
   type CoopMemberProfile,
   type MemberHat,
 } from '../../lib/coopGovernance';
 import { buildHatBccGroups, type BccGroupKey } from '../../lib/coopTaskBoard';
 import { toUserMessage } from '../../lib/userFacingErrors';
 
-const props = defineProps<{
-  members: CoopMemberProfile[];
-  canManageRosterLinks?: boolean;
-}>();
+const props = withDefaults(
+  defineProps<{
+    members: CoopMemberProfile[];
+    consignors?: ConsignorAgreementConfig[];
+    canManageRosterLinks?: boolean;
+  }>(),
+  {
+    consignors: () => [],
+    canManageRosterLinks: false,
+  }
+);
 
 const emit = defineEmits<{
   (e: 'update:members', next: CoopMemberProfile[]): void;
@@ -287,15 +438,22 @@ const customRoleOptions: ReadonlyArray<{ id: CustomRoleId; icon: string; label: 
 const CUSTOM_ROLE_IDS = new Set<string>(customRoleOptions.map((r) => r.id));
 
 const { currentTeam } = useAuth();
+const { refreshCapabilities } = useMemberCapabilities();
 const { coopIdentity, isOwner, isFounder, soleFounder, refreshCoopIdentity } =
   useCoopFounderGate();
 
 const memberships = ref<any[]>([]);
 const loadingMemberships = ref(false);
 const savingMembershipId = ref('');
+const lockingRowId = ref('');
+const editingPrefixRowId = ref('');
+const cleaningRoster = ref(false);
 const inviting = ref(false);
 const errorMessage = ref('');
 const selectedBccGroupId = ref<BccGroupKey>('all_voting');
+const prefixDrafts = ref<Record<string, string>>({});
+
+const legacyConsignors = computed(() => props.consignors || []);
 
 const bccGroups = computed(() =>
   buildHatBccGroups(memberships.value, props.members)
@@ -310,6 +468,11 @@ const activeBccGroup = computed(
     bccGroups.value.find((g) => g.id === selectedBccGroupId.value) ||
     bccGroups.value[0]
 );
+
+function visibleRoleOptionsForRow(m: any) {
+  if (hasCustomRole(m, 'consignor')) return customRoleOptions;
+  return customRoleOptions.filter((r) => r.id !== 'consignor');
+}
 
 async function copyActiveBccEmails() {
   const grp = activeBccGroup.value;
@@ -331,11 +494,11 @@ async function copyActiveBccEmails() {
 const inviteForm = ref<{
   name: string;
   email: string;
-  initialRole: CustomRoleId;
+  initialRole: Exclude<CustomRoleId, 'consignor'>;
 }>({
   name: '',
   email: '',
-  initialRole: 'enabler',
+  initialRole: 'curator',
 });
 
 const resolvedTeamId = computed(
@@ -361,85 +524,179 @@ function hasCustomRole(m: any, roleId: CustomRoleId): boolean {
   return Array.isArray(m?.roles) && m.roles.includes(roleId);
 }
 
-function linkedRosterNameForUser(userId?: string): string {
-  if (!userId) return '';
-  const found = props.members.find((rm) => rm.userId === userId);
-  return found ? found.name : '';
-}
-
-// Every member (and consignor) has a barcode prefix. Options come from prefixes already in use + the protected set.
-const prefixOptions = computed(() => {
-  const set = new Set<string>(PROTECTED_BARCODE_PREFIXES);
-  for (const rm of props.members) {
-    const px = String(rm.inventoryPrefix || '').trim().toUpperCase();
-    if (px) set.add(px);
-  }
-  return Array.from(set);
-});
-
+/**
+ * Audit Fix #2: Strict 1-to-1 account matching by userId -> email ONLY (never fuzzy display name!).
+ */
 function rosterIndexForMembership(m: any): number {
   const uid = String(m?.userId || '').trim();
   const email = String(m?.userEmail || '').trim().toLowerCase();
-  const name = String(m?.userName || '').trim().toLowerCase();
-  return props.members.findIndex(
-    (rm) =>
-      (uid && rm.userId === uid) ||
-      (email && rm.email && rm.email.trim().toLowerCase() === email) ||
-      (name && rm.name.trim().toLowerCase() === name)
-  );
-}
-
-function prefixForUser(m: any): string {
-  const idx = rosterIndexForMembership(m);
-  return idx >= 0 ? String(props.members[idx].inventoryPrefix || '').toUpperCase() : '';
-}
-
-/** Picks a barcode prefix and auto-links (or creates) the matching roster profile so nobody stays "Unlinked". */
-function handlePrefixSelect(membership: any, prefix: string) {
-  if (!canManageLinks.value) return;
-  const clean = String(prefix || '').trim().toUpperCase();
-  if (!clean) return;
-  const uid = String(membership.userId || '').trim();
-  const email = membership.userEmail ? String(membership.userEmail).trim().toLowerCase() : undefined;
-  const partner: CoopMemberProfile['partner'] = clean.startsWith('PDXGL')
-    ? 'PDXGL'
-    : clean.startsWith('BB')
-      ? 'BB'
-      : 'HUCK';
-  const idx = rosterIndexForMembership(membership);
-  const derivedHats = deriveMemberHatsFromRoles(membership.roles || [], idx >= 0 ? props.members[idx] : undefined);
-
-  if (idx >= 0) {
-    emit(
-      'update:members',
-      props.members.map((rm, i) =>
-        i === idx
-          ? {
-              ...rm,
-              userId: uid || rm.userId,
-              email: email || rm.email,
-              partner,
-              inventoryPrefix: clean,
-              hats: derivedHats,
-              canVote: derivedHats.some((h) => MEMBER_HAT_META[h]?.canVote),
-            }
-          : rm
-      )
-    );
-    return;
+  if (uid) {
+    const byUid = props.members.findIndex((rm) => rm.userId && rm.userId.trim() === uid);
+    if (byUid >= 0) return byUid;
   }
+  if (email) {
+    const byEmail = props.members.findIndex(
+      (rm) =>
+        (!rm.userId || !uid || rm.userId.trim() === uid) &&
+        rm.email &&
+        rm.email.trim().toLowerCase() === email
+    );
+    if (byEmail >= 0) return byEmail;
+  }
+  return -1;
+}
 
-  const profile: CoopMemberProfile = {
-    name: String(membership.userName || email || 'Collective Member'),
-    partner,
-    role: partner === 'BB' ? 'Consignor' : 'Partner Curator',
-    canVote: derivedHats.some((h) => MEMBER_HAT_META[h]?.canVote),
-    userId: uid || undefined,
-    email,
-    hats: derivedHats,
-    inventoryPrefix: clean,
+function profileForMembership(m: any): CoopMemberProfile | undefined {
+  const idx = rosterIndexForMembership(m);
+  return idx >= 0 ? props.members[idx] : undefined;
+}
+
+function displayNameForMembership(m: any): string {
+  const rawUserName = String(m?.userName || '').trim();
+  if (rawUserName && !rawUserName.includes('@')) return rawUserName;
+  const prof = profileForMembership(m);
+  if (prof?.name && !prof.name.includes('(')) return prof.name;
+  return rawUserName || String(m?.userEmail || 'Invited Member');
+}
+
+function isStewardHuckOwner(m: any): boolean {
+  const email = String(m?.userEmail || '').trim().toLowerCase();
+  return hasBuiltInOwner(m) || email === 'huck@thehc.llc';
+}
+
+function hasSharedPlaceholderPrefix(m: any): boolean {
+  const prof = profileForMembership(m);
+  if (!prof?.inventoryPrefix) return false;
+  const norm = formatAutoHyphenPrefix(prof.inventoryPrefix);
+  if (norm === 'HUCK-' && !isStewardHuckOwner(m) && !prof.prefixLockedAt) {
+    return true;
+  }
+  // Check if another distinct membership row also claims this exact prefix
+  const otherClaim = memberships.value.some((other) => {
+    if (other.$id === m.$id) return false;
+    const otherProf = profileForMembership(other);
+    if (!otherProf?.inventoryPrefix) return false;
+    if (formatAutoHyphenPrefix(otherProf.inventoryPrefix) !== norm) return false;
+    // If the other row is the primary steward for HUCK-, mark non-steward as shared
+    return isStewardHuckOwner(other) || Boolean(otherProf.prefixLockedAt && !prof.prefixLockedAt);
+  });
+  return otherClaim;
+}
+
+function requestedPrefixForRow(m: any): string {
+  const prof = profileForMembership(m);
+  return prof?.requestedPrefix ? formatAutoHyphenPrefix(prof.requestedPrefix) : '';
+}
+
+function uniqueLockedPrefixForRow(m: any): string {
+  if (hasSharedPlaceholderPrefix(m)) return '';
+  const prof = profileForMembership(m);
+  if (prof?.inventoryPrefix) return formatAutoHyphenPrefix(prof.inventoryPrefix);
+  if (isStewardHuckOwner(m)) return 'HUCK-';
+  return '';
+}
+
+const hasStaleOrSharedRows = computed(() => {
+  const hasUnlinkedPlaceholders = props.members.some(
+    (rm) => !rm.userId && !rm.email && rm.partner !== 'BB'
+  );
+  const hasShared = memberships.value.some((m) => hasSharedPlaceholderPrefix(m));
+  return hasUnlinkedPlaceholders || hasShared;
+});
+
+function onRowDraftInput(rowId: string, val: string) {
+  prefixDrafts.value = {
+    ...prefixDrafts.value,
+    [rowId]: sanitizePrefixRootInput(val),
   };
-  emit('update:members', [...props.members, profile]);
+}
+
+function openInlinePrefixEditor(m: any) {
+  const current = uniqueLockedPrefixForRow(m).replace(/-$/, '');
+  prefixDrafts.value = {
+    ...prefixDrafts.value,
+    [m.$id]: current === 'HUCK' && !isStewardHuckOwner(m) ? '' : current,
+  };
+  editingPrefixRowId.value = m.$id;
+}
+
+async function submitInlinePrefixLock(m: any) {
+  const root = sanitizePrefixRootInput(prefixDrafts.value[m.$id] || '');
+  if (root.length < 2) return;
+  await lockPrefixForMembership(m, root);
+}
+
+async function lockPrefixForMembership(m: any, rawPrefix: string) {
+  if (!canManageLinks.value) return;
+  lockingRowId.value = m.$id;
+  try {
+    const headers = await getCoopJwtHeaders();
+    const res = await fetch('/api/coop/prefix-request', {
+      method: 'POST',
+      headers: { ...headers, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'lock',
+        prefix: rawPrefix,
+        targetUserId: m.userId || undefined,
+        targetEmail: m.userEmail || undefined,
+        targetName: displayNameForMembership(m),
+        targetRoles: Array.isArray(m.roles) ? m.roles : ['curator'],
+      }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(data?.error || 'Could not lock SKU prefix.');
+    }
+    if (Array.isArray(data?.policyConfig?.members)) {
+      emit('update:members', data.policyConfig.members);
+    }
+    editingPrefixRowId.value = '';
+    await refreshCapabilities();
+    const formatted = formatAutoHyphenPrefix(rawPrefix);
+    addToast({
+      type: 'success',
+      message: `Locked unique SKU prefix ${formatted} for ${displayNameForMembership(m)}.`,
+    });
+  } catch (err: any) {
+    addToast({
+      type: 'error',
+      message: toUserMessage(err, 'Could not lock SKU prefix.'),
+    });
+  } finally {
+    lockingRowId.value = '';
+  }
+}
+
+async function handleCleanupPlaceholders() {
+  if (!canManageLinks.value) return;
+  cleaningRoster.value = true;
+  try {
+    const headers = await getCoopJwtHeaders();
+    const res = await fetch('/api/coop/prefix-request', {
+      method: 'POST',
+      headers: { ...headers, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'cleanup_placeholders' }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(data?.error || 'Could not clean up stale roster rows.');
+    }
+    if (Array.isArray(data?.policyConfig?.members)) {
+      emit('update:members', data.policyConfig.members);
+    }
+    await refreshCapabilities();
+    addToast({
+      type: 'success',
+      message: 'Synced Collective Roster — stale placeholder rows cleared!',
+    });
+  } catch (err: any) {
+    addToast({
+      type: 'error',
+      message: toUserMessage(err, 'Could not clean up stale roster rows.'),
+    });
+  } finally {
+    cleaningRoster.value = false;
+  }
 }
 
 async function loadMemberships() {
@@ -473,7 +730,6 @@ async function toggleCustomRole(membership: any, roleId: CustomRoleId) {
     ? membership.roles.map((r: any) => String(r))
     : [];
 
-  // Preserve built-in roles ('owner', 'member') untouched (§8.3)
   const builtIns = existingRoles.filter((r) => !CUSTOM_ROLE_IDS.has(r));
   const currentCustom = new Set(existingRoles.filter((r) => CUSTOM_ROLE_IDS.has(r)));
 
@@ -483,7 +739,6 @@ async function toggleCustomRole(membership: any, roleId: CustomRoleId) {
     currentCustom.add(roleId);
   }
 
-  // Never strip built-in 'owner', and ensure non-empty roles array for Appwrite
   const merged = Array.from(new Set([...builtIns, ...currentCustom]));
   if (hasBuiltInOwner(membership) && !merged.includes('owner')) {
     merged.unshift('owner');
@@ -503,25 +758,24 @@ async function toggleCustomRole(membership: any, roleId: CustomRoleId) {
       m.$id === membership.$id ? updated : m
     );
 
-    // Sync derived display hats onto any linked roster entry (§8.4)
-    if (membership.userId) {
-      const linkedIdx = props.members.findIndex(
-        (rm) => rm.userId === membership.userId
+    const linkedIdx = rosterIndexForMembership(membership);
+    if (linkedIdx >= 0) {
+      const target = props.members[linkedIdx];
+      const nextHats = deriveMemberHatsFromRoles(merged, target);
+      const nextMembers = props.members.map((rm, idx) =>
+        idx === linkedIdx
+          ? {
+              ...rm,
+              userId: membership.userId || rm.userId,
+              email: membership.userEmail
+                ? String(membership.userEmail).toLowerCase()
+                : rm.email,
+              hats: nextHats,
+              canVote: nextHats.some((h) => MEMBER_HAT_META[h]?.canVote),
+            }
+          : rm
       );
-      if (linkedIdx >= 0) {
-        const target = props.members[linkedIdx];
-        const nextHats = deriveMemberHatsFromRoles(merged, target);
-        const nextMembers = props.members.map((rm, idx) =>
-          idx === linkedIdx
-            ? {
-                ...rm,
-                hats: nextHats,
-                canVote: nextHats.some((h) => MEMBER_HAT_META[h]?.canVote),
-              }
-            : rm
-        );
-        emit('update:members', nextMembers);
-      }
+      emit('update:members', nextMembers);
     }
 
     await refreshCoopIdentity(true);
@@ -540,34 +794,6 @@ async function toggleCustomRole(membership: any, roleId: CustomRoleId) {
   }
 }
 
-function handleLinkSelect(membership: any, selectedRosterName: string) {
-  if (!canManageLinks.value) return;
-  const uid = String(membership.userId || '').trim();
-  if (!uid) return;
-
-  const nextMembers = props.members.map((rm) => {
-    // Clear any previous roster row linked to this userId first (1-to-1 link)
-    if (rm.userId === uid && rm.name !== selectedRosterName) {
-      return { ...rm, userId: undefined, email: undefined };
-    }
-    if (rm.name === selectedRosterName) {
-      const derivedHats = deriveMemberHatsFromRoles(membership.roles || [], rm);
-      return {
-        ...rm,
-        userId: uid,
-        email: membership.userEmail
-          ? String(membership.userEmail).toLowerCase()
-          : rm.email,
-        hats: derivedHats,
-        canVote: derivedHats.some((h) => MEMBER_HAT_META[h]?.canVote),
-      };
-    }
-    return rm;
-  });
-
-  emit('update:members', nextMembers);
-}
-
 async function handleInviteMember() {
   if (!isOwner.value || !resolvedTeamId.value) return;
   const email = inviteForm.value.email.trim().toLowerCase();
@@ -575,7 +801,7 @@ async function handleInviteMember() {
   const invitedRole = inviteForm.value.initialRole;
   if (!email || !name) return;
 
-  // Auto-pair 'curator' ONLY on initial invite for voting/provider roles; keep 'consignor' isolated (§14A).
+  // Every real invited member includes 'curator' base role (§14A).
   const pairedCustomRoles = ensureCuratorBaseRoles([invitedRole]) as MemberHat[];
   const teamRoles = Array.from(new Set(['member', ...pairedCustomRoles]));
 
@@ -583,8 +809,8 @@ async function handleInviteMember() {
   try {
     const redirectUrl =
       typeof window !== 'undefined'
-        ? `${window.location.origin}/coop/governance`
-        : 'https://works.thehc.llc/coop/governance';
+        ? `${window.location.origin}/profile`
+        : 'https://works.thehc.llc/profile';
     const created = await teams.createMembership(
       resolvedTeamId.value,
       teamRoles,
@@ -596,17 +822,13 @@ async function handleInviteMember() {
     );
     memberships.value = [created, ...memberships.value];
 
-    // Auto-upsert & link a matching Roster profile so the Founder never has to add them twice.
     const createdUid = created?.userId ? String(created.userId).trim() : '';
     const existingIdx = props.members.findIndex(
       (rm) =>
         (createdUid && rm.userId === createdUid) ||
-        (rm.email && rm.email.trim().toLowerCase() === email) ||
-        rm.name.trim().toLowerCase() === name.toLowerCase()
+        (!rm.userId && rm.email && rm.email.trim().toLowerCase() === email)
     );
     const derivedHats = deriveMemberHatsFromRoles(teamRoles);
-    const isConsignorOnly = derivedHats.length === 1 && derivedHats[0] === 'consignor';
-    const usesPrefix = derivedHats.some((h) => MEMBER_HAT_META[h]?.usesPrefix);
 
     if (existingIdx >= 0) {
       const nextMembers = props.members.map((rm, idx) => {
@@ -614,6 +836,7 @@ async function handleInviteMember() {
         const mergedHats = Array.from(new Set([...(rm.hats || []), ...derivedHats])) as MemberHat[];
         return {
           ...rm,
+          name: rm.name.includes('(') ? name : rm.name,
           userId: createdUid || rm.userId,
           email,
           hats: mergedHats,
@@ -622,29 +845,25 @@ async function handleInviteMember() {
       });
       emit('update:members', nextMembers);
     } else {
-      const partner: CoopMemberProfile['partner'] = isConsignorOnly ? 'BB' : 'HUCK';
-      const roleLabel: CoopMemberProfile['role'] = isConsignorOnly
-        ? 'Consignor'
-        : invitedRole === 'founder'
-          ? 'Co-op Member'
-          : 'Partner Curator';
+      // New Curator starts with prefixStatus: 'unset' so they pick/lock their OWN unique SKU (never sharing HUCK-)!
       const newProfile: CoopMemberProfile = {
         name,
-        partner,
-        role: roleLabel,
+        partner: 'CURATOR',
+        role: invitedRole === 'founder' ? 'Co-op Member' : 'Partner Curator',
         canVote: derivedHats.some((h) => MEMBER_HAT_META[h]?.canVote),
         userId: createdUid || undefined,
         email,
         hats: derivedHats,
-        inventoryPrefix: usesPrefix ? (isConsignorOnly ? 'BB-' : 'HUCK-') : undefined,
+        inventoryPrefix: undefined,
+        prefixStatus: 'unset',
       };
       emit('update:members', [...props.members, newProfile]);
     }
 
-    inviteForm.value = { name: '', email: '', initialRole: 'enabler' };
+    inviteForm.value = { name: '', email: '', initialRole: 'curator' };
     addToast({
       type: 'success',
-      message: `Sent Collective invite to ${email} (${pairedCustomRoles.join(' + ')}) & added to Roster.`,
+      message: `Sent Collective invite to ${email} (${pairedCustomRoles.join(' + ')}). They can request their unique SKU on their Profile!`,
     });
   } catch (err: any) {
     console.warn('[CoopRolesPanel] Invite failed:', err);

@@ -551,20 +551,24 @@
           <input v-model.number="policyConfig.orphanClaimWindowDays" type="number" min="7" max="90" step="1" class="input input-bordered input-sm rounded-xl font-mono font-bold w-full" />
           <p class="text-[11px] text-base-content/60">Days before an unlinked register ticket can be swept 100% to Commons Pool.</p>
         </div>
+
+        <div class="p-4 rounded-2xl bg-base-200/40 border border-base-300 space-y-1.5">
+          <label class="text-xs font-extrabold uppercase tracking-wider text-base-content/60">Dial 7 • PO Receipt Auto-Approve Cap ($)</label>
+          <input v-model.number="policyConfig.autoApproveReceiptPoMaxUsd" type="number" min="0" max="5000" step="5" class="input input-bordered input-sm rounded-xl font-mono font-bold w-full" />
+          <p class="text-[11px] text-base-content/60">Receipt-backed POs at or below this $ amount auto-approve for Gate 2 recoupment ($0 = approve every PO).</p>
+        </div>
       </div>
 
-      <!-- Consignor Agreements -->
+      <!-- Legacy Consignor Agreement (BB- Preserved; New Consignors Frozen) -->
       <div class="p-4 sm:p-5 rounded-2xl bg-base-200/40 border border-base-300 space-y-4">
         <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
-            <div class="text-xs font-extrabold uppercase tracking-wider text-secondary">Consignor Agreements</div>
-            <div class="text-sm font-black text-base-content">Straight Consignment Deals (applied on /coop/settlements)</div>
+            <div class="text-xs font-extrabold uppercase tracking-wider text-secondary">Legacy Consignor Agreement</div>
+            <div class="text-sm font-black text-base-content">External Consignment Contract (BB- preserved; new consignor onboarding paused)</div>
           </div>
-          <div class="flex items-center gap-2 flex-wrap">
-            <input v-model="newConsignor.prefix" type="text" placeholder="PREFIX (e.g. CON)" class="input input-bordered input-sm rounded-xl font-mono text-xs w-32" />
-            <input v-model="newConsignor.displayName" type="text" placeholder="Display name" class="input input-bordered input-sm rounded-xl text-xs w-40" />
-            <button type="button" class="btn btn-sm btn-secondary rounded-xl font-bold" @click="addConsignor">+ Add Straight Consignor</button>
-          </div>
+          <span class="badge badge-warning badge-outline font-bold text-xs whitespace-nowrap">
+            🔒 Legacy BB- Only
+          </span>
         </div>
 
         <div v-if="policyConfig.consignors.length === 0" class="text-xs text-base-content/60">No consignors configured yet.</div>
@@ -624,85 +628,22 @@
     </div>
 
     <!-- ===================================================== -->
-    <!-- TAB 3: PARTNER & VOTER ROSTER REGISTRY                -->
+    <!-- TAB 3: UNIFIED COLLECTIVE ROSTER & UNIQUE SKU PREFIXES -->
     <!-- ===================================================== -->
     <div v-if="activeGovTab === 'roster'" class="card bg-base-100 border border-base-300 shadow-sm rounded-3xl p-5 sm:p-7 space-y-5">
-      <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-        <div>
-          <h3 class="text-xl font-black text-base-content">Co-op Partner, Skill Partner &amp; Voter Roster</h3>
-          <p class="text-xs text-base-content/70">Manage eligible Loomio voters, Curator Partners (HUCK-, PDXGL-), Promoters &amp; Surplus Enablers (SWEAT- — $0 inventory required), and Consignors (BB-).</p>
-        </div>
-        <div v-if="canEditGlobalFinancials" class="flex items-center gap-2 w-full sm:w-auto flex-wrap">
-          <input v-model="newRosterMember.name" type="text" placeholder="Member Name (e.g. Alex)" class="input input-bordered input-sm rounded-xl text-xs" />
-          <select v-model="newRosterMember.partner" class="select select-bordered select-sm rounded-xl font-mono font-bold text-xs">
-            <option value="HUCK">HUCK- (Curator)</option>
-            <option value="PDXGL">PDXGL- (Curator)</option>
-            <option value="SWEAT">SWEAT- (Skill / Floor Partner)</option>
-            <option value="BB">BB- (Consignor)</option>
-          </select>
-          <button type="button" class="btn btn-sm btn-primary rounded-xl font-bold" @click="addRosterMember">+ Add Member</button>
-        </div>
+      <div>
+        <h3 class="text-xl font-black text-base-content">Collective Member &amp; Curator SKU Roster</h3>
+        <p class="text-xs text-base-content/70">
+          One unified roster for all Collective Curators, voting hats, and unique barcode prefixes (with legacy BB- consignment preserved).
+        </p>
       </div>
 
-      <!-- In-App Appwrite Team Roles & Account Linking Panel (§8.3 & §8.4) -->
       <CoopRolesPanel
         :members="policyConfig.members"
+        :consignors="policyConfig.consignors"
         :can-manage-roster-links="canEditGlobalFinancials"
         @update:members="handleRosterMembersUpdated"
       />
-
-      <div class="overflow-x-auto border border-base-200 rounded-2xl">
-        <table class="table table-sm">
-          <thead>
-            <tr class="bg-base-200/60 text-xs font-extrabold uppercase text-base-content/70">
-              <th>Member Name</th>
-              <th>Partner Prefix</th>
-              <th>WSDE Hats (Display)</th>
-              <th>Linked Account</th>
-              <th>Voting Rights</th>
-              <th class="text-right">Action</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-for="(member, idx) in policyConfig.members" :key="member.name" class="hover:bg-base-200/40">
-              <td class="font-bold text-xs">{{ member.name }}</td>
-              <td>
-                <span class="badge badge-xs font-mono font-bold" :class="member.partner === 'SWEAT' ? 'badge-secondary' : member.partner === 'PDXGL' ? 'badge-accent' : member.partner === 'BB' ? 'badge-warning' : 'badge-primary'">
-                  {{ member.partner }}-
-                </span>
-              </td>
-              <td class="text-xs">
-                <div class="flex items-center gap-1 flex-wrap">
-                  <span
-                    v-for="hat in member.hats || []"
-                    :key="hat"
-                    class="badge badge-ghost badge-xs font-semibold"
-                  >
-                    {{ MEMBER_HAT_META[hat]?.icon }} {{ MEMBER_HAT_META[hat]?.label || hat }}
-                  </span>
-                  <span v-if="!member.hats || member.hats.length === 0" class="text-base-content/60">{{ member.role }}</span>
-                </div>
-              </td>
-              <td class="text-xs">
-                <span v-if="member.userId" class="badge badge-success badge-outline badge-xs font-mono font-bold">
-                  🔗 {{ member.email || member.userId.slice(0, 10) }}
-                </span>
-                <span v-else class="text-base-content/45 text-[11px]">Unlinked</span>
-              </td>
-              <td>
-                <span class="badge badge-xs font-bold" :class="member.canVote ? 'badge-success' : 'badge-ghost'">
-                  {{ member.canVote ? '1 Member = 1 Vote' : 'Observer' }}
-                </span>
-              </td>
-              <td class="text-right">
-                <button v-if="canEditGlobalFinancials && policyConfig.members.length > 1" type="button" class="btn btn-ghost btn-xs text-error" @click="removeRosterMember(idx)">
-                  Remove
-                </button>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
     </div>
 
     <!-- ===================================================== -->
@@ -972,7 +913,6 @@ import {
   pacificTodayYmd,
   DEFAULT_COOP_POLICY_CONFIG,
   CONSIGNOR_DEAL_MODE_LABELS,
-  MEMBER_HAT_META,
   type LoomioSignal,
   type CoopProposal,
   type SurplusPolicyMode,
@@ -1028,16 +968,6 @@ const policyConfig = ref<CoopPolicyConfig>({
   ...DEFAULT_COOP_POLICY_CONFIG,
   members: [...DEFAULT_COOP_POLICY_CONFIG.members],
 });
-
-const newRosterMember = ref<{
-  name: string;
-  partner: 'HUCK' | 'PDXGL' | 'SWEAT' | 'BB';
-}>({
-  name: '',
-  partner: 'HUCK',
-});
-
-const newConsignor = ref({ prefix: '', displayName: '' });
 
 const defaultProposals: CoopProposal[] = [
   {
@@ -1330,28 +1260,6 @@ const persistSingleProposal = async (proposal: CoopProposal) => {
   }
 };
 
-const addConsignor = () => {
-  const clean = newConsignor.value.prefix.trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
-  if (!clean) {
-    addToast({ type: 'warning', message: 'Enter a consignor prefix first.' });
-    return;
-  }
-  const prefix = `${clean}-`;
-  if (policyConfig.value.consignors.some((c) => c.prefix === prefix)) {
-    addToast({ type: 'warning', message: `${prefix} already has an agreement.` });
-    return;
-  }
-  policyConfig.value.consignors.push({
-    prefix,
-    displayName: newConsignor.value.displayName.trim() || `${clean} Consignor`,
-    mode: 'flat_commission',
-    coopCommissionPct: 20,
-    fixedMonthlyRent: 0,
-    capRentAtNetSales: true,
-  });
-  newConsignor.value = { prefix: '', displayName: '' };
-};
-
 const removeConsignor = async (idx: number) => {
   const target = policyConfig.value.consignors[idx];
   if (!target) return;
@@ -1410,50 +1318,6 @@ const savePolicyConfigToCloud = async () => {
     type: 'success',
     message: `Enacted Policy: ${policyConfig.value.curatorSharePct}/${policyConfig.value.commonsSharePct} Gate 3 • ${policyConfig.value.reserveSharePct}% Res / ${policyConfig.value.salesPatronagePct}% Sales / ${policyConfig.value.laborPatronagePct}% Labor!`,
   });
-};
-
-const addRosterMember = async () => {
-  const rawName = newRosterMember.value.name.trim();
-  if (!rawName) {
-    addToast({ type: 'warning', message: 'Enter a member name first.' });
-    return;
-  }
-  const partner = newRosterMember.value.partner;
-  const formattedName = rawName.includes('(') ? rawName : `${rawName} (${partner})`;
-  policyConfig.value.members.push({
-    name: formattedName,
-    partner,
-    role:
-      partner === 'BB'
-        ? 'Consignor'
-        : partner === 'SWEAT'
-          ? 'Marketing & Social Enabler'
-          : partner === 'PDXGL'
-            ? 'Partner Curator'
-            : 'Co-op Member',
-    canVote: partner !== 'BB',
-  });
-  newRosterMember.value.name = '';
-  await savePolicyAndManifestState();
-  addToast({ type: 'success', message: `Added ${formattedName} to Co-op Roster!` });
-};
-
-const removeRosterMember = async (idx: number) => {
-  const target = policyConfig.value.members[idx];
-  if (!target) return;
-  const ok = await askConfirm(
-    `Remove ${target.name} from the Collective Roster?`,
-    'Remove Roster Member',
-    'Remove Member',
-    'Cancel',
-    'btn-error'
-  );
-  if (!ok) return;
-  const removed = policyConfig.value.members.splice(idx, 1);
-  await savePolicyAndManifestState();
-  if (removed[0]) {
-    addToast({ type: 'info', message: `Removed ${removed[0].name} from Co-op Roster.` });
-  }
 };
 
 const handleRosterMembersUpdated = async (nextMembers: CoopMemberProfile[]) => {

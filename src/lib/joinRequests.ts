@@ -23,13 +23,12 @@ export type JoinRequestStatus = (typeof JOIN_REQUEST_STATUS)[keyof typeof JOIN_R
 export const JOIN_REQUEST_HATS = ['curator', 'promoter', 'enabler', 'builder', 'consignor'] as const;
 export type JoinRequestHat = (typeof JOIN_REQUEST_HATS)[number];
 
-/** Canonical Hat Options for ConnectWithUsForm (shared across /coop and /signup). */
+/** Canonical Hat Options for ConnectWithUsForm (shared across /coop and /signup; external Consignor frozen — BB- legacy only). */
 export const JOIN_REQUEST_HAT_OPTIONS = [
   { id: 'curator', icon: '💎', title: 'Curator Partner' },
   { id: 'promoter', icon: '📣', title: 'Promoter' },
   { id: 'enabler', icon: '🔥', title: 'Surplus Enabler' },
   { id: 'builder', icon: '🛠️', title: 'Builder — Dev, Design & Displays' },
-  { id: 'consignor', icon: '🏷️', title: 'Straight Consignor' },
 ] as const;
 
 /** Quick-tap Pre-Screen Niche Chips so stewards can approve/decline on sight without email back-and-forth. */

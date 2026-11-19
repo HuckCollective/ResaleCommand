@@ -11,6 +11,9 @@ export interface BookmarkletMemberSession {
   name: string;
   email: string;
   prefix: string;
+  prefixStatus?: 'unset' | 'requested' | 'locked';
+  requestedPrefix?: string;
+  ownedPrefixes?: string[];
   role: BookmarkletAllowedRole;
   roleBadge: string;
   iat: number;
@@ -150,10 +153,14 @@ async function resolveCoopRosterMemberRole(
 ): Promise<{
   role: BookmarkletAllowedRole | 'restricted';
   isConsignor: boolean;
+  rosterMatched?: boolean;
   rosterPrefix?: string;
+  prefixStatus?: 'unset' | 'requested' | 'locked';
+  requestedPrefix?: string;
+  ownedPrefixes?: string[];
 }> {
   if (prefix.toUpperCase().startsWith('BB')) {
-    return { role: 'restricted', isConsignor: true };
+    return { role: 'restricted', isConsignor: true, prefixStatus: 'locked', ownedPrefixes: ['BB-'] };
   }
 
   const endpoint = getEnvVar('PUBLIC_APPWRITE_ENDPOINT') || 'https://sfo.cloud.appwrite.io/v1';
@@ -180,64 +187,93 @@ async function resolveCoopRosterMemberRole(
     const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
     const members: any[] = Array.isArray(parsed?.policyConfig?.members) ? parsed.policyConfig.members : [];
 
-    for (const m of members) {
-      const mUserId = String(m?.userId || m?.id || '').trim();
-      const mEmail = String(m?.email || '').trim().toLowerCase();
-      const mName = cleanName(m?.name || '');
+    // Strict 1-to-1 matching: userId -> email -> unlinked exact name fallback only
+    const matched =
+      (uId ? members.find((m) => String(m?.userId || m?.id || '').trim() === uId) : undefined) ||
+      (uEmail
+        ? members.find((m) => {
+            const mUid = String(m?.userId || m?.id || '').trim();
+            if (mUid && uId && mUid !== uId) return false;
+            return String(m?.email || '').trim().toLowerCase() === uEmail;
+          })
+        : undefined) ||
+      (uName
+        ? members.find((m) => {
+            const mUid = String(m?.userId || m?.id || '').trim();
+            const mEm = String(m?.email || '').trim();
+            if (mUid || mEm) return false;
+            return cleanName(m?.name || '') === uName;
+          })
+        : undefined);
 
-      const exactIdMatch = Boolean(uId && mUserId && uId === mUserId);
-      const exactEmailMatch = Boolean(uEmail && mEmail && uEmail === mEmail);
-      const exactFullNameMatch = Boolean(uName && mName && uName === mName);
+    if (matched) {
+      const normCode = (val: unknown) => {
+        const c = String(val || '').trim().toUpperCase();
+        return c ? (c.endsWith('-') ? c : `${c}-`) : undefined;
+      };
+      const rosterPrefix = normCode(matched.inventoryPrefix);
+      const requestedPrefix = normCode(matched.requestedPrefix);
+      const historicals: string[] = Array.isArray(matched.historicalPrefixes)
+        ? matched.historicalPrefixes.map((h: any) => normCode(h)).filter(Boolean) as string[]
+        : [];
+      const prefixStatus: 'unset' | 'requested' | 'locked' =
+        matched.prefixStatus === 'locked' && rosterPrefix
+          ? 'locked'
+          : matched.prefixStatus === 'requested' || (!rosterPrefix && Boolean(requestedPrefix))
+            ? 'requested'
+            : rosterPrefix
+              ? 'locked'
+              : 'unset';
+      const ownedPrefixes = Array.from(
+        new Set([...(rosterPrefix ? [rosterPrefix] : []), ...historicals])
+      );
+      const hats: string[] = Array.isArray(matched.hats) ? matched.hats : [];
+      const isRosterConsignor =
+        Boolean(rosterPrefix?.startsWith('BB')) ||
+        matched.partner === 'BB' ||
+        matched.role === 'Consignor' ||
+        (hats.length === 1 && hats[0] === 'consignor');
 
-      if (exactIdMatch || exactEmailMatch || exactFullNameMatch) {
-        const rawRosterPrefix = String(m?.inventoryPrefix || '').trim().toUpperCase();
-        const rosterPrefix = rawRosterPrefix
-          ? rawRosterPrefix.endsWith('-')
-            ? rawRosterPrefix
-            : `${rawRosterPrefix}-`
-          : undefined;
-        const hats: string[] = Array.isArray(m.hats) ? m.hats : [];
-        const isRosterConsignor =
-          Boolean(rosterPrefix?.startsWith('BB')) ||
-          m.partner === 'BB' ||
-          m.role === 'Consignor' ||
-          (hats.length === 1 && hats[0] === 'consignor');
-        if (isRosterConsignor) {
-          return {
-            role: 'restricted',
-            isConsignor: true,
-            rosterPrefix: rosterPrefix || 'BB-',
-          };
-        }
-        if (hats.includes('founder') || m.role === 'Co-op Member') {
-          return { role: 'founder', isConsignor: false, rosterPrefix };
-        }
-        if (hats.includes('curator') || m.role === 'Partner Curator') {
-          return { role: 'curator', isConsignor: false, rosterPrefix };
-        }
-        if (
-          m.partner === 'SWEAT' ||
-          m.partner === 'BB' ||
-          m.role === 'Marketing & Social Enabler' ||
-          m.role === 'Consignor'
-        ) {
-          return {
-            role: isTeamOwnerOrAdmin ? 'founder' : 'restricted',
-            isConsignor: isTeamOwnerOrAdmin ? false : isRosterConsignor,
-            rosterPrefix,
-          };
-        }
+      if (isRosterConsignor) {
+        return {
+          role: 'restricted',
+          isConsignor: true,
+          rosterMatched: true,
+          rosterPrefix: rosterPrefix || 'BB-',
+          prefixStatus: 'locked',
+          ownedPrefixes: ['BB-'],
+        };
       }
+      if (isTeamOwnerOrAdmin || hats.includes('founder') || matched.role === 'Co-op Member') {
+        return {
+          role: 'founder',
+          isConsignor: false,
+          rosterMatched: true,
+          rosterPrefix,
+          prefixStatus,
+          requestedPrefix,
+          ownedPrefixes,
+        };
+      }
+      return {
+        role: 'curator',
+        isConsignor: false,
+        rosterMatched: true,
+        rosterPrefix,
+        prefixStatus,
+        requestedPrefix,
+        ownedPrefixes,
+      };
     }
   } catch {
     // Fall back to team/label role resolution below
   }
 
   if (isTeamOwnerOrAdmin) return { role: 'founder', isConsignor: false };
-  if (prefix.toUpperCase().startsWith('PDXGL') || prefix.toUpperCase().startsWith('HUCK')) {
+  if (!prefix.toUpperCase().startsWith('BB')) {
     return { role: 'curator', isConsignor: false };
   }
-  return { role: 'restricted', isConsignor: prefix.toUpperCase().startsWith('BB') };
+  return { role: 'restricted', isConsignor: true };
 }
 
 export async function verifyAppwriteJwtToMember(
@@ -345,9 +381,19 @@ export async function verifyAppwriteJwtToMember(
         ? rawUserPrefix
         : `${rawUserPrefix}-`
       : '';
-    const rawChosenPrefix = resolved.rosterPrefix || teamPrefix || userPrefix || 'HUCK-';
+    const isUnsetCurator =
+      (resolved.rosterMatched &&
+        (resolved.prefixStatus === 'unset' || resolved.prefixStatus === 'requested') &&
+        !resolved.rosterPrefix) ||
+      (!resolved.rosterMatched && !isTeamOwnerOrAdmin && !userPrefix);
+
+    const rawChosenPrefix = isUnsetCurator
+      ? ''
+      : resolved.rosterPrefix || userPrefix || (isTeamOwnerOrAdmin ? teamPrefix || 'HUCK-' : '');
     const cleanChosen = rawChosenPrefix.trim().toUpperCase();
-    const prefix = cleanChosen.endsWith('-') ? cleanChosen : `${cleanChosen}-`;
+    const prefix = cleanChosen ? (cleanChosen.endsWith('-') ? cleanChosen : `${cleanChosen}-`) : '';
+    const resolvedPrefixStatus: 'unset' | 'requested' | 'locked' =
+      resolved.prefixStatus || (prefix ? 'locked' : 'unset');
 
     if (finalRole === 'restricted' || resolved.isConsignor || prefix.startsWith('BB')) {
       const consignorFlag = Boolean(resolved.isConsignor || prefix.startsWith('BB'));
@@ -371,6 +417,14 @@ export async function verifyAppwriteJwtToMember(
         name: me.name || me.email || 'Member',
         email: me.email || '',
         prefix,
+        prefixStatus: resolvedPrefixStatus,
+        requestedPrefix: resolved.requestedPrefix,
+        ownedPrefixes:
+          resolved.ownedPrefixes && resolved.ownedPrefixes.length > 0
+            ? resolved.ownedPrefixes
+            : prefix
+              ? [prefix]
+              : [],
         role: finalRole,
         roleBadge: formatRoleBadge(finalRole),
         iat: nowSec,

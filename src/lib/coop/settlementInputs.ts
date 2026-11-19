@@ -11,9 +11,11 @@ import {
 } from '../warehouses';
 import type { CoopExpenseItem } from '../coopExpenses';
 import {
+  buildMemberPrefixAliasMap,
   calculateConsignorSettlement,
   currentPacificMonthKey,
   findConsignorAgreement,
+  formatAutoHyphenPrefix,
   getLaborHoursByMemberForMonth,
   getLaborHoursByPartnerForMonth,
   isSettlementEligibleLabor,
@@ -265,6 +267,7 @@ export function resolvePartnerDisplayName(
   teamPartnerPrefixes: any[] = []
 ): string {
   const clean = String(prefix || '').replace(/[-_]+$/, '').toUpperCase();
+  const normPref = clean ? `${clean}-` : '';
   if (clean === 'COMMONS') return 'Shared Commons Pool (100% Margin Sweep)';
   if (clean === 'HUCK') return 'Huckleberry Collective';
   if (clean === 'PDXGL') return 'PDX Game Library';
@@ -272,6 +275,15 @@ export function resolvePartnerDisplayName(
   const consignor = findConsignorAgreement(policyConfig.consignors, prefix);
   if (consignor?.displayName) return consignor.displayName;
   if (clean === 'BB') return 'B&B Consignment (PDXGL Sub-Client)';
+
+  const rosterOwner = (policyConfig.members || []).find(
+    (m) =>
+      formatAutoHyphenPrefix(m.inventoryPrefix) === normPref ||
+      (m.historicalPrefixes || []).some((h) => formatAutoHyphenPrefix(h) === normPref)
+  );
+  if (rosterOwner?.name) {
+    return `${rosterOwner.name} (${normPref})`;
+  }
 
   for (const p of teamPartnerPrefixes || []) {
     const pStr = normalizeOrgPrefix(typeof p === 'string' ? p : p?.prefix);
@@ -543,6 +555,20 @@ function buildSingleMonthSettlement(
   const sweatReimbursementCents = new Map<string, { displayName: string; cents: number }>();
   const unassignedReimbursements: UnassignedReimbursementNotice[] = [];
 
+  const prefixAliasMap = buildMemberPrefixAliasMap(policyConfig.members);
+  const knownOrgPrefixes = new Set<string>(['HUCK-', 'PDXGL-']);
+  for (const m of policyConfig.members) {
+    if (m.inventoryPrefix) knownOrgPrefixes.add(normalizeOrgPrefix(m.inventoryPrefix));
+    for (const h of m.historicalPrefixes || []) {
+      const hNorm = formatAutoHyphenPrefix(h);
+      if (hNorm) knownOrgPrefixes.add(hNorm);
+    }
+  }
+  for (const p of teamPartnerPrefixes || []) {
+    const pStr = normalizeOrgPrefix(typeof p === 'string' ? p : p?.prefix);
+    if (pStr) knownOrgPrefixes.add(pStr);
+  }
+
   for (const exp of monthSharedExpenses) {
     if (isRentOrMallFeeExpense(exp)) continue;
     const amtCents = Math.max(0, toCents(exp.coopSharedAmount ?? exp.amount ?? 0));
@@ -555,7 +581,8 @@ function buildSingleMonthSettlement(
     }
 
     const rawPartner = String(exp.partner || '').trim();
-    const normPrefix = rawPartner ? normalizeOrgPrefix(rawPartner) : '';
+    const rawNormPrefix = rawPartner ? normalizeOrgPrefix(rawPartner) : '';
+    const normPrefix = rawNormPrefix ? prefixAliasMap.get(rawNormPrefix) || rawNormPrefix : '';
     const isConsignorOwner = normPrefix
       ? Boolean(findConsignorAgreement(policyConfig.consignors, normPrefix))
       : false;
@@ -575,6 +602,14 @@ function buildSingleMonthSettlement(
       const rosterMatch = policyConfig.members.find(
         (m) => m.name.trim().toLowerCase() === rawMember.toLowerCase()
       );
+      if (rosterMatch?.inventoryPrefix) {
+        const activeCuratorPrefix = formatAutoHyphenPrefix(rosterMatch.inventoryPrefix);
+        orgReimbursementCents.set(
+          activeCuratorPrefix,
+          (orgReimbursementCents.get(activeCuratorPrefix) || 0) + amtCents
+        );
+        continue;
+      }
       if (!rawMember) {
         unassignedReimbursements.push({
           owner: 'Unnamed SWEAT Worker',
@@ -594,19 +629,11 @@ function buildSingleMonthSettlement(
       continue;
     }
 
-    const knownOrgPrefixes = new Set<string>(['HUCK-', 'PDXGL-']);
-    for (const m of policyConfig.members) {
-      if (m.inventoryPrefix) knownOrgPrefixes.add(normalizeOrgPrefix(m.inventoryPrefix));
-    }
-    for (const p of teamPartnerPrefixes || []) {
-      const pStr = normalizeOrgPrefix(typeof p === 'string' ? p : p?.prefix);
-      if (pStr) knownOrgPrefixes.add(pStr);
-    }
-
     if (normPrefix && knownOrgPrefixes.has(normPrefix)) {
+      const canonicalPrefix = prefixAliasMap.get(normPrefix) || normPrefix;
       orgReimbursementCents.set(
-        normPrefix,
-        (orgReimbursementCents.get(normPrefix) || 0) + amtCents
+        canonicalPrefix,
+        (orgReimbursementCents.get(canonicalPrefix) || 0) + amtCents
       );
     } else {
       unassignedReimbursements.push({
@@ -637,9 +664,11 @@ function buildSingleMonthSettlement(
   );
   const approvedPartnerHours = getLaborHoursByPartnerForMonth(laborEntries || [], monthKey, {
     status: 'approved',
+    roster: policyConfig.members,
   });
   const pendingPartnerHours = getLaborHoursByPartnerForMonth(laborEntries || [], monthKey, {
     status: 'pending',
+    roster: policyConfig.members,
   });
 
   // 5. Aggregate sales into org buckets (exact integer cents)
@@ -702,7 +731,8 @@ function buildSingleMonthSettlement(
   };
 
   for (const sale of monthSales) {
-    const prefix = resolveSalePartnerPrefix(sale, teamPartnerPrefixes, defaultUpcPrefix);
+    const rawSalePrefix = resolveSalePartnerPrefix(sale, teamPartnerPrefixes, defaultUpcPrefix);
+    const prefix = prefixAliasMap.get(rawSalePrefix) || rawSalePrefix;
     const grp = ensureOrgGroup(prefix);
 
     const grossCents = Math.max(0, toCents(sale.grossAmount || 0));
@@ -834,7 +864,8 @@ function buildSingleMonthSettlement(
     grp.commonsTakeCents += commonsTakeCents;
 
     if (pendingListerTransfer) {
-      const listerPref = normalizeOrgPrefix(pendingListerTransfer.rec.listerPrefix);
+      const rawListerPref = normalizeOrgPrefix(pendingListerTransfer.rec.listerPrefix);
+      const listerPref = prefixAliasMap.get(rawListerPref) || rawListerPref;
       if (listerPref === 'SWEAT-') {
         const rawName = String(pendingListerTransfer.rec.listerName || 'Sweat-Equity Member').trim();
         const rosterMatch = policyConfig.members.find(
@@ -856,23 +887,42 @@ function buildSingleMonthSettlement(
     }
   }
 
-  // Inject 0-sale org rows when they have approved/pending labor or shared reimbursements (All Venues only)
+  // Inject 0-sale org rows dynamically for EVERY Curator prefix with approved/pending labor or shared reimbursements (All Venues only)
   if (!isVenueScopedPreview) {
-    if (
-      !orgGroups.has('HUCK-') &&
-      (approvedPartnerHours.HUCK > 0 ||
-        pendingPartnerHours.HUCK > 0 ||
-        (orgReimbursementCents.get('HUCK-') || 0) > 0)
-    ) {
-      ensureOrgGroup('HUCK-');
+    const candidateCuratorPrefixes = new Set<string>(['HUCK-', 'PDXGL-']);
+    for (const m of policyConfig.members) {
+      const mPref = formatAutoHyphenPrefix(m.inventoryPrefix);
+      if (mPref && mPref !== 'SWEAT-' && !findConsignorAgreement(policyConfig.consignors, mPref)) {
+        candidateCuratorPrefixes.add(mPref);
+      }
     }
-    if (
-      !orgGroups.has('PDXGL-') &&
-      (approvedPartnerHours.PDXGL > 0 ||
-        pendingPartnerHours.PDXGL > 0 ||
-        (orgReimbursementCents.get('PDXGL-') || 0) > 0)
-    ) {
-      ensureOrgGroup('PDXGL-');
+    for (const rootKey of Object.keys(approvedPartnerHours)) {
+      if (rootKey && rootKey !== 'SWEAT') {
+        const pref = prefixAliasMap.get(`${rootKey}-`) || `${rootKey}-`;
+        if (!findConsignorAgreement(policyConfig.consignors, pref)) {
+          candidateCuratorPrefixes.add(pref);
+        }
+      }
+    }
+    for (const rootKey of Object.keys(pendingPartnerHours)) {
+      if (rootKey && rootKey !== 'SWEAT') {
+        const pref = prefixAliasMap.get(`${rootKey}-`) || `${rootKey}-`;
+        if (!findConsignorAgreement(policyConfig.consignors, pref)) {
+          candidateCuratorPrefixes.add(pref);
+        }
+      }
+    }
+
+    for (const curatorPrefix of candidateCuratorPrefixes) {
+      const rootKey = curatorPrefix.replace(/-$/, '');
+      if (
+        !orgGroups.has(curatorPrefix) &&
+        ((approvedPartnerHours[rootKey] || 0) > 0 ||
+          (pendingPartnerHours[rootKey] || 0) > 0 ||
+          (orgReimbursementCents.get(curatorPrefix) || 0) > 0)
+      ) {
+        ensureOrgGroup(curatorPrefix);
+      }
     }
     for (const [orgPrefix, cents] of orgReimbursementCents.entries()) {
       if (cents > 0 && !orgGroups.has(orgPrefix)) {
@@ -976,20 +1026,8 @@ function buildSingleMonthSettlement(
       .sort()
       .pop();
 
-    const approvedHrs = isVenueScopedPreview
-      ? 0
-      : orgKey === 'HUCK'
-        ? approvedPartnerHours.HUCK
-        : orgKey === 'PDXGL'
-          ? approvedPartnerHours.PDXGL
-          : 0;
-    const pendingHrs = isVenueScopedPreview
-      ? 0
-      : orgKey === 'HUCK'
-        ? pendingPartnerHours.HUCK
-        : orgKey === 'PDXGL'
-          ? pendingPartnerHours.PDXGL
-          : 0;
+    const approvedHrs = isVenueScopedPreview ? 0 : approvedPartnerHours[orgKey] || 0;
+    const pendingHrs = isVenueScopedPreview ? 0 : pendingPartnerHours[orgKey] || 0;
 
     const reimbCents = isVenueScopedPreview
       ? 0

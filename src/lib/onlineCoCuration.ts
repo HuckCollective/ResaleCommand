@@ -101,11 +101,11 @@ export interface CoCurationRecord {
   itemId: string;
   upc: string;
   titleSnapshot: string;
-  ogBuyerPrefix: 'HUCK-' | 'PDXGL-';
+  ogBuyerPrefix: string;
   ogBuyerName: string;
   listerUserId: string;
   listerName: string;
-  listerPrefix: 'HUCK-' | 'PDXGL-' | 'SWEAT-';
+  listerPrefix: string;
   mode: CoCurationMode;
   transferFloorPrice: number;
   binFacility: 'HG' | 'HH';

@@ -147,9 +147,143 @@ export type { MemberHat, MemberHatMeta } from './memberHats';
 /** Barcode prefixes printed on physical booth tags. Never editable or removable once registered. */
 export const PROTECTED_BARCODE_PREFIXES: readonly string[] = ['HUCK-', 'PDXGL-', 'BB-'];
 
+/** Reserved system prefix roots that no individual Curator may claim as their personal SKU prefix. */
+export const RESERVED_PREFIX_ROOTS: readonly string[] = [
+  'COMMONS',
+  'SWEAT',
+  'UNASSIGNED',
+  'NONE',
+  'ALL',
+  'ITEM',
+  'PO',
+  'SO',
+  'SC',
+  '0EJ',
+  'BB',
+];
+
+export type PrefixLifecycleStatus = 'unset' | 'requested' | 'locked';
+
+/**
+ * Strips hyphens, spaces, and punctuation from a raw user SKU input so members type ONLY
+ * letters/digits (e.g. 'dom' or 'DOM-' -> 'DOM').
+ */
+export function sanitizePrefixRootInput(raw: string | null | undefined): string {
+  return String(raw || '')
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, '')
+    .slice(0, 6);
+}
+
+/**
+ * Formats a sanitized root into a canonical barcode prefix with automatic trailing '-' (e.g. 'DOM' -> 'DOM-').
+ */
+export function formatAutoHyphenPrefix(raw: string | null | undefined): string {
+  const root = sanitizePrefixRootInput(raw);
+  return root ? `${root}-` : '';
+}
+
 export function isProtectedPrefix(prefix: string, usedPrefixes: string[] = []): boolean {
   const key = String(prefix || '').trim().toUpperCase();
   return PROTECTED_BARCODE_PREFIXES.includes(key) || usedPrefixes.map((p) => p.toUpperCase()).includes(key);
+}
+
+/**
+ * Builds an alias lookup (`Map<normalizedOldPrefix, normalizedActivePrefix>`) from every member's
+ * `historicalPrefixes` so sales, expenses, and labor under retired physical tags roll cleanly into
+ * that Curator's current settlement row without splitting payouts across two rows.
+ */
+export function buildMemberPrefixAliasMap(members: ReadonlyArray<CoopMemberProfile> = []): Map<string, string> {
+  const map = new Map<string, string>();
+  for (const m of members || []) {
+    const active = formatAutoHyphenPrefix(m?.inventoryPrefix);
+    if (!active) continue;
+    map.set(active, active);
+    for (const hist of m?.historicalPrefixes || []) {
+      const cleanHist = formatAutoHyphenPrefix(hist);
+      if (cleanHist && cleanHist !== active) {
+        map.set(cleanHist, active);
+      }
+    }
+  }
+  return map;
+}
+
+/**
+ * Validates a candidate SKU prefix (`2–6` uppercase alphanumeric chars, auto-suffixed with '-')
+ * for global 1-to-1 exclusivity across active member prefixes, `historicalPrefixes`, consignor contracts,
+ * and extra team partner prefixes.
+ */
+export function validateUniquePrefixRequest(
+  rawInput: string,
+  opts: {
+    members?: ReadonlyArray<CoopMemberProfile>;
+    consignors?: ReadonlyArray<ConsignorAgreementConfig>;
+    partnerPrefixes?: ReadonlyArray<any>;
+    allowForUserId?: string;
+    allowForEmail?: string;
+  } = {}
+): { ok: true; root: string; prefix: string } | { ok: false; error: string } {
+  const root = sanitizePrefixRootInput(rawInput);
+  if (root.length < 2 || root.length > 6) {
+    return {
+      ok: false,
+      error: 'Choose 2 to 6 letters or numbers (for example DOM or MIKE) — the hyphen is added automatically.',
+    };
+  }
+  if (/^\d+$/.test(root)) {
+    return {
+      ok: false,
+      error: 'Include at least one letter in your SKU prefix (for example DOM or M2K).',
+    };
+  }
+  if (RESERVED_PREFIX_ROOTS.includes(root) || root.startsWith('0EJ')) {
+    return {
+      ok: false,
+      error: `${root}- is reserved for booth or system operations. Please pick another prefix.`,
+    };
+  }
+
+  const prefix = `${root}-`;
+  const callerUid = String(opts.allowForUserId || '').trim();
+  const callerEmail = String(opts.allowForEmail || '').trim().toLowerCase();
+
+  const isSameCaller = (m: CoopMemberProfile): boolean => {
+    if (callerUid && m.userId && m.userId.trim() === callerUid) return true;
+    if (callerEmail && m.email && m.email.trim().toLowerCase() === callerEmail) return true;
+    return false;
+  };
+
+  for (const c of opts.consignors || []) {
+    if (formatAutoHyphenPrefix(c.prefix) === prefix) {
+      return { ok: false, error: `${prefix} is already assigned to consignor ${c.displayName}.` };
+    }
+  }
+
+  for (const m of opts.members || []) {
+    const same = isSameCaller(m);
+    const active = formatAutoHyphenPrefix(m.inventoryPrefix);
+    const requested = formatAutoHyphenPrefix(m.requestedPrefix);
+    const historicals = (m.historicalPrefixes || []).map((h) => formatAutoHyphenPrefix(h)).filter(Boolean);
+
+    if (!same && active === prefix) {
+      // Allow claiming an UNLINKED legacy seed row's prefix only during Founder lock? No — keep 1-to-1 strict unless linked!
+      if (m.userId || m.email) {
+        return { ok: false, error: `${prefix} is already locked to ${m.name}. Every Curator has a unique SKU.` };
+      }
+    }
+    if (!same && requested === prefix && (m.userId || m.email)) {
+      return { ok: false, error: `${prefix} has already been requested by ${m.name}.` };
+    }
+    if (!same && historicals.includes(prefix)) {
+      return {
+        ok: false,
+        error: `${prefix} was previously printed on physical booth tags for ${m.name} and cannot be reused.`,
+      };
+    }
+  }
+
+  return { ok: true, root, prefix };
 }
 
 /**
@@ -166,9 +300,9 @@ export function canMemberEditGlobalFinancials(
 
 function defaultHatsFor(partner: string, role?: string): MemberHat[] {
   if (partner === 'BB' || role === 'Consignor') return ['consignor'];
-  if (partner === 'SWEAT' || role === 'Marketing & Social Enabler') return ['promoter', 'enabler'];
-  if (partner === 'PDXGL') return ['curator'];
-  return ['founder', 'curator', 'promoter'];
+  if (partner === 'SWEAT' || role === 'Marketing & Social Enabler') return ['curator', 'promoter', 'enabler'];
+  if (partner === 'HUCK' && role === 'Co-op Member') return ['founder', 'curator', 'promoter'];
+  return ['curator'];
 }
 
 /**
@@ -200,7 +334,7 @@ export function deriveMemberHatsFromRoles(
 
 export interface CoopMemberProfile {
   name: string;
-  partner: 'HUCK' | 'PDXGL' | 'SWEAT' | 'BB';
+  partner: string;
   role: 'Co-op Member' | 'Partner Curator' | 'Marketing & Social Enabler' | 'Consignor';
   canVote: boolean;
   /** Optional linked Appwrite Auth User ID (set by Founder/Owner in Roles panel; server re-verifies JWT) */
@@ -209,8 +343,18 @@ export interface CoopMemberProfile {
   email?: string;
   /** Combinable WSDE hats (display-only; server security uses Appwrite Team roles). */
   hats?: MemberHat[];
-  /** Physical barcode prefix for Curator/Consignor hats (e.g. 'HUCK-'). */
+  /** Physical barcode prefix for Curator/Consignor hats (e.g. 'HUCK-', 'DOM-'). */
   inventoryPrefix?: string;
+  /** Lifecycle status of this member's personal barcode prefix ('unset' | 'requested' | 'locked'). */
+  prefixStatus?: PrefixLifecycleStatus;
+  /** Member-requested candidate prefix awaiting Steward lock (normalized 'DOM-'). */
+  requestedPrefix?: string;
+  /** ISO timestamp when prefix was locked for physical shelf tags. */
+  prefixLockedAt?: string;
+  /** Steward name/id who locked the prefix. */
+  prefixLockedBy?: string;
+  /** Prior locked prefixes whose printed booth stickers continue crediting this Curator. */
+  historicalPrefixes?: string[];
 }
 
 export type ConsignorDealMode =
@@ -348,6 +492,8 @@ export interface CoopPolicyConfig {
   minAgreeVotes: number;
   /** Days before an unlinked register ticket can be swept 100% to Commons Pool */
   orphanClaimWindowDays: number;
+  /** Founder setting: max USD for receipt-backed POs to auto-approve Gate 2 recoupment ($0 = approve every PO) */
+  autoApproveReceiptPoMaxUsd: number;
   /** Eligible Co-op Voters & Labor Contributors */
   members: CoopMemberProfile[];
 }
@@ -380,7 +526,7 @@ export interface CoopLaborEntry {
   date: string;
   member: string;
   memberUserId?: string;
-  partner: 'HUCK' | 'PDXGL' | 'SWEAT';
+  partner: string;
   category: CoopLaborCategory;
   /** Per-entry function tag (`Promoter` / `Enabler` / `Builder` / `Shift`) */
   functionTag?: CoopLaborFunctionTag;
@@ -412,7 +558,7 @@ export interface CoopLaborEntry {
 
 export interface MemberLaborShareSummary {
   member: string;
-  partner: 'HUCK' | 'PDXGL' | 'SWEAT';
+  partner: string;
   roleLabel: string;
   /** Approved hours (basis for Gate 4B Sweat-Equity share) */
   hours: number;
@@ -479,11 +625,10 @@ export const DEFAULT_COOP_POLICY_CONFIG: CoopPolicyConfig = {
   payRatioCapStandard: 4.5,
   minAgreeVotes: 2,
   orphanClaimWindowDays: 30,
+  autoApproveReceiptPoMaxUsd: 25,
   members: [
-    { name: 'Mike (HUCK)', partner: 'HUCK', role: 'Co-op Member', canVote: true },
-    { name: 'Tyler (HUCK)', partner: 'HUCK', role: 'Co-op Member', canVote: true },
-    { name: 'PDX Partner (PDXGL)', partner: 'PDXGL', role: 'Partner Curator', canVote: true },
-    { name: 'Jesse (Social & Ops)', partner: 'SWEAT', role: 'Marketing & Social Enabler', canVote: true },
+    { name: 'Huckleberry', partner: 'HUCK', role: 'Co-op Member', canVote: true, inventoryPrefix: 'HUCK-', prefixStatus: 'locked' },
+    { name: 'PDX Partner (PDXGL)', partner: 'PDXGL', role: 'Partner Curator', canVote: true, inventoryPrefix: 'PDXGL-', prefixStatus: 'locked' },
   ],
 };
 
@@ -613,17 +758,23 @@ function proposalToDocPayload(proposal: CoopProposal, tenantId = 'huck_collectiv
 }
 
 /**
- * Explicit partner ALWAYS wins first (§5 item 26); name-keyword heuristic applies ONLY when explicit is absent.
+ * Explicit partner ALWAYS wins first (§5 item 26), supporting any dynamic Curator SKU root
+ * (e.g. 'HUCK', 'PDXGL', 'DOM', 'MIKE', 'GENE', 'SWEAT'). Name-keyword heuristic applies ONLY when explicit is absent.
  */
 export function inferPartnerFromMemberName(
   member: string,
-  explicit?: string
-): 'HUCK' | 'PDXGL' | 'SWEAT' {
+  explicit?: string,
+  aliasMap?: ReadonlyMap<string, string>
+): string {
   const exp = String(explicit || '')
     .trim()
     .toUpperCase()
     .replace(/[-_]+$/, '');
-  if (exp === 'HUCK' || exp === 'PDXGL' || exp === 'SWEAT') {
+  if (/^[A-Z0-9]{2,8}$/.test(exp)) {
+    if (aliasMap) {
+      const mapped = aliasMap.get(`${exp}-`);
+      if (mapped) return mapped.replace(/-$/, '');
+    }
     return exp;
   }
   if (/social|sweat|marketing|enabler/i.test(member)) return 'SWEAT';
@@ -651,14 +802,49 @@ export function normalizePolicyConfig(raw?: Partial<CoopPolicyConfig>): CoopPoli
       : DEFAULT_COOP_POLICY_CONFIG.members;
   const members: CoopMemberProfile[] = rawMembers.map((m) => {
     const validHats = (Array.isArray(m.hats) ? m.hats : []).filter((h): h is MemberHat => h in MEMBER_HAT_META);
-    const hats = validHats.length > 0 ? validHats : defaultHatsFor(m.partner, m.role);
+    const cleanPartner = sanitizePrefixRootInput(m.partner) || 'HUCK';
+    const hats = validHats.length > 0 ? validHats : defaultHatsFor(cleanPartner, m.role);
     const usesPrefix = hats.some((h) => MEMBER_HAT_META[h].usesPrefix);
+    const explicitInv = m.inventoryPrefix ? formatAutoHyphenPrefix(m.inventoryPrefix) : undefined;
+    const requestedPref = m.requestedPrefix ? formatAutoHyphenPrefix(m.requestedPrefix) : undefined;
+    const isExplicitlyUnsetOrRequested = m.prefixStatus === 'unset' || m.prefixStatus === 'requested';
+    const resolvedInv = usesPrefix
+      ? explicitInv ||
+        (!isExplicitlyUnsetOrRequested && !requestedPref && cleanPartner !== 'SWEAT'
+          ? `${cleanPartner}-`
+          : undefined)
+      : undefined;
+    const resolvedStatus: PrefixLifecycleStatus =
+      m.prefixStatus === 'locked' && resolvedInv
+        ? 'locked'
+        : m.prefixStatus === 'requested' || (!resolvedInv && Boolean(requestedPref))
+          ? 'requested'
+          : resolvedInv
+            ? 'locked'
+            : 'unset';
+    const historicalPrefixes = Array.isArray(m.historicalPrefixes)
+      ? Array.from(
+          new Set(
+            m.historicalPrefixes
+              .map((h) => formatAutoHyphenPrefix(h))
+              .filter((h) => h && h !== resolvedInv)
+          )
+        )
+      : undefined;
+    const syncedPartner = resolvedInv ? resolvedInv.replace(/-$/, '') : cleanPartner;
+
     return {
       ...m,
+      partner: syncedPartner,
       userId: m.userId ? String(m.userId).trim() : undefined,
       email: m.email ? String(m.email).trim().toLowerCase() : undefined,
       hats,
-      inventoryPrefix: usesPrefix ? m.inventoryPrefix || (m.partner === 'SWEAT' ? undefined : `${m.partner}-`) : undefined,
+      inventoryPrefix: resolvedInv,
+      prefixStatus: resolvedStatus,
+      requestedPrefix: requestedPref,
+      prefixLockedAt: m.prefixLockedAt ? String(m.prefixLockedAt) : undefined,
+      prefixLockedBy: m.prefixLockedBy ? String(m.prefixLockedBy) : undefined,
+      historicalPrefixes: historicalPrefixes && historicalPrefixes.length > 0 ? historicalPrefixes : undefined,
       canVote: hats.some((h) => MEMBER_HAT_META[h].canVote),
     };
   });
@@ -684,6 +870,10 @@ export function normalizePolicyConfig(raw?: Partial<CoopPolicyConfig>): CoopPoli
   const icaRetainedPct = Math.min(50, Math.max(0, Math.round(Number(base.icaRetainedPct ?? 0))));
   const sweatSalesPoolMode: SweatSalesPoolMode =
     base.sweatSalesPoolMode === 'equal_all' ? 'equal_all' : 'labor_only';
+  const rawAutoApprovePo = Number(base.autoApproveReceiptPoMaxUsd);
+  const autoApproveReceiptPoMaxUsd = Number.isFinite(rawAutoApprovePo)
+    ? Math.min(5000, Math.max(0, Math.round(rawAutoApprovePo * 100) / 100))
+    : 25;
 
   return {
     consignors,
@@ -701,6 +891,7 @@ export function normalizePolicyConfig(raw?: Partial<CoopPolicyConfig>): CoopPoli
     payRatioCapStandard: Math.min(6.5, Math.max(1, Number(base.payRatioCapStandard ?? 4.5))),
     minAgreeVotes: Math.max(1, Math.round(Number(base.minAgreeVotes ?? 2))),
     orphanClaimWindowDays: Math.max(7, Math.round(Number(base.orphanClaimWindowDays ?? 30))),
+    autoApproveReceiptPoMaxUsd,
     members,
   };
 }
@@ -858,13 +1049,36 @@ export function summarizeLaborApproval(
   };
 }
 
+function resolveEntryPartnerWithRoster(
+  entry: Pick<CoopLaborEntry, 'member' | 'memberUserId' | 'partner'>,
+  roster: ReadonlyArray<CoopMemberProfile> = [],
+  aliasMap?: ReadonlyMap<string, string>
+): string {
+  const uid = String(entry.memberUserId || '').trim();
+  const memberLower = String(entry.member || '').trim().toLowerCase();
+  const rosterMatch =
+    (uid ? roster.find((r) => r.userId && r.userId.trim() === uid) : undefined) ||
+    (memberLower ? roster.find((r) => r.name.trim().toLowerCase() === memberLower) : undefined);
+
+  if (rosterMatch?.inventoryPrefix) {
+    return formatAutoHyphenPrefix(rosterMatch.inventoryPrefix).replace(/-$/, '');
+  }
+  return inferPartnerFromMemberName(entry.member, entry.partner, aliasMap);
+}
+
 export function getLaborHoursByPartnerForMonth(
   entries: CoopLaborEntry[],
   monthKey: string,
-  opts: { status?: 'approved' | 'all' | 'pending' } = { status: 'approved' }
-): Record<'HUCK' | 'PDXGL' | 'SWEAT', number> {
+  opts: { status?: 'approved' | 'all' | 'pending'; roster?: ReadonlyArray<CoopMemberProfile> } = { status: 'approved' }
+): Record<string, number> {
   const mode = opts.status || 'approved';
-  const totals: Record<'HUCK' | 'PDXGL' | 'SWEAT', number> = { HUCK: 0, PDXGL: 0, SWEAT: 0 };
+  const roster = opts.roster || [];
+  const aliasMap = buildMemberPrefixAliasMap(roster);
+  const totals: Record<string, number> = { HUCK: 0, PDXGL: 0, SWEAT: 0 };
+  for (const m of roster) {
+    const root = sanitizePrefixRootInput(m.inventoryPrefix || m.partner);
+    if (root && totals[root] === undefined) totals[root] = 0;
+  }
   for (const entry of entries || []) {
     if (isDemoSeedLaborEntry(entry) || !isValidLaborEntryData(entry)) continue;
     const entryMonth = laborEntryMonthKey(entry.date);
@@ -875,8 +1089,8 @@ export function getLaborHoursByPartnerForMonth(
     if (mode === 'pending' && status !== 'pending') continue;
     if (mode === 'all' && status === 'rejected') continue;
 
-    const partner = inferPartnerFromMemberName(entry.member, entry.partner);
-    totals[partner] = Number((totals[partner] + (Number(entry.hours) || 0)).toFixed(2));
+    const partner = resolveEntryPartnerWithRoster(entry, roster, aliasMap);
+    totals[partner] = Number(((totals[partner] || 0) + (Number(entry.hours) || 0)).toFixed(2));
   }
   return totals;
 }
@@ -888,11 +1102,12 @@ export function getLaborHoursByMemberForMonth(
   opts: { status?: 'approved' | 'all' | 'pending' } = { status: 'approved' }
 ): MemberLaborShareSummary[] {
   const mode = opts.status || 'approved';
+  const aliasMap = buildMemberPrefixAliasMap(roster);
   const map = new Map<
     string,
     {
       member: string;
-      partner: 'HUCK' | 'PDXGL' | 'SWEAT';
+      partner: string;
       roleLabel: string;
       approvedHours: number;
       pendingHours: number;
@@ -923,7 +1138,7 @@ export function getLaborHoursByMemberForMonth(
 
     const memberName = String(entry.member || 'Member').trim();
     const mapKey = memberName.toLowerCase();
-    const partner = inferPartnerFromMemberName(memberName, entry.partner);
+    const partner = resolveEntryPartnerWithRoster(entry, roster, aliasMap);
     const exactRosterMatch = roster.find((r) => r.name.trim().toLowerCase() === mapKey);
     const partnerRosterFallback = roster.find((r) => r.partner === partner);
     const rosterMatch = exactRosterMatch || partnerRosterFallback;

@@ -6,6 +6,9 @@ export interface DashboardMember {
   hats: MemberHat[];
   /** Barcode prefix for Curator / Consignor hats, e.g. 'HUCK-' */
   inventoryPrefix?: string;
+  prefixStatus?: 'unset' | 'requested' | 'locked';
+  requestedPrefix?: string;
+  historicalPrefixes?: string[];
 }
 
 export interface DashboardProposalLite {
@@ -74,6 +77,9 @@ export interface DashboardSnapshot {
   joinRequests: number;
   /** Open member messages, UI bug screenshots & AI flags awaiting review */
   coopMessages: number;
+  pendingPrefixRequests: Array<{ name: string; email?: string; requestedPrefix: string }>;
+  pendingSharedExpenses: number;
+  pendingLaborCount: number;
 }
 
 export function emptySnapshot(now = Date.now()): DashboardSnapshot {
@@ -91,6 +97,9 @@ export function emptySnapshot(now = Date.now()): DashboardSnapshot {
     shortfall: 0,
     joinRequests: 0,
     coopMessages: 0,
+    pendingPrefixRequests: [],
+    pendingSharedExpenses: 0,
+    pendingLaborCount: 0,
   };
 }
 

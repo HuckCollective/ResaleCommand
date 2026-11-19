@@ -47,7 +47,11 @@ export const GET: APIRoute = async ({ request }) => {
       ok: true,
       allowed: true,
       member: auth.member,
-      capabilities: capabilitiesForRole(auth.member.role, auth.member.prefix),
+      capabilities: capabilitiesForRole(auth.member.role, auth.member.prefix, {
+        prefixStatus: auth.member.prefixStatus,
+        requestedPrefix: auth.member.requestedPrefix,
+        ownedPrefixes: auth.member.ownedPrefixes,
+      }),
     }),
     { status: 200, headers: BML_CORS_HEADERS }
   );

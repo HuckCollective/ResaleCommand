@@ -4,11 +4,15 @@ import { account } from './appwrite';
 import { authStore } from './store';
 
 export type MemberRole = 'founder' | 'curator' | 'restricted';
+export type MemberPrefixStatus = 'unset' | 'requested' | 'locked';
 
 export interface MemberCapabilities {
   role: MemberRole;
   roleBadge: string;
   prefix: string;
+  prefixStatus: MemberPrefixStatus;
+  requestedPrefix?: string;
+  ownedPrefixes: string[];
   isConsignor: boolean;
   canUseBml: boolean;
   canUseBookmarklets: boolean;
@@ -22,13 +26,40 @@ export interface MemberCapabilities {
 
 export function capabilitiesForRole(
   role: MemberRole,
-  prefix = 'HUCK-',
-  options?: { forceConsignor?: boolean }
+  prefix = '',
+  options?: {
+    forceConsignor?: boolean;
+    prefixStatus?: MemberPrefixStatus;
+    requestedPrefix?: string;
+    ownedPrefixes?: string[];
+  }
 ): MemberCapabilities {
-  const cleanPrefix = String(prefix || 'HUCK-').trim().toUpperCase();
-  const normalizedPrefix = cleanPrefix.endsWith('-') ? cleanPrefix : `${cleanPrefix}-`;
+  const cleanPrefix = String(prefix || '').trim().toUpperCase();
+  const normalizedPrefix = cleanPrefix
+    ? cleanPrefix.endsWith('-')
+      ? cleanPrefix
+      : `${cleanPrefix}-`
+    : '';
+  const requestedNorm = options?.requestedPrefix
+    ? String(options.requestedPrefix).trim().toUpperCase().replace(/-*$/, '-')
+    : undefined;
+  const resolvedStatus: MemberPrefixStatus =
+    options?.prefixStatus ||
+    (normalizedPrefix ? 'locked' : requestedNorm ? 'requested' : 'unset');
+  const ownedPrefixes = Array.from(
+    new Set(
+      [
+        ...(resolvedStatus === 'locked' && normalizedPrefix ? [normalizedPrefix] : []),
+        ...(Array.isArray(options?.ownedPrefixes) ? options!.ownedPrefixes : []),
+      ]
+        .map((p) => String(p || '').trim().toUpperCase())
+        .filter(Boolean)
+        .map((p) => (p.endsWith('-') ? p : `${p}-`))
+    )
+  );
+  const displayPrefix = normalizedPrefix || requestedNorm || '';
   const isConsignor = Boolean(
-    options?.forceConsignor ?? normalizedPrefix.startsWith('BB')
+    options?.forceConsignor ?? displayPrefix.startsWith('BB')
   );
   const canAccessCollective = !isConsignor;
 
@@ -36,7 +67,10 @@ export function capabilitiesForRole(
     return {
       role: 'restricted',
       roleBadge: isConsignor ? '🤝 Consignor' : '🌱 Sweat Partner',
-      prefix: normalizedPrefix,
+      prefix: displayPrefix || (isConsignor ? 'BB-' : 'SWEAT-'),
+      prefixStatus: isConsignor ? 'locked' : resolvedStatus,
+      requestedPrefix: requestedNorm,
+      ownedPrefixes: isConsignor ? ['BB-'] : ownedPrefixes,
       isConsignor,
       canUseBml: false,
       canUseBookmarklets: false,
@@ -52,7 +86,10 @@ export function capabilitiesForRole(
   return {
     role,
     roleBadge: role === 'founder' ? '👑 Founder' : '💎 Curator',
-    prefix: normalizedPrefix,
+    prefix: displayPrefix,
+    prefixStatus: resolvedStatus,
+    requestedPrefix: requestedNorm,
+    ownedPrefixes,
     isConsignor: false,
     canUseBml: true,
     canUseBookmarklets: true,
@@ -65,7 +102,7 @@ export function capabilitiesForRole(
   };
 }
 
-const SESSION_CACHE_KEY_PREFIX = 'rc_member_caps_v3:';
+const SESSION_CACHE_KEY_PREFIX = 'rc_member_caps_v4:';
 const resolvedCapsByUserId = ref<Record<string, MemberCapabilities>>({});
 const checkedByUserId = ref<Record<string, boolean>>({});
 const inflightByUserId = new Map<string, Promise<MemberCapabilities | null>>();
@@ -77,9 +114,11 @@ function inferLocalRoleAndPrefix(authState: any): {
 } {
   const u = authState?.user;
   const team = authState?.currentTeam || authState?.ownedTeam;
-  const rawPrefix = u?.prefs?.upcPrefix || team?.prefs?.upcPrefix || 'HUCK-';
-  const cleanPrefix = String(rawPrefix).trim().toUpperCase();
-  const prefix = cleanPrefix.endsWith('-') ? cleanPrefix : `${cleanPrefix}-`;
+  const rawPrefix =
+    u?.prefs?.upcPrefix ||
+    (authState?.ownedTeam ? team?.prefs?.upcPrefix || 'HUCK-' : '');
+  const cleanPrefix = String(rawPrefix || '').trim().toUpperCase();
+  const prefix = cleanPrefix ? (cleanPrefix.endsWith('-') ? cleanPrefix : `${cleanPrefix}-`) : '';
 
   if (!u) {
     return { role: 'curator', prefix, isConsignor: false };
@@ -127,8 +166,15 @@ function normalizeServerCapabilities(raw: any): MemberCapabilities | null {
   const isConsignor = Boolean(
     raw.isConsignor ?? String(raw.prefix || '').toUpperCase().startsWith('BB')
   );
-  return capabilitiesForRole(role, raw.prefix || 'HUCK-', {
+  const prefixStatus: MemberPrefixStatus | undefined =
+    raw.prefixStatus === 'locked' || raw.prefixStatus === 'requested' || raw.prefixStatus === 'unset'
+      ? raw.prefixStatus
+      : undefined;
+  return capabilitiesForRole(role, String(raw.prefix || ''), {
     forceConsignor: isConsignor,
+    prefixStatus,
+    requestedPrefix: raw.requestedPrefix ? String(raw.requestedPrefix) : undefined,
+    ownedPrefixes: Array.isArray(raw.ownedPrefixes) ? raw.ownedPrefixes : undefined,
   });
 }
 

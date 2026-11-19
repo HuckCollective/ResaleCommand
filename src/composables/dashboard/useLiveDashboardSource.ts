@@ -65,6 +65,8 @@ export function useLiveDashboardSource(): DashboardSource {
   const lastSyncAt = ref<string | null>(null);
   const joinRequests = ref(0);
   const coopMessages = ref(0);
+  const pendingSharedExpenses = ref(0);
+  const pendingLaborCount = ref(0);
   let messagesListenerAttached = false;
 
   /** Verified "Connect With Us" requests waiting on stewards (non-stewards simply get 0). */
@@ -111,7 +113,7 @@ export function useLiveDashboardSource(): DashboardSource {
           : String(d.orderId || '');
       const split = splitTrailingBoothSku(rawOrderDesc);
       const extractedSku = cleanCatalogSku(split.sku || (/^0EJ/i.test(sSo) ? sSo : '')).toUpperCase();
-      const extractedUpc = /^(?:HUCK|PDXGL|BB)-/i.test(sSo) ? sSo : '';
+      const extractedUpc = /^[A-Z0-9]{2,6}-\d+/i.test(sSo) ? sSo : '';
       const sku = extractedSku || sSo;
 
       const soUpper = String(d.soNumber || '').trim().toUpperCase();
@@ -217,6 +219,9 @@ export function useLiveDashboardSource(): DashboardSource {
 
   const loadExpenses = async () => {
     const rows = await coopExpensesApi.listExpenses(currentTeam.value?.$id || 'huck_collective', 500);
+    pendingSharedExpenses.value = rows.filter(
+      (e) => e.status === 'pending' && e.scope !== 'personal_write_off'
+    ).length;
     expenses.value = rows
       .filter((e) => e.status !== 'rejected')
       .map((e) => ({
@@ -226,6 +231,24 @@ export function useLiveDashboardSource(): DashboardSource {
         status: e.status === 'reimbursed' ? ('reimbursed' as const) : ('pending' as const),
         scope: e.scope,
       }));
+  };
+
+  const loadPendingLaborCount = async () => {
+    try {
+      const headers = await getCoopJwtHeaders();
+      const res = await fetch('/api/coop/labor', { method: 'GET', headers });
+      if (res.ok) {
+        const body = await res.json();
+        pendingLaborCount.value = Number(body?.summary?.pendingCount || 0);
+        if (Array.isArray(body?.entries)) {
+          laborEntries.value = body.entries;
+        }
+        return;
+      }
+    } catch {
+      // Non-fatal fallback
+    }
+    pendingLaborCount.value = 0;
   };
 
   const loadDrops = async () => {
@@ -249,17 +272,21 @@ export function useLiveDashboardSource(): DashboardSource {
   const profile = computed(() => {
     const uid = user.value?.$id;
     const email = user.value?.email?.trim().toLowerCase();
-    const name = user.value?.name?.toLowerCase();
+    const cleanName = String(user.value?.name || '').replace(/\(.*?\)/g, '').trim().toLowerCase();
     if (uid) {
       const byUid = roster.value.find((m) => m.userId && m.userId === uid);
       if (byUid) return byUid;
     }
     if (email) {
-      const byEmail = roster.value.find((m) => m.email && m.email.trim().toLowerCase() === email);
+      const byEmail = roster.value.find(
+        (m) => (!m.userId || !uid || m.userId === uid) && m.email && m.email.trim().toLowerCase() === email
+      );
       if (byEmail) return byEmail;
     }
-    if (!name) return undefined;
-    return roster.value.find((m) => m.name.toLowerCase().includes(name));
+    if (!cleanName) return undefined;
+    return roster.value.find(
+      (m) => !m.userId && !m.email && m.name.replace(/\(.*?\)/g, '').trim().toLowerCase() === cleanName
+    );
   });
 
   const member = computed<DashboardMember>(() => ({
@@ -267,13 +294,26 @@ export function useLiveDashboardSource(): DashboardSource {
     // No roster match (e.g. the owner): show every hat, as before
     hats: profile.value?.hats?.length ? profile.value.hats : (Object.keys(MEMBER_HAT_META) as MemberHat[]),
     inventoryPrefix: profile.value?.inventoryPrefix,
+    prefixStatus: profile.value?.prefixStatus,
+    requestedPrefix: profile.value?.requestedPrefix,
+    historicalPrefixes: profile.value?.historicalPrefixes,
   }));
 
   const statement = computed<DashboardStatementLite | null>(() => {
-    const prefix = String(member.value.inventoryPrefix || 'HUCK-').toUpperCase();
+    const rawActive = String(member.value.inventoryPrefix || '').trim().toUpperCase();
+    if (!rawActive) return null;
+    const ownedPrefixes = Array.from(
+      new Set(
+        [rawActive, ...(member.value.historicalPrefixes || [])]
+          .map((p) => String(p || '').trim().toUpperCase())
+          .filter(Boolean)
+      )
+    );
     const curMonth = pacificMonthKey(new Date().toISOString());
     const monthSales = sales.value.filter(
-      (s) => pacificMonthKey(s.soldAt) === curMonth && String(s.ownerPrefix || '').toUpperCase().startsWith(prefix)
+      (s) =>
+        pacificMonthKey(s.soldAt) === curMonth &&
+        ownedPrefixes.some((px) => String(s.ownerPrefix || '').toUpperCase().startsWith(px))
     );
     if (monthSales.length === 0) return null;
     const rawById = new Map<string, any>();
@@ -285,7 +325,7 @@ export function useLiveDashboardSource(): DashboardSource {
         .toFixed(2)
     );
     const netDeposit = Math.max(0, Number((grossSales - venueFee).toFixed(2)));
-    const agreement = findConsignorAgreement(policyConfig.value.consignors, prefix);
+    const agreement = findConsignorAgreement(policyConfig.value.consignors, rawActive);
     if (agreement) {
       const settled = calculateConsignorSettlement({
         agreement,
@@ -318,6 +358,20 @@ export function useLiveDashboardSource(): DashboardSource {
     };
   });
 
+  const pendingPrefixRequests = computed(() =>
+    roster.value
+      .filter(
+        (m) =>
+          Boolean(m.requestedPrefix) &&
+          (m.prefixStatus === 'requested' || m.requestedPrefix !== m.inventoryPrefix)
+      )
+      .map((m) => ({
+        name: m.name,
+        email: m.email,
+        requestedPrefix: String(m.requestedPrefix || ''),
+      }))
+  );
+
   const snapshot = computed(() => ({
     ...emptySnapshot(),
     items: inventoryItems.value || [],
@@ -332,6 +386,9 @@ export function useLiveDashboardSource(): DashboardSource {
     shortfall: Math.max(0, Number(policyConfig.value.carriedOverShortfall || 0)),
     joinRequests: joinRequests.value,
     coopMessages: coopMessages.value,
+    pendingPrefixRequests: pendingPrefixRequests.value,
+    pendingSharedExpenses: pendingSharedExpenses.value,
+    pendingLaborCount: pendingLaborCount.value,
   }));
 
   const loading = computed(() => initialLoading.value || inventoryLoading.value);
@@ -358,10 +415,19 @@ export function useLiveDashboardSource(): DashboardSource {
           policyConfig.value = normalized;
           roster.value = normalized.members;
           proposals.value = state.proposals || [];
-          laborEntries.value = state.laborEntries || [];
+          if (laborEntries.value.length === 0) {
+            laborEntries.value = state.laborEntries || [];
+          }
         })
       );
-      tasks.push(loadDrops(), loadLastSync(), loadExpenses(), loadJoinRequests(), loadCoopMessages());
+      tasks.push(
+        loadDrops(),
+        loadLastSync(),
+        loadExpenses(),
+        loadJoinRequests(),
+        loadCoopMessages(),
+        loadPendingLaborCount()
+      );
       await Promise.allSettled(tasks);
       // Sales need inventory loaded first so each sale can be tied to its owner
       await loadSales().catch((e) => console.warn('[Dashboard] Sales load failed:', e));

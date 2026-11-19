@@ -36,7 +36,11 @@ export interface CoopMeIdentity {
   canLockMonth: boolean;
   canEditGlobalFinancials: boolean;
   linkedMemberName?: string;
-  linkedPartner?: 'HUCK' | 'PDXGL' | 'SWEAT' | 'BB';
+  linkedPartner?: string;
+  linkedPrefix?: string;
+  prefixStatus?: 'unset' | 'requested' | 'locked';
+  requestedPrefix?: string;
+  ownedPrefixes?: string[];
 }
 
 export interface SettlementSaleItem {

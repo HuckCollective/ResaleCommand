@@ -123,11 +123,11 @@
             <Icon icon="solar:users-group-rounded-bold" class="w-5 h-5 sm:w-6 sm:h-6" />
           </div>
           <div class="min-w-0 flex-1">
-            <div class="text-[11px] uppercase font-bold opacity-60 truncate">Huckleberry (HUCK-)</div>
+            <div class="text-[11px] uppercase font-bold opacity-60 truncate">Active Contributors</div>
             <div class="text-lg sm:text-2xl font-black font-mono text-primary truncate">
-              {{ partnerHours.HUCK.toFixed(1) }}h ({{ huckSharePct }}%)
+              {{ memberShares.length }} member{{ memberShares.length === 1 ? '' : 's' }}
             </div>
-            <div class="text-[10px] font-semibold opacity-55 truncate">Approved Curator &amp; Ops Hours</div>
+            <div class="text-[10px] font-semibold opacity-55 truncate">Approved &amp; Pending Workers</div>
           </div>
         </div>
       </div>
@@ -135,14 +135,14 @@
       <div class="bg-base-100 p-3.5 sm:p-5 rounded-2xl border border-base-200 shadow-sm">
         <div class="flex items-center gap-2.5 sm:gap-3">
           <div class="p-2.5 sm:p-3 bg-accent/10 text-accent rounded-xl shrink-0">
-            <Icon icon="solar:gamepad-bold" class="w-5 h-5 sm:w-6 sm:h-6" />
+            <Icon icon="solar:shop-2-bold" class="w-5 h-5 sm:w-6 sm:h-6" />
           </div>
           <div class="min-w-0 flex-1">
-            <div class="text-[11px] uppercase font-bold opacity-60 truncate">PDX Game Lib (PDXGL-)</div>
+            <div class="text-[11px] uppercase font-bold opacity-60 truncate">Floor &amp; Sourcing Hours</div>
             <div class="text-lg sm:text-2xl font-black font-mono text-accent truncate">
-              {{ partnerHours.PDXGL.toFixed(1) }}h ({{ pdxglSharePct }}%)
+              {{ producerVsEnablerTotals.producer.toFixed(1) }}h
             </div>
-            <div class="text-[10px] font-semibold opacity-55 truncate">Approved Curator &amp; Ops Hours</div>
+            <div class="text-[10px] font-semibold opacity-55 truncate">Booth restock, sourcing &amp; events</div>
           </div>
         </div>
       </div>
@@ -153,11 +153,11 @@
             <Icon icon="solar:camera-add-bold" class="w-5 h-5 sm:w-6 sm:h-6" />
           </div>
           <div class="min-w-0 flex-1">
-            <div class="text-[11px] uppercase font-bold opacity-60 truncate">Marketing Enablers (SWEAT-)</div>
+            <div class="text-[11px] uppercase font-bold opacity-60 truncate">Promo, Photo &amp; Tech Hours</div>
             <div class="text-lg sm:text-2xl font-black font-mono text-info truncate">
-              {{ partnerHours.SWEAT.toFixed(1) }}h ({{ sweatSharePct }}%)
+              {{ producerVsEnablerTotals.enabler.toFixed(1) }}h
             </div>
-            <div class="text-[10px] font-semibold opacity-55 truncate">$0 Inventory · Approved Share</div>
+            <div class="text-[10px] font-semibold opacity-55 truncate">Reels, staging, shipping &amp; tools</div>
           </div>
         </div>
       </div>
@@ -1107,7 +1107,6 @@ import {
 } from '../../lib/coopTaskBoard';
 import {
   loadCoopGovernanceState,
-  getLaborHoursByPartnerForMonth,
   getLaborHoursByMemberForMonth,
   classifySurplusLaborRole,
   effectiveLaborApproval,
@@ -1406,12 +1405,6 @@ const pendingMonthsForBulk = computed(() => {
   return Array.from(set);
 });
 
-const partnerHours = computed(() =>
-  getLaborHoursByPartnerForMonth(laborEntries.value, selectedMonth.value, {
-    status: 'approved',
-  })
-);
-
 const memberShares = computed(() =>
   getLaborHoursByMemberForMonth(
     laborEntries.value,
@@ -1434,31 +1427,6 @@ const producerVsEnablerTotals = computed(() => {
     }
   }
   return { producer, enabler };
-});
-
-const totalApprovedHours = computed(() =>
-  Number(
-    (
-      partnerHours.value.HUCK +
-      partnerHours.value.PDXGL +
-      partnerHours.value.SWEAT
-    ).toFixed(2)
-  )
-);
-
-const huckSharePct = computed(() => {
-  if (totalApprovedHours.value <= 0) return 0;
-  return Math.round((partnerHours.value.HUCK / totalApprovedHours.value) * 100);
-});
-
-const pdxglSharePct = computed(() => {
-  if (totalApprovedHours.value <= 0) return 0;
-  return Math.round((partnerHours.value.PDXGL / totalApprovedHours.value) * 100);
-});
-
-const sweatSharePct = computed(() => {
-  if (totalApprovedHours.value <= 0) return 0;
-  return Math.max(0, 100 - huckSharePct.value - pdxglSharePct.value);
 });
 
 function isHttpUrl(val?: string): boolean {

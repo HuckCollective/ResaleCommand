@@ -317,8 +317,20 @@ export async function resolveVerifiedCoopCaller(
 
   const { policyConfig } = await loadGovernancePolicyOnServer(ctx);
   const rosterMembers = policyConfig.members || [];
-  const linkedMember = rosterMembers.find(
-    (m) => m.userId && m.userId === me.$id
+  const meEmailLower = String(me.email || '').trim().toLowerCase();
+  const linkedMember =
+    rosterMembers.find((m) => m.userId && m.userId === me.$id) ||
+    (meEmailLower
+      ? rosterMembers.find(
+          (m) => !m.userId && m.email && m.email.trim().toLowerCase() === meEmailLower
+        )
+      : undefined);
+  const linkedOwnedPrefixes = Array.from(
+    new Set(
+      [linkedMember?.inventoryPrefix, ...(linkedMember?.historicalPrefixes || [])]
+        .map((p) => String(p || '').trim().toUpperCase())
+        .filter(Boolean)
+    )
   );
 
   return {
@@ -340,6 +352,10 @@ export async function resolveVerifiedCoopCaller(
     canEditGlobalFinancials: isFounder,
     linkedMemberName: linkedMember?.name,
     linkedPartner: linkedMember?.partner,
+    linkedPrefix: linkedMember?.inventoryPrefix,
+    prefixStatus: linkedMember?.prefixStatus,
+    requestedPrefix: linkedMember?.requestedPrefix,
+    ownedPrefixes: linkedOwnedPrefixes.length > 0 ? linkedOwnedPrefixes : undefined,
     rosterMembers,
     linkedMember,
     confirmedVotingMemberCount: Math.max(1, rawConfirmedVotingCount),
