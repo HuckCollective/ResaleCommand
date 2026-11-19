@@ -8,7 +8,10 @@
       <!-- ========================================================================= -->
       <!-- TIER 1: SLIM PAGE TOOLS DOCK (TOP STRIP)                                   -->
       <!-- ========================================================================= -->
-      <div class="border-b border-base-content/15 bg-base-200 dark:bg-base-300 py-1 px-3 flex items-center justify-center text-xs shadow-2xs">
+      <div
+        v-if="showPager"
+        class="border-b border-base-content/15 bg-base-200 dark:bg-base-300 py-1 px-3 flex items-center justify-center text-xs shadow-2xs"
+      >
         <div class="max-w-xl w-full mx-auto flex items-center justify-between sm:justify-center gap-1 sm:gap-2">
           <!-- Scroll to Top & Filtered Total Rows Trigger -->
           <button 
@@ -166,6 +169,10 @@ const props = defineProps({
   isFiltered: {
     type: Boolean,
     default: false
+  },
+  showPager: {
+    type: Boolean,
+    default: true
   }
 });
 

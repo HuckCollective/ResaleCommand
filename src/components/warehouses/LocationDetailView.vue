@@ -1,47 +1,14 @@
 <template>
   <div class="space-y-6">
-    <!-- Breadcrumb & Top Navigation -->
+    <!-- Breadcrumb Navigation (Tray / Sync / Sales actions live in unified BottomActionDock) -->
     <div class="flex items-center justify-between gap-3 flex-wrap">
       <div class="flex items-center gap-2 text-xs">
-        <a href="/warehouse" class="btn btn-ghost btn-xs gap-1 opacity-70 hover:opacity-100 font-bold px-1.5">
+        <a href="/warehouse" class="btn btn-ghost btn-xs h-9 md:h-7 gap-1 opacity-75 hover:opacity-100 font-bold px-2">
           <Icon icon="solar:arrow-left-linear" class="w-4 h-4" />
-          <span>Locations &amp; Warehouses</span>
+          <span>Booths &amp; Storage</span>
         </a>
         <span class="opacity-30">/</span>
         <span class="font-bold text-base-content truncate">{{ warehouse?.name || 'Location' }}</span>
-      </div>
-
-      <div class="flex items-center gap-2 flex-wrap">
-        <button 
-          type="button" 
-          @click="openLocationStagingTray" 
-          class="btn btn-sm h-11 md:h-9 btn-outline border-base-300 gap-1.5 font-bold shadow-xs"
-          title="Open Outbound Location Manifest Tray"
-        >
-          <Icon icon="solar:box-minimalistic-bold" class="w-4 h-4 text-primary" />
-          <span>Staging Tray</span>
-          <span v-if="activeDraft && (activeDraft.itemCount || activeDraftItems.length)" class="badge badge-xs badge-secondary font-mono font-bold whitespace-nowrap shrink-0">
-            {{ activeDraft.itemCount || activeDraftItems.length }}
-          </span>
-        </button>
-
-        <a 
-          v-if="warehouse && activeLocationMeta.usesRicochet" 
-          :href="'/warehouse/sync/' + encodeURIComponent(resolveCanonicalLocationCode(warehouse) || warehouse.code || 'MD')" 
-          class="btn btn-sm h-11 md:h-9 btn-outline btn-secondary gap-1.5 font-bold shadow-xs"
-        >
-          <Icon icon="solar:round-transfer-horizontal-bold-duotone" class="w-4 h-4" />
-          <span>Inventory Sync</span>
-        </a>
-
-        <a 
-          v-if="warehouse" 
-          :href="'/sales/import/' + encodeURIComponent(resolveCanonicalLocationCode(warehouse) || warehouse.code || 'MD')" 
-          class="btn btn-sm h-11 md:h-9 btn-outline btn-success gap-1.5 font-bold shadow-xs"
-        >
-          <Icon icon="solar:import-bold-duotone" class="w-4 h-4" />
-          <span>Sales Importer</span>
-        </a>
       </div>
     </div>
 
@@ -62,13 +29,6 @@
 
     <!-- Main Location Cockpit -->
     <div v-else class="space-y-6">
-      <!-- Ricochet POS 2-Way Sync Bookmarklet Bar (Unified BookmarkletHeroBar Pattern) -->
-      <BookmarkletHeroBar
-        v-if="activeLocationMeta.usesRicochet"
-        tool="ricochet_sync"
-        :location-meta="activeLocationMeta"
-      />
-
       <!-- Location Identity Hero Banner -->
       <div class="card bg-base-100 border border-base-200 shadow-md p-5 sm:p-6 rounded-3xl">
         <div class="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
@@ -173,39 +133,15 @@
 
         <!-- Unified Outbound Drops & Manifests Hub -->
         <div class="card bg-base-100 border border-base-200 shadow-md p-5 rounded-box space-y-4">
-          <!-- Card Header & Actions -->
-          <div class="flex items-center justify-between flex-wrap gap-3 pb-3 border-b border-base-200">
-            <div>
-              <h3 class="font-black text-base sm:text-lg flex items-center gap-2">
-                <Icon icon="solar:box-minimalistic-bold" class="w-5 h-5 text-primary" />
-                <span>Outbound Drops &amp; Manifests ({{ locationManifests.length }})</span>
-              </h3>
-              <p class="text-xs opacity-60">
-                All drops staged, exported, and placed at {{ warehouse.name }}. Inspect items, export to POS, open in tray, or manage shipments.
-              </p>
-            </div>
-            
-            <div class="flex items-center gap-2">
-              <button 
-                type="button" 
-                @click="openLocationStagingTray"
-                class="btn btn-xs sm:btn-sm btn-ghost border border-base-300 rounded-btn font-bold gap-1.5 shadow-2xs"
-                title="Open the Outbound Staging Tray"
-              >
-                <Icon icon="solar:inbox-out-bold" class="w-4 h-4 text-primary" />
-                <span>Staging Tray</span>
-              </button>
-              
-              <button 
-                type="button" 
-                @click="handleCreateNewDraft" 
-                class="btn btn-xs sm:btn-sm btn-primary rounded-btn font-bold gap-1.5 shadow-xs"
-                title="Create a new drop draft for this location"
-              >
-                <Icon icon="solar:add-circle-bold" class="w-4 h-4" />
-                <span>+ Create New Drop</span>
-              </button>
-            </div>
+          <!-- Card Header -->
+          <div class="pb-3 border-b border-base-200">
+            <h3 class="font-black text-base sm:text-lg flex items-center gap-2">
+              <Icon icon="solar:box-minimalistic-bold" class="w-5 h-5 text-primary" />
+              <span>Outbound Drops &amp; Manifests ({{ locationManifests.length }})</span>
+            </h3>
+            <p class="text-xs opacity-60">
+              All drops staged, exported, and placed at {{ warehouse.name }}. Inspect items, export to POS, open in tray, or manage shipments.
+            </p>
           </div>
 
           <!-- Status Filter Pills -->
@@ -580,8 +516,14 @@
               size="sm"
             />
           </div>
-          <div class="flex items-center gap-2 text-xs font-mono opacity-70">
-            <span>Showing {{ filteredCatalogItems.length }} of {{ inStockItems.length }} items</span>
+          <div class="flex items-center gap-2 text-xs font-mono opacity-75">
+            <span>
+              Showing {{ catalogRangeStart }}–{{ catalogRangeEnd }} of {{ filteredCatalogItems.length }}
+              <template v-if="filteredCatalogItems.length !== inStockItems.length">
+                ({{ inStockItems.length }} total)
+              </template>
+              items
+            </span>
           </div>
         </div>
 
@@ -600,18 +542,10 @@
                 </tr>
               </thead>
               <tbody>
-                <tr v-for="item in filteredCatalogItems" :key="item.$id" class="hover:bg-base-200/40 transition-colors">
+                <tr v-for="item in paginatedCatalogItems" :key="item.$id" class="hover:bg-base-200/40 transition-colors">
                   <td class="cursor-pointer" @click="openItemEditor(item)" title="Click to view & edit in ItemDrawer">
                     <div class="flex items-center gap-2.5">
-                      <div class="w-9 h-9 rounded-lg bg-base-300 overflow-hidden shrink-0">
-                        <img 
-                          v-if="item.imageId" 
-                          :src="getItemPhotoUrl(item.imageId)" 
-                          @error="handleImageError($event, item.imageId)"
-                          class="w-full h-full object-cover" 
-                        />
-                        <Icon v-else icon="solar:tag-bold" class="w-4 h-4 m-2.5 opacity-40" />
-                      </div>
+                      <ItemThumbnail :item="item" size="sm" rounded="lg" class="shrink-0" />
                       <span class="font-bold text-xs truncate max-w-xs block hover:text-primary transition-colors">{{ item.title }}</span>
                     </div>
                   </td>
@@ -835,7 +769,7 @@
               <span>Delete Location</span>
             </button>
 
-            <button type="submit" class="btn btn-sm btn-primary font-bold px-6" :disabled="savingSettings">
+            <button type="submit" class="btn btn-sm btn-outline btn-primary font-bold px-6" :disabled="savingSettings">
               <span v-if="savingSettings" class="loading loading-spinner loading-xs"></span>
               <span>Save Changes</span>
             </button>
@@ -1160,6 +1094,245 @@
       @close="editingItem = null" 
       @save="handleItemSaved" 
     />
+
+    <!-- CANONICAL BOTTOM ACTION DOCK (Stays mounted so spacer never jumps when trays toggle) -->
+    <BottomActionDock
+      placement="viewport"
+      :visible="!loading && !!warehouse"
+      max-width="max-w-xl"
+      :no-padding="true"
+    >
+      <template v-if="showDockTopStrip" #top>
+        <!-- Case A: In-Stock Catalog Pagination Strip -->
+        <div
+          v-if="activeTab === 'catalog' && filteredCatalogItems.length > 0"
+          class="max-w-xl w-full mx-auto flex items-center justify-between sm:justify-center gap-1 sm:gap-2"
+        >
+          <button
+            type="button"
+            class="btn btn-xs h-7 px-2.5 bg-base-100 border border-base-content/25 text-base-content hover:text-primary hover:border-primary/50 hover:bg-primary/10 transition-all active:scale-95 gap-1 shrink-0 shadow-2xs font-mono rounded-lg"
+            @click="scrollToTop"
+            title="Scroll to top"
+          >
+            <Icon icon="solar:arrow-up-bold" class="w-3.5 h-3.5 text-primary shrink-0" />
+            <span class="font-black text-xs">{{ filteredCatalogItems.length }}</span>
+            <span class="text-base-content/80 font-sans text-[10px] font-extrabold uppercase tracking-tight">items</span>
+          </button>
+
+          <button
+            type="button"
+            class="btn btn-xs btn-ghost btn-circle h-7 w-7 font-bold hidden xs:inline-flex shrink-0"
+            :disabled="catalogPage <= 1"
+            @click="catalogPage = 1"
+            title="First Page"
+          >
+            <Icon icon="solar:double-alt-arrow-left-bold" class="w-3.5 h-3.5" />
+          </button>
+
+          <button
+            type="button"
+            class="btn btn-xs btn-ghost btn-circle h-7 w-7 font-bold shrink-0"
+            :disabled="catalogPage <= 1"
+            @click="catalogPage = Math.max(1, catalogPage - 1)"
+            title="Previous Page"
+          >
+            <Icon icon="solar:alt-arrow-left-bold" class="w-3.5 h-3.5" />
+          </button>
+
+          <div class="flex items-center gap-1.5 px-2.5 py-0.5 bg-base-100 rounded-lg border border-base-content/20 font-mono text-xs shrink-0">
+            <span class="font-black text-primary-content bg-primary px-1.5 py-0.5 rounded shadow-xs">{{ catalogPage }}</span>
+            <span class="text-base-content/60 font-bold">/</span>
+            <span class="font-bold text-base-content">{{ catalogTotalPages }}</span>
+          </div>
+
+          <button
+            type="button"
+            class="btn btn-xs btn-ghost btn-circle h-7 w-7 font-bold shrink-0"
+            :disabled="catalogPage >= catalogTotalPages"
+            @click="catalogPage = Math.min(catalogTotalPages, catalogPage + 1)"
+            title="Next Page"
+          >
+            <Icon icon="solar:alt-arrow-right-bold" class="w-3.5 h-3.5" />
+          </button>
+
+          <button
+            type="button"
+            class="btn btn-xs btn-ghost btn-circle h-7 w-7 font-bold hidden xs:inline-flex shrink-0"
+            :disabled="catalogPage >= catalogTotalPages"
+            @click="catalogPage = catalogTotalPages"
+            title="Last Page"
+          >
+            <Icon icon="solar:double-alt-arrow-right-bold" class="w-3.5 h-3.5" />
+          </button>
+
+          <div class="h-3.5 w-px bg-base-content/25 shrink-0 mx-0.5"></div>
+
+          <select
+            :value="catalogPageSize"
+            @change="onCatalogPageSizeChange(($event.target as HTMLSelectElement).value)"
+            class="select select-xs h-6 min-h-6 bg-base-100 text-base-content font-mono font-bold text-[11px] rounded-lg border border-base-content/25 hover:border-primary focus:border-primary shadow-xs pl-2 pr-6 min-w-[4.8rem] cursor-pointer shrink-0"
+            title="Items per page"
+          >
+            <option v-for="opt in catalogPageSizeOptions" :key="opt" :value="opt">{{ opt }}/pg</option>
+          </select>
+        </div>
+
+        <!-- Case B: Slim Active Drop Telemetry Strip (Non-Catalog Booth Tabs) -->
+        <button
+          v-else-if="activeDraft && !isStorageLocation"
+          type="button"
+          class="max-w-xl w-full mx-auto flex items-center justify-between gap-2 px-2.5 py-1 rounded-xl bg-base-100 hover:bg-base-200 border border-base-content/20 cursor-pointer text-left transition-colors"
+          @click="openLocationStagingTray"
+          title="Open Staging Tray for this drop"
+        >
+          <span class="flex items-center gap-1.5 min-w-0 flex-1">
+            <Icon icon="solar:box-minimalistic-bold" class="w-4 h-4 text-primary shrink-0" />
+            <span class="font-black text-xs text-base-content truncate">{{ activeDraft.name }}</span>
+            <span class="badge badge-xs badge-secondary text-secondary-content font-mono font-bold whitespace-nowrap shrink-0">
+              {{ activeDraftUnits }} units
+            </span>
+            <span class="text-[11px] font-mono font-black text-secondary shrink-0">
+              ${{ activeDraftRetail.toFixed(2) }}
+            </span>
+          </span>
+          <span class="text-[10px] font-bold uppercase text-primary shrink-0 whitespace-nowrap">Open Tray ⌃</span>
+        </button>
+      </template>
+
+      <div class="w-full px-2 py-1.5 flex items-center justify-between sm:justify-center gap-1.5 sm:gap-2">
+        <!-- MODE A: SELLING BOOTHS (MD, DT) -->
+        <template v-if="!isStorageLocation">
+          <button
+            type="button"
+            class="btn h-11 flex-1 sm:flex-initial px-2.5 sm:px-3.5 rounded-2xl inline-flex items-center justify-center gap-1.5 bg-base-200/80 hover:bg-base-300 text-base-content font-bold border border-base-content/15 shadow-xs active:scale-95 cursor-pointer"
+            @click="openLocationStagingTray"
+            title="Open Outbound Staging Tray"
+          >
+            <Icon icon="solar:box-minimalistic-bold" class="w-4 h-4 text-primary shrink-0" />
+            <span class="font-extrabold text-xs whitespace-nowrap">Drop Tray</span>
+            <span
+              v-if="activeDraftItems.length > 0"
+              class="badge badge-xs badge-secondary text-secondary-content font-mono font-black whitespace-nowrap shrink-0"
+            >
+              {{ activeDraftItems.length }}
+            </span>
+          </button>
+
+          <button
+            type="button"
+            class="btn h-11 flex-1 sm:flex-initial px-2.5 sm:px-3.5 rounded-2xl inline-flex items-center justify-center gap-1.5 bg-base-200/80 hover:bg-base-300 text-base-content font-bold border border-base-content/15 shadow-xs active:scale-95 cursor-pointer"
+            @click="openToolsTray"
+            title="Open Booth Sync, Bookmarklet &amp; Sales Importer"
+          >
+            <Icon icon="solar:bolt-bold" class="w-4 h-4 text-secondary shrink-0" />
+            <span class="font-extrabold text-xs whitespace-nowrap">Booth Sync</span>
+            <span
+              v-if="outboxPendingCount > 0"
+              class="badge badge-xs badge-warning text-warning-content font-mono font-black whitespace-nowrap shrink-0"
+            >
+              {{ outboxPendingCount }}
+            </span>
+          </button>
+
+          <!-- Tab-Aware Contextual Primary Action (Single Solid Primary Pill) -->
+          <button
+            v-if="activeTab === 'expenses'"
+            type="button"
+            class="btn h-11 flex-1 sm:flex-initial px-3.5 sm:px-5 rounded-2xl inline-flex items-center justify-center gap-1.5 bg-primary text-primary-content font-black shadow-md border border-primary-content/25 active:scale-95 hover:brightness-110 cursor-pointer"
+            @click="openAddExpenseModal"
+          >
+            <Icon icon="solar:add-circle-bold" class="w-4 h-4 shrink-0" />
+            <span class="font-black text-xs whitespace-nowrap">Log Expense</span>
+          </button>
+          <button
+            v-else-if="activeTab === 'settings'"
+            type="button"
+            :disabled="savingSettings"
+            class="btn h-11 flex-1 sm:flex-initial px-3.5 sm:px-5 rounded-2xl inline-flex items-center justify-center gap-1.5 bg-primary text-primary-content font-black shadow-md border border-primary-content/25 active:scale-95 hover:brightness-110 cursor-pointer"
+            @click="saveLocationSettings"
+          >
+            <span v-if="savingSettings" class="loading loading-spinner loading-xs"></span>
+            <Icon v-else icon="solar:diskette-bold" class="w-4 h-4 shrink-0" />
+            <span class="font-black text-xs whitespace-nowrap">Save Booth</span>
+          </button>
+          <button
+            v-else
+            type="button"
+            class="btn h-11 flex-1 sm:flex-initial px-3.5 sm:px-5 rounded-2xl inline-flex items-center justify-center gap-1.5 bg-primary text-primary-content font-black shadow-md border border-primary-content/25 active:scale-95 hover:brightness-110 cursor-pointer"
+            @click="handleCreateNewDraft"
+          >
+            <Icon icon="solar:add-circle-bold" class="w-4 h-4 shrink-0" />
+            <span class="font-black text-xs whitespace-nowrap">New Drop</span>
+          </button>
+        </template>
+
+        <!-- MODE B: BACKSTOCK STORAGE (HG, HH — Zero POS Sync Clutter) -->
+        <template v-else>
+          <a
+            :href="'/inventory?location=' + encodeURIComponent(canonicalLocationCode)"
+            class="btn h-11 flex-1 sm:flex-initial px-2.5 sm:px-3.5 rounded-2xl inline-flex items-center justify-center gap-1.5 bg-base-200/80 hover:bg-base-300 text-base-content font-bold border border-base-content/15 shadow-xs active:scale-95 cursor-pointer"
+          >
+            <Icon icon="solar:box-bold-duotone" class="w-4 h-4 text-primary shrink-0" />
+            <span class="font-extrabold text-xs whitespace-nowrap">Inventory</span>
+          </a>
+
+          <a
+            href="/inventory?queue=online_ready"
+            class="btn h-11 flex-1 sm:flex-initial px-2.5 sm:px-3.5 rounded-2xl inline-flex items-center justify-center gap-1.5 bg-base-200/80 hover:bg-base-300 text-base-content font-bold border border-base-content/15 shadow-xs active:scale-95 cursor-pointer"
+          >
+            <Icon icon="solar:globus-bold-duotone" class="w-4 h-4 text-info shrink-0" />
+            <span class="font-extrabold text-xs whitespace-nowrap">Online Bin</span>
+          </a>
+
+          <button
+            v-if="activeTab === 'expenses'"
+            type="button"
+            class="btn h-11 flex-1 sm:flex-initial px-3.5 sm:px-5 rounded-2xl inline-flex items-center justify-center gap-1.5 bg-primary text-primary-content font-black shadow-md border border-primary-content/25 active:scale-95 hover:brightness-110 cursor-pointer"
+            @click="openAddExpenseModal"
+          >
+            <Icon icon="solar:add-circle-bold" class="w-4 h-4 shrink-0" />
+            <span class="font-black text-xs whitespace-nowrap">Log Expense</span>
+          </button>
+          <button
+            v-else-if="activeTab === 'settings'"
+            type="button"
+            :disabled="savingSettings"
+            class="btn h-11 flex-1 sm:flex-initial px-3.5 sm:px-5 rounded-2xl inline-flex items-center justify-center gap-1.5 bg-primary text-primary-content font-black shadow-md border border-primary-content/25 active:scale-95 hover:brightness-110 cursor-pointer"
+            @click="saveLocationSettings"
+          >
+            <span v-if="savingSettings" class="loading loading-spinner loading-xs"></span>
+            <Icon v-else icon="solar:diskette-bold" class="w-4 h-4 shrink-0" />
+            <span class="font-black text-xs whitespace-nowrap">Save Storage</span>
+          </button>
+          <a
+            v-else-if="activeTab === 'catalog'"
+            :href="'/inventory?location=' + encodeURIComponent(canonicalLocationCode)"
+            class="btn h-11 flex-1 sm:flex-initial px-3.5 sm:px-5 rounded-2xl inline-flex items-center justify-center gap-1.5 bg-primary text-primary-content font-black shadow-md border border-primary-content/25 active:scale-95 hover:brightness-110 cursor-pointer"
+          >
+            <Icon icon="solar:box-bold-duotone" class="w-4 h-4 shrink-0" />
+            <span class="font-black text-xs whitespace-nowrap">Browse Stock</span>
+          </a>
+          <button
+            v-else
+            type="button"
+            class="btn h-11 flex-1 sm:flex-initial px-3.5 sm:px-5 rounded-2xl inline-flex items-center justify-center gap-1.5 bg-primary text-primary-content font-black shadow-md border border-primary-content/25 active:scale-95 hover:brightness-110 cursor-pointer"
+            @click="handleCreateNewDraft"
+          >
+            <Icon icon="solar:add-circle-bold" class="w-4 h-4 shrink-0" />
+            <span class="font-black text-xs whitespace-nowrap">New Drop</span>
+          </button>
+        </template>
+      </div>
+    </BottomActionDock>
+
+    <!-- BOOTH SYNC, OUTBOX QUEUE & SALES IMPORTER BOTTOM-SHEET TRAY -->
+    <LocationToolsTray
+      v-if="warehouse && !isStorageLocation"
+      v-model="isToolsTrayOpen"
+      :location-meta="activeLocationMeta"
+      :canonical-code="canonicalLocationCode"
+      @pending-count="outboxPendingCount = $event"
+    />
   </div>
 </template>
 
@@ -1169,17 +1342,13 @@ import { Icon } from '@iconify/vue';
 import { useAuth } from '../../composables/useAuth';
 import { useUrlTab } from '../../composables/useUrlTab';
 import { useInventory } from '../../composables/useInventory';
-import { warehousesApi, type WarehouseDocument, matchesLocationFilter, resolveCanonicalLocationCode, getLocationSettingMeta, buildRicochetBookmarkletHref } from '../../lib/warehouses';
-import {
-  formatBmlBarLabel,
-  getCachedBmlRegistryConfig,
-  loadBmlRegistryConfig,
-  type BookmarkletRegistryConfig,
-} from '../../lib/bml/registry';
+import { warehousesApi, type WarehouseDocument, matchesLocationFilter, resolveCanonicalLocationCode, getLocationSettingMeta, isStorageFacility } from '../../lib/warehouses';
 import { manifestsApi, type ManifestDocument } from '../../lib/manifests';
 import { useManifest } from '../../composables/useManifest';
 import LocationManifestTray from '../inventory/LocationManifestTray.vue';
-import BookmarkletHeroBar from '../bml/BookmarkletHeroBar.vue';
+import LocationToolsTray from './LocationToolsTray.vue';
+import BottomActionDock from '../common/BottomActionDock.vue';
+import ItemThumbnail from '../common/ItemThumbnail.vue';
 import SearchInputWithScanner from '../common/SearchInputWithScanner.vue';
 import SlideOverDrawer from '../common/SlideOverDrawer.vue';
 import { getAssetUrl, updateInventoryItem } from '../../lib/inventory';
@@ -1192,8 +1361,22 @@ const ItemDrawer = defineAsyncComponent(() => import('../common/ItemDrawer.vue')
 
 const editingItem = ref<any | null>(null);
 
+const isToolsTrayOpen = ref(false);
+const outboxPendingCount = ref(0);
+
+const closeSecondaryOverlays = () => {
+  isToolsTrayOpen.value = false;
+  isManifestTrayOpen.value = false;
+  dropPendingRollback.value = null;
+  showAddExpenseModal.value = false;
+  expenseToDelete.value = null;
+};
+
 const openItemEditor = (item: any) => {
   if (!item) return;
+  dropPendingRollback.value = null;
+  showAddExpenseModal.value = false;
+  expenseToDelete.value = null;
   editingItem.value = item;
 };
 
@@ -1254,6 +1437,8 @@ const dropPendingRollback = ref<ManifestDocument | null>(null);
 const isRollingBack = ref(false);
 
 const openRollbackModal = (drop: ManifestDocument) => {
+  closeSecondaryOverlays();
+  editingItem.value = null;
   dropPendingRollback.value = drop;
 };
 
@@ -1314,10 +1499,18 @@ const handleUnverifyDrop = async (drop: ManifestDocument) => {
 
 const warehouse = ref<WarehouseDocument | null>(null);
 const activeLocationMeta = computed(() => getLocationSettingMeta(warehouse.value || props.locationId));
-const bookmarkletHref = computed(() => buildRicochetBookmarkletHref(activeLocationMeta.value.code || 'MD'));
-const bmlRegistry = ref<BookmarkletRegistryConfig>(getCachedBmlRegistryConfig());
-const bookmarkletBarLabel = computed(() =>
-  formatBmlBarLabel(bmlRegistry.value.tools.ricochet_sync, activeLocationMeta.value.shortName)
+const canonicalLocationCode = computed(() =>
+  String(
+    resolveCanonicalLocationCode(warehouse.value || props.locationId) ||
+      warehouse.value?.code ||
+      props.locationId ||
+      ''
+  )
+    .trim()
+    .toUpperCase()
+);
+const isStorageLocation = computed(() =>
+  isStorageFacility(warehouse.value || activeLocationMeta.value)
 );
 const locationManifests = ref<ManifestDocument[]>([]);
 const loading = ref(true);
@@ -1351,6 +1544,8 @@ const newExpenseForm = ref({
 const openAddExpenseModal = () => {
   const locName = warehouse.value?.name || activeLocationMeta.value.shortName || 'Booth';
   const defRent = Number(warehouse.value?.monthlyRent ?? activeLocationMeta.value.monthlyRent ?? 0);
+  closeSecondaryOverlays();
+  editingItem.value = null;
   newExpenseForm.value = {
     amount: defRent,
     date: new Date().toISOString().slice(0, 10),
@@ -1433,6 +1628,8 @@ const submitNewExpense = async () => {
 };
 
 const confirmDeleteExpense = (exp: any) => {
+  closeSecondaryOverlays();
+  editingItem.value = null;
   expenseToDelete.value = exp;
 };
 
@@ -1808,6 +2005,56 @@ const filteredCatalogItems = computed(() => {
   });
 });
 
+const catalogPage = ref(1);
+const catalogPageSize = ref(50);
+const catalogPageSizeOptions = [25, 50, 100, 200];
+
+const catalogTotalPages = computed(() =>
+  Math.max(1, Math.ceil(filteredCatalogItems.value.length / catalogPageSize.value))
+);
+
+const paginatedCatalogItems = computed(() => {
+  const start = (catalogPage.value - 1) * catalogPageSize.value;
+  return filteredCatalogItems.value.slice(start, start + catalogPageSize.value);
+});
+
+const catalogRangeStart = computed(() =>
+  filteredCatalogItems.value.length === 0 ? 0 : (catalogPage.value - 1) * catalogPageSize.value + 1
+);
+
+const catalogRangeEnd = computed(() =>
+  Math.min(filteredCatalogItems.value.length, catalogPage.value * catalogPageSize.value)
+);
+
+const showDockTopStrip = computed(() =>
+  (activeTab.value === 'catalog' && filteredCatalogItems.value.length > 0) ||
+  (Boolean(activeDraft.value) && !isStorageLocation.value)
+);
+
+watch([catalogSearch, catalogPageSize], () => {
+  catalogPage.value = 1;
+});
+
+watch(catalogTotalPages, (total) => {
+  if (catalogPage.value > total) {
+    catalogPage.value = total;
+  }
+});
+
+const onCatalogPageSizeChange = (val: string) => {
+  const next = parseInt(val, 10);
+  if (!isNaN(next) && next !== catalogPageSize.value) {
+    catalogPageSize.value = next;
+    catalogPage.value = 1;
+  }
+};
+
+const scrollToTop = () => {
+  if (typeof window !== 'undefined') {
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+};
+
 // Item Helpers
 const getItemRecord = (drop: ManifestDocument, itemId: string) => {
   const inv = inventoryItems.value.find(i => i.$id === itemId);
@@ -1838,7 +2085,15 @@ const formatDate = (dateStr?: string | null) => {
 };
 
 // Actions
+const openToolsTray = () => {
+  closeSecondaryOverlays();
+  editingItem.value = null;
+  isToolsTrayOpen.value = true;
+};
+
 const openLocationStagingTray = async () => {
+  closeSecondaryOverlays();
+  editingItem.value = null;
   if (activeDraft.value) {
     await switchActiveManifest(activeDraft.value.$id);
   }
@@ -1846,6 +2101,8 @@ const openLocationStagingTray = async () => {
 };
 
 const openDraftInTray = async (draft: ManifestDocument) => {
+  closeSecondaryOverlays();
+  editingItem.value = null;
   await switchActiveManifest(draft.$id);
   isManifestTrayOpen.value = true;
 };
@@ -1998,9 +2255,6 @@ const confirmDeleteLocation = async () => {
 
 onMounted(() => {
   loadLocationData();
-  void loadBmlRegistryConfig().then((cfg) => {
-    bmlRegistry.value = cfg;
-  });
 });
 
 watch(team, () => {

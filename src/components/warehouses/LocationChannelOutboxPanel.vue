@@ -192,6 +192,10 @@ const props = defineProps<{
   };
 }>();
 
+const emit = defineEmits<{
+  (e: 'pending-count', count: number): void;
+}>();
+
 const intents = ref<ChannelSyncIntent[]>([]);
 const isRefreshing = ref(false);
 const updatingId = ref('');
@@ -199,6 +203,11 @@ const loadError = ref('');
 
 const pendingIntents = computed(() =>
   intents.value.filter((i) => i.status === 'pending' || i.status === 'failed')
+);
+watch(
+  () => pendingIntents.value.length,
+  (count) => emit('pending-count', count),
+  { immediate: true }
 );
 const completedCount = computed(
   () => intents.value.filter((i) => i.status === 'applied' || i.status === 'skipped').length

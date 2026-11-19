@@ -13,20 +13,6 @@
     </div>
   </div>
   <div v-else class="space-y-4">
-    <!-- FOUNDER/CURATOR-ONLY AUCTION SCOUT & ORDERS BOOKMARKLET BAR (Unified BookmarkletHeroBar Pattern) -->
-    <BookmarkletHeroBar tool="auction_scout">
-      <template #companion>
-        <a
-          href="/scout/trackers"
-          class="btn btn-xs sm:btn-sm btn-secondary text-secondary-content font-black shadow-2xs gap-1"
-          title="Open active Scout Buy Trackers (/scout/trackers)"
-        >
-          <span>📌 Buy Trackers</span>
-          <span v-if="buyTrackerCount > 0" class="badge badge-xs badge-neutral font-mono">{{ buyTrackerCount }}</span>
-        </a>
-      </template>
-    </BookmarkletHeroBar>
-
     <!-- 4-STAT HAUL SPEND & PROJECTED ROI SUMMARY STRIP -->
     <KpiStatGrid :items="purchaseKpiStats" />
 
@@ -79,15 +65,6 @@
           <span class="badge badge-sm badge-ghost font-mono opacity-70">
             {{ filteredPurchases.length }} purchase{{ filteredPurchases.length === 1 ? '' : 's' }}
           </span>
-          <button 
-            type="button" 
-            @click="showImportModal = true"
-            class="btn btn-xs sm:btn-sm btn-outline btn-primary gap-1.5 font-bold rounded-xl h-9 min-h-9 px-3 active:scale-95 transition-all shadow-2xs"
-            title="Import Purchase Orders from CSV"
-          >
-            <Icon icon="solar:file-download-linear" class="w-3.5 h-3.5" />
-            <span>Import CSV</span>
-          </button>
         </div>
       </div>
 
@@ -169,17 +146,6 @@
             <span>Received</span>
             <span class="badge badge-xs font-mono font-bold" :class="statusFilter === 'received' ? 'badge-neutral' : 'badge-ghost'">{{ statusCounts.received }}</span>
           </button>
-
-          <!-- 📌 Active Buy Trackers Link (/scout/trackers) -->
-          <a
-            href="/scout/trackers"
-            class="btn btn-xs rounded-lg font-bold gap-1.5 transition-all shrink-0 btn-ghost bg-secondary/10 text-secondary border border-secondary/30 hover:bg-secondary/20"
-            title="Un-acquired Scout Buy Trackers (SC-...) live in /scout/trackers until acquired"
-          >
-            <span>📌 Scout Trackers</span>
-            <span class="badge badge-xs badge-secondary font-mono font-bold">{{ buyTrackerCount }}</span>
-            <span>↗</span>
-          </a>
         </div>
 
         <!-- Quick Toggle: Hide Empty POs (0 Items) -->
@@ -575,49 +541,68 @@
 
     <!-- UNIFIED 2-TIER BOTTOM DOCK WITH PAGER PATTERN -->
     <PaginationDock
-      v-if="filteredPurchases.length > 0"
       v-model:currentPage="currentPage"
       v-model:pageSize="pageSize"
       :totalItems="filteredPurchases.length"
       :totalPages="totalPages"
       :isLoading="loading"
+      :showPager="filteredPurchases.length > 0"
       entityLabel="POs"
       :isFiltered="!!searchQuery"
       @scroll-top="scrollToTop"
     >
       <template #dock>
-        <!-- Dock Item 1: Speed Entry -->
-        <a 
-          href="/purchases/speed-entry" 
-          class="h-11 my-auto px-2 sm:px-3 rounded-2xl flex flex-col items-center justify-center gap-0.5 transition-all duration-200 bg-base-200/80 hover:bg-warning/15 text-warning font-bold border border-warning/25 shadow-xs active:scale-95 cursor-pointer"
-          title="Fast batch receipt & haul entry"
-        >
-          <Icon icon="solar:bolt-bold" class="w-4.5 h-4.5 text-warning" />
-          <span class="font-extrabold uppercase text-[10px] tracking-tight leading-none whitespace-nowrap">Speed Entry</span>
-        </a>
-
-        <!-- Dock Item 2: Import CSV -->
-        <button 
+        <!-- Dock Item 1: Buy Trackers Tray -->
+        <button
           type="button"
-          @click="showImportModal = true"
-          class="h-11 my-auto px-2 sm:px-3 rounded-2xl flex flex-col items-center justify-center gap-0.5 transition-all duration-200 bg-base-200/80 hover:bg-base-300 text-base-content font-bold border border-base-content/15 shadow-xs active:scale-95 cursor-pointer"
-          title="Bulk import purchases & inventory via CSV"
+          @click="openActionTray('trackers')"
+          class="btn h-11 my-auto px-2.5 sm:px-3.5 rounded-2xl inline-flex items-center justify-center gap-1.5 transition-all duration-200 bg-base-200/80 hover:bg-secondary/15 text-base-content font-bold border border-base-content/15 shadow-xs active:scale-95 cursor-pointer"
+          title="View open Buy Trackers before checkout"
         >
-          <Icon icon="solar:file-text-bold" class="w-4.5 h-4.5" />
-          <span class="font-extrabold uppercase text-[10px] tracking-tight leading-none whitespace-nowrap">Import CSV</span>
+          <Icon icon="solar:bookmark-square-minimalistic-bold" class="w-4 h-4 text-secondary shrink-0" />
+          <span class="font-extrabold text-xs whitespace-nowrap">Trackers</span>
+          <span
+            v-if="buyTrackerCount > 0"
+            class="badge badge-xs badge-secondary text-secondary-content font-mono font-black whitespace-nowrap shrink-0"
+          >
+            {{ buyTrackerCount }}
+          </span>
         </button>
 
-        <!-- Dock Item 3: New Purchase Order (Solid Elevated Hero Action) -->
-        <a 
-          href="/purchases/new" 
-          class="h-11 my-auto px-3.5 sm:px-4 rounded-2xl flex flex-col items-center justify-center gap-0.5 transition-all duration-200 bg-primary text-primary-content font-black shadow-md border border-primary-content/25 active:scale-95 hover:brightness-110 cursor-pointer"
-          title="Create a new Purchase Order"
+        <!-- Dock Item 2: Auction Scout & Bookmarklet Tray -->
+        <button
+          type="button"
+          @click="openActionTray('scout')"
+          class="btn h-11 my-auto px-2.5 sm:px-3.5 rounded-2xl inline-flex items-center justify-center gap-1.5 transition-all duration-200 bg-base-200/80 hover:bg-base-300 text-base-content font-bold border border-base-content/15 shadow-xs active:scale-95 cursor-pointer"
+          title="Open Auction Scout bookmarklet &amp; Quick Scout"
         >
-          <Icon icon="solar:add-circle-bold" class="w-4.5 h-4.5 drop-shadow-xs" />
-          <span class="font-black uppercase text-[10px] sm:text-[11px] tracking-wide leading-none whitespace-nowrap">New PO</span>
-        </a>
+          <Icon icon="solar:rocket-2-bold" class="w-4 h-4 text-primary shrink-0" />
+          <span class="font-extrabold text-xs whitespace-nowrap">Scout</span>
+        </button>
+
+        <!-- Dock Item 3: Unified Add Purchase (Single Elevated CPA — Hick's Law) -->
+        <button
+          type="button"
+          @click="openActionTray('add')"
+          class="btn h-11 my-auto px-3.5 sm:px-5 rounded-2xl inline-flex items-center justify-center gap-1.5 transition-all duration-200 bg-primary text-primary-content font-black shadow-md border border-primary-content/25 active:scale-95 hover:brightness-110 cursor-pointer"
+          title="Add Purchase: Speed Entry, New PO, or CSV Import"
+        >
+          <Icon icon="solar:add-circle-bold" class="w-4 h-4 drop-shadow-xs shrink-0" />
+          <span class="font-black text-xs tracking-wide whitespace-nowrap">Add</span>
+        </button>
       </template>
     </PaginationDock>
+
+    <!-- Unified Purchases Bottom-Sheet Action Tray (Add / Buy Trackers / Auction Scout) -->
+    <PurchasesActionTray
+      v-model="showActionTray"
+      v-model:activeTab="actionTrayTab"
+      :trackers="activeBuyTrackers"
+      :get-item-count="getItemCount"
+      :can-use-bml="capabilities.canUseBml"
+      @import-csv="openImportFromTray"
+      @inspect-tracker="openTrackerItemsFromTray"
+    />
 
     <!-- Regular Bulk Import Modal (Identical to Inventory) -->
     <BulkImport v-if="showImportModal" @close="showImportModal = false" @complete="showImportModal = false; loadPurchases(true, true);" />
@@ -644,10 +629,10 @@ import { addToast } from '../../stores/toast';
 import { confirmDialog } from '../../stores/confirm';
 import { useLoader } from '../../composables/useLoader';
 import { Icon } from '@iconify/vue';
-import BookmarkletHeroBar from '../bml/BookmarkletHeroBar.vue';
 import KpiStatGrid from '../common/KpiStatGrid.vue';
 import PaginationDock from '../common/PaginationDock.vue';
 import PurchaseItemsTray from './PurchaseItemsTray.vue';
+import PurchasesActionTray from './PurchasesActionTray.vue';
 
 const BulkImport = defineAsyncComponent(() => import('../inventory/BulkImport.vue'));
 
@@ -725,9 +710,13 @@ const isRefundedOrKnownVoidPurchase = (p) => {
     return false;
 };
 
-const buyTrackerCount = computed(() => {
-    return (purchases.value || []).filter(p => isUnacquiredBuyTracker(p)).length;
+const activeBuyTrackers = computed(() => {
+    return (purchases.value || [])
+        .filter(p => isUnacquiredBuyTracker(p))
+        .sort((a, b) => new Date(b.$updatedAt || b.$createdAt || 0).getTime() - new Date(a.$updatedAt || a.$createdAt || 0).getTime());
 });
+
+const buyTrackerCount = computed(() => activeBuyTrackers.value.length);
 
 const acquiredPurchases = computed(() => {
     return (purchases.value || []).filter(p => !isUnacquiredBuyTracker(p) && !isRefundedOrKnownVoidPurchase(p));
@@ -843,13 +832,34 @@ const statusCounts = computed(() => {
 
 const showImportModal = ref(false);
 const showItemsTray = ref(false);
+const showActionTray = ref(false);
+const actionTrayTab = ref('add');
 const activeTrayPurchase = ref(null);
 const undoBatch = ref(null);
 const processingUndo = ref(false);
 
 const openItemsTray = (purchase) => {
+    showActionTray.value = false;
+    showImportModal.value = false;
     activeTrayPurchase.value = purchase;
     showItemsTray.value = true;
+};
+
+const openActionTray = (tab = 'add') => {
+    showImportModal.value = false;
+    showItemsTray.value = false;
+    actionTrayTab.value = tab;
+    showActionTray.value = true;
+};
+
+const openImportFromTray = () => {
+    showActionTray.value = false;
+    showItemsTray.value = false;
+    showImportModal.value = true;
+};
+
+const openTrackerItemsFromTray = (tracker) => {
+    openItemsTray(tracker);
 };
 
 const searchQuery = ref('');
