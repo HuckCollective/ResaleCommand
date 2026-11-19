@@ -10,6 +10,7 @@ import {
     type SmartQueueId
 } from '../lib/inventoryVibes';
 import { useDataFilter, type SortDirection, type FilterChip } from './useDataFilter';
+import { matchesMySkuFilter, normalizeUpcPrefix } from '../lib/curatorOwnership';
 
 export type InventorySortColumn = 'title' | 'cost' | 'resalePrice' | 'soldPrice' | 'soldDate' | 'margin' | 'upc' | 'vendor' | 'status' | 'location' | '$updatedAt' | '$createdAt';
 export type { SortDirection, FilterChip };
@@ -56,6 +57,8 @@ export interface UseInventoryFiltersOptions {
     purchases?: Ref<any[]>;
     orgPlacedLocations?: Ref<string[]>;
     knownPrefixes?: Ref<string[]>;
+    ownedPrefixes?: Ref<string[]>;
+    currentUserId?: Ref<string>;
     defaultPageSize?: number;
 }
 
@@ -222,11 +225,14 @@ export function useInventoryFilters(
         const prefixes = new Set(['HUCK-', 'PDXGL-']);
         if (options.knownPrefixes?.value) {
             options.knownPrefixes.value.forEach(p => {
-                if (p) {
-                    let cleaned = p.trim().toUpperCase();
-                    if (!cleaned.endsWith('-') && !/^\d+$/.test(cleaned)) cleaned += '-';
-                    prefixes.add(cleaned);
-                }
+                const cleaned = normalizeUpcPrefix(p);
+                if (cleaned) prefixes.add(cleaned);
+            });
+        }
+        if (options.ownedPrefixes?.value) {
+            options.ownedPrefixes.value.forEach(p => {
+                const cleaned = normalizeUpcPrefix(p);
+                if (cleaned) prefixes.add(cleaned);
             });
         }
         return Array.from(prefixes);
@@ -638,7 +644,11 @@ export function useInventoryFilters(
             // 12. Barcode / Partner Prefix / 0EJ filter
             if (bc && bc !== 'all') {
                 const code = (anyItem.upc || anyItem.locationSku || anyItem.sku || '').trim().toUpperCase();
-                if (bc === '__missing__') {
+                if (bc === '__mine__') {
+                    if (!matchesMySkuFilter(anyItem, options.ownedPrefixes?.value || [], options.currentUserId?.value || '')) {
+                        return false;
+                    }
+                } else if (bc === '__missing__') {
                     if (code !== '') return false;
                 } else if (bc === '__numeric__') {
                     if (!code || !/^\d+$/.test(code)) return false;
@@ -799,7 +809,13 @@ export function useInventoryFilters(
         }
 
         // Barcode chip
-        if (filterBarcode.value === '__missing__') {
+        if (filterBarcode.value === '__mine__') {
+            chips.push({
+                id: 'barcode',
+                label: 'My SKU',
+                onRemove: () => { filterBarcode.value = 'all'; }
+            });
+        } else if (filterBarcode.value === '__missing__') {
             chips.push({
                 id: 'barcode-missing',
                 label: 'No Barcode',

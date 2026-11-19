@@ -7,6 +7,7 @@ import { withRateLimitRetry } from '../lib/retry';
 import { syncPurchaseStatusForItems } from '../lib/purchases';
 import { useLoader } from './useLoader';
 import { addToast } from '../stores/toast';
+import { getCoopJwtHeaders } from '../lib/coopLedgerClient';
 
 export type ExportFormat = 'ricochet' | 'ebay' | 'poshmark' | 'generic';
 
@@ -34,10 +35,11 @@ export function useInventoryBulkActions(onSuccess?: (affectedIds?: string[], upd
 
         try {
             // 1. FAST PATH: Server-Side Bulk Update (bypasses client browser rate limits with admin key)
+            let authError = '';
             try {
                 const resp = await fetch('/api/inventory/bulk-update', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: await getCoopJwtHeaders(),
                     body: JSON.stringify({
                         itemIds,
                         updates: { storageLocation: targetLocation },
@@ -46,7 +48,10 @@ export function useInventoryBulkActions(onSuccess?: (affectedIds?: string[], upd
                     })
                 });
 
-                if (resp.ok) {
+                if (resp.status === 401 || resp.status === 403) {
+                    const errData = await resp.json().catch(() => ({}));
+                    authError = errData?.error || 'You do not have permission to move one or more selected items.';
+                } else if (resp.ok) {
                     const data = await resp.json();
                     if (data.success) {
                         const count = data.updatedCount ?? total;
@@ -59,9 +64,16 @@ export function useInventoryBulkActions(onSuccess?: (affectedIds?: string[], upd
                         return true;
                     }
                 }
-                console.warn("Server bulk update fell through, attempting client fallback...");
+                if (!authError) {
+                    console.warn("Server bulk update fell through, attempting client fallback...");
+                }
             } catch (serverErr) {
                 console.warn("Server bulk-update unreachable, falling back to client execution:", serverErr);
+            }
+
+            if (authError) {
+                addToast({ type: 'error', message: authError });
+                return false;
             }
 
             // 2. FALLBACK PATH: Paced Client-Side Loop with Rate Limit Protection
@@ -124,10 +136,11 @@ export function useInventoryBulkActions(onSuccess?: (affectedIds?: string[], upd
 
         try {
             // 1. FAST PATH: Server-Side Bulk Update
+            let authError = '';
             try {
                 const resp = await fetch('/api/inventory/bulk-update', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: await getCoopJwtHeaders(),
                     body: JSON.stringify({
                         itemIds,
                         updates: { status: targetStatus },
@@ -136,7 +149,10 @@ export function useInventoryBulkActions(onSuccess?: (affectedIds?: string[], upd
                     })
                 });
 
-                if (resp.ok) {
+                if (resp.status === 401 || resp.status === 403) {
+                    const errData = await resp.json().catch(() => ({}));
+                    authError = errData?.error || 'You do not have permission to update status for these items.';
+                } else if (resp.ok) {
                     const data = await resp.json();
                     if (data.success) {
                         const count = data.updatedCount ?? total;
@@ -151,6 +167,11 @@ export function useInventoryBulkActions(onSuccess?: (affectedIds?: string[], upd
                 }
             } catch (serverErr) {
                 console.warn("Server bulk-update unreachable, falling back to client execution:", serverErr);
+            }
+
+            if (authError) {
+                addToast({ type: 'error', message: authError });
+                return false;
             }
 
             // 2. FALLBACK PATH: Paced Client-Side Loop
@@ -212,10 +233,11 @@ export function useInventoryBulkActions(onSuccess?: (affectedIds?: string[], upd
 
         try {
             // 1. FAST PATH: Server-Side Bulk Delete
+            let authError = '';
             try {
                 const resp = await fetch('/api/inventory/bulk-delete', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: await getCoopJwtHeaders(),
                     body: JSON.stringify({
                         itemIds,
                         collectionId: getCollectionId(),
@@ -223,7 +245,10 @@ export function useInventoryBulkActions(onSuccess?: (affectedIds?: string[], upd
                     })
                 });
 
-                if (resp.ok) {
+                if (resp.status === 401 || resp.status === 403) {
+                    const errData = await resp.json().catch(() => ({}));
+                    authError = errData?.error || 'You do not have permission to delete one or more selected items.';
+                } else if (resp.ok) {
                     const data = await resp.json();
                     if (data.success) {
                         const count = data.deletedCount ?? total;
@@ -234,6 +259,11 @@ export function useInventoryBulkActions(onSuccess?: (affectedIds?: string[], upd
                 }
             } catch (serverErr) {
                 console.warn("Server bulk-delete unreachable, falling back to client execution:", serverErr);
+            }
+
+            if (authError) {
+                addToast({ type: 'error', message: authError });
+                return false;
             }
 
             // 2. FALLBACK PATH: Paced Client-Side Loop
@@ -339,10 +369,11 @@ export function useInventoryBulkActions(onSuccess?: (affectedIds?: string[], upd
 
         try {
             // 1. FAST PATH: Server-Side Bulk Update
+            let authError = '';
             try {
                 const resp = await fetch('/api/inventory/bulk-update', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: await getCoopJwtHeaders(),
                     body: JSON.stringify({
                         itemIds,
                         updates: safeUpdates,
@@ -351,7 +382,10 @@ export function useInventoryBulkActions(onSuccess?: (affectedIds?: string[], upd
                     })
                 });
 
-                if (resp.ok) {
+                if (resp.status === 401 || resp.status === 403) {
+                    const errData = await resp.json().catch(() => ({}));
+                    authError = errData?.error || 'You do not have permission to update one or more selected items.';
+                } else if (resp.ok) {
                     const data = await resp.json();
                     if (data.success) {
                         const count = data.updatedCount ?? total;
@@ -363,9 +397,16 @@ export function useInventoryBulkActions(onSuccess?: (affectedIds?: string[], upd
                         return true;
                     }
                 }
-                console.warn("Server bulk update fell through, attempting client fallback...");
+                if (!authError) {
+                    console.warn("Server bulk update fell through, attempting client fallback...");
+                }
             } catch (serverErr) {
                 console.warn("Server bulk-update unreachable, falling back to client execution:", serverErr);
+            }
+
+            if (authError) {
+                addToast({ type: 'error', message: authError });
+                return false;
             }
 
             // 2. FALLBACK PATH: Paced Client-Side Loop

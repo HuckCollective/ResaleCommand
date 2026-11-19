@@ -2,6 +2,7 @@ import { generateCode128Svg } from './barcode128';
 import { extractShortTagTitle } from './exportUtils';
 import { generateQrCodeSvg, resolveQrPayload } from './qrCodeHelper';
 import { parsePriceValue } from './lot-strategy';
+import { isDraftPlaceholderUpc } from './curatorOwnership';
 
 export interface RolloPrintItem {
   id?: string;
@@ -415,6 +416,18 @@ export function generateRolloPrintHtml(items: RolloPrintItem[], options: RolloPr
  * Triggers Rollo print popup in browser.
  */
 export function printRolloLabels(items: RolloPrintItem[], options: RolloPrintOptions = {}) {
+  const hasDraftTag = (items || []).some((it) => {
+    if (String(it?.locationSku || '').trim()) return false;
+    return (
+      isDraftPlaceholderUpc(it?.barcodeVal) ||
+      isDraftPlaceholderUpc(it?.upc) ||
+      isDraftPlaceholderUpc(it?.sku)
+    );
+  });
+  if (hasDraftTag) {
+    console.warn('[printRolloLabels] Blocked printing temporary DRAFT- barcodes to physical labels.');
+    return;
+  }
   // Use the robust Universal PDF engine by default (bypasses browser CSS @page rotation bugs)
   if (options.engine !== 'html') {
     printLabelsViaPdf(items, options);

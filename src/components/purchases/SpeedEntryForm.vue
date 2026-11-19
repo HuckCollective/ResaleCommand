@@ -1,6 +1,15 @@
 <template>
   <div class="card bg-base-100 shadow-xl border border-base-200">
     <div class="card-body p-4 sm:p-6">
+      <div
+        v-if="speedMintInfo.mode === 'draft'"
+        class="alert alert-info mb-4 rounded-2xl border border-info/30 text-xs flex flex-wrap items-center justify-between gap-2"
+      >
+        <span>
+          ℹ️ Saved items stay in <strong>HG backstock</strong> with a temporary draft tag until a Steward locks your Curator SKU prefix on <strong>/profile</strong>.
+        </span>
+        <a href="/profile" class="btn btn-xs btn-info font-bold">Open /profile ➔</a>
+      </div>
       
       <!-- 1. Top Scan / Intake Hero Card (Canonical Image / Camera / Upload Pattern) -->
       <div class="card bg-base-100 shadow-md border border-base-200 overflow-hidden mb-6">
@@ -419,6 +428,8 @@ import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue';
 import { Icon } from '@iconify/vue';
 import { purchasesAPI } from '../../lib/purchases';
 import { useAuth } from '../../composables/useAuth';
+import { useMemberCapabilities } from '../../lib/memberAccess';
+import { buildCuratorPoNumber, resolveMintingPrefixForMember } from '../../lib/curatorOwnership';
 import { useCart } from '../../composables/useCart';
 import { useLoader } from '../../composables/useLoader';
 import { confirmDialog } from '../../stores/confirm';
@@ -426,7 +437,11 @@ import { addToast } from '../../stores/toast';
 import ScannerWidget from '../common/ScannerWidget.vue';
 import SlideOverDrawer from '../common/SlideOverDrawer.vue';
 
-const { currentTeam } = useAuth();
+const { currentTeam, user } = useAuth();
+const { capabilities } = useMemberCapabilities();
+const speedMintInfo = computed(() =>
+    resolveMintingPrefixForMember(capabilities.value, user.value?.$id)
+);
 const { activeCart, cartItems } = useCart();
 const { showLoader, hideLoader } = useLoader();
 const saving = ref(false);
@@ -813,13 +828,16 @@ const submit = async () => {
     });
     
     try {
+        const mintInfo = speedMintInfo.value;
         const result = await purchasesAPI.savePurchaseOrder({
             purchaseId: activeCart.value?.$id || null,
-            poNumber: activeCart.value?.poNumber || undefined,
+            poNumber: activeCart.value?.poNumber || buildCuratorPoNumber(mintInfo.prefix),
             vendor: poVendor.value.trim() || 'Receipt Purchase',
             purchaseDate: poDate.value,
             grandTotal: (poTotal.value !== '' && !isNaN(Number(poTotal.value))) ? Number(poTotal.value) : undefined,
             tenantId: currentTeam.value?.$id || null,
+            buyerId: user.value?.$id || null,
+            upcPrefix: mintInfo.prefix,
             receiptFile: lastScannedReceiptFile.value,
             items: items.value
         });

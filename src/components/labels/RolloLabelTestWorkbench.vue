@@ -30,6 +30,18 @@
       </div>
     </div>
 
+    <!-- Pre-Placement SKU Lock Warning -->
+    <div
+      v-if="isUnlockedCurator"
+      class="alert alert-warning rounded-2xl border border-warning/40 text-xs flex flex-wrap items-center justify-between gap-2"
+    >
+      <div>
+        <span class="font-bold">🔒 SKU Prefix Not Locked Yet:</span>
+        <span class="opacity-85 ml-1">Lock your Curator SKU prefix before printing physical retail barcode tags. Temporary DRAFT- barcodes cannot be printed.</span>
+      </div>
+      <a href="/profile" class="btn btn-xs btn-warning font-bold">Lock SKU on /profile ➔</a>
+    </div>
+
     <!-- Main Workbench Grid: Controls on Left, Live Preview on Right -->
     <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
       
@@ -742,6 +754,13 @@ import { extractShortTagTitle } from '../../lib/exportUtils';
 import { getAllLocationSettingMetas } from '../../lib/warehouses';
 import { siteConfig } from '../../site-config';
 import { addToast } from '../../stores/toast';
+import { useMemberCapabilities } from '../../lib/memberAccess';
+import { isDraftPlaceholderUpc } from '../../lib/curatorOwnership';
+
+const { capabilities } = useMemberCapabilities();
+const isUnlockedCurator = computed(
+  () => capabilities.value.role !== 'founder' && capabilities.value.prefixStatus !== 'locked'
+);
 
 // -------------------------------------------------------------
 // 1. Partner Organizations & Venue Profiles
@@ -1236,7 +1255,25 @@ const mockupStyle = computed(() => {
 // -------------------------------------------------------------
 // 7. Print Triggers
 // -------------------------------------------------------------
+const isLabelPrintBlocked = (): string => {
+  if (
+    isDraftPlaceholderUpc(activeForm.value.upc) ||
+    isDraftPlaceholderUpc(displayBarcodeVal.value)
+  ) {
+    return 'Temporary DRAFT- barcodes cannot be printed on retail labels. Assign a locked SKU prefix first.';
+  }
+  if (isUnlockedCurator.value && !String(activeForm.value.locationSku || '').trim()) {
+    return 'Lock your Curator SKU prefix on /profile before printing retail barcode labels.';
+  }
+  return '';
+};
+
 const handlePrint = (quantity = 1) => {
+  const blockMsg = isLabelPrintBlocked();
+  if (blockMsg) {
+    addToast({ type: 'warning', message: blockMsg });
+    return;
+  }
   const itemToPrint: RolloPrintItem = {
     title: displayTitle.value,
     tagTitle: displayTitle.value,
@@ -1264,6 +1301,11 @@ const handlePrint = (quantity = 1) => {
 };
 
 const handleOpenPdf = () => {
+  const blockMsg = isLabelPrintBlocked();
+  if (blockMsg) {
+    addToast({ type: 'warning', message: blockMsg });
+    return;
+  }
   const itemToPrint: RolloPrintItem = {
     title: displayTitle.value,
     tagTitle: displayTitle.value,

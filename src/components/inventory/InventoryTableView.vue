@@ -48,6 +48,10 @@
                     v-model:filterLocation="filterLocation"
                     v-model:filterSmartQueue="filterSmartQueue"
                     v-model:filterBarcode="filterBarcode"
+                    :myPrefix="capabilities.prefixStatus === 'locked' ? capabilities.prefix : ''"
+                    :ownedPrefixes="capabilities.ownedPrefixes || []"
+                    :currentUserId="user?.$id || ''"
+                    :isConsignor="capabilities.isConsignor"
                     :filteredCount="filteredItems.length"
                     :selectedCount="selectedItems.length"
                     :sortColumn="sortColumn"
@@ -354,21 +358,21 @@
                                     <ul tabindex="0" class="dropdown-content z-50 menu p-1.5 shadow-xl bg-base-100 rounded-box w-44 border border-base-200 text-xs font-bold space-y-0.5">
                                         <li>
                                             <a @click="openItem(item)" class="text-primary">
-                                                <Icon icon="solar:pen-linear" class="w-3.5 h-3.5" /> Edit Details
+                                                <Icon icon="solar:pen-linear" class="w-3.5 h-3.5" /> {{ canEditItemFull(item) ? 'Edit Details' : 'View Details' }}
                                             </a>
                                         </li>
-                                        <li>
+                                        <li v-if="canEditItemFull(item)">
                                             <a @click="quickFlipStatus(item, 'placed')" class="text-success">
                                                 <Icon icon="solar:shop-2-bold" class="w-3.5 h-3.5" /> Mark Placed
                                             </a>
                                         </li>
-                                        <li>
+                                        <li v-if="canEditItemFull(item)">
                                             <a @click="quickFlipStatus(item, 'sold')" class="text-info">
                                                 <Icon icon="solar:tag-price-bold" class="w-3.5 h-3.5" /> Mark Sold
                                             </a>
                                         </li>
-                                        <div class="divider my-0.5"></div>
-                                        <li>
+                                        <div v-if="canEditItemFull(item)" class="divider my-0.5"></div>
+                                        <li v-if="canEditItemFull(item)">
                                             <a @click="deleteItemConfirm(item)" class="text-error">
                                                 <Icon icon="solar:trash-bin-trash-linear" class="w-3.5 h-3.5" /> Delete Item
                                             </a>
@@ -472,6 +476,14 @@ import { useInventoryBulkActions } from '../../composables/useInventoryBulkActio
 import { updateInventoryItem, deleteInventoryItem, saveItemToInventory } from '../../lib/inventory';
 import { formatSellingLocationBadge, hasOnlineReadyTag } from '../../lib/onlineCoCuration';
 import { useAuth } from '../../composables/useAuth';
+import { useMemberCapabilities } from '../../lib/memberAccess';
+import {
+    canItemBePlacedOrPrinted,
+    evaluateItemAccess,
+    isPlacementMutation,
+    isRetailPlacementLocation,
+    resolveMintingPrefixForMember,
+} from '../../lib/curatorOwnership';
 import { addToast } from '../../stores/toast';
 import { confirmDialog } from '../../stores/confirm';
 import ItemThumbnail from '../common/ItemThumbnail.vue';
@@ -516,6 +528,30 @@ const props = defineProps({
 const emit = defineEmits(['update:viewMode']);
 
 const { currentTeam, user } = useAuth();
+const { capabilities } = useMemberCapabilities();
+
+const canEditItemFull = (item) =>
+    evaluateItemAccess(item, capabilities.value, { userId: user.value?.$id }).canEditFull;
+
+const canPlaceItemInTable = (item) =>
+    canItemBePlacedOrPrinted(item, capabilities.value, { userId: user.value?.$id });
+
+const checkBulkTargetsPermission = (ids, { requireFull = false, placement = false } = {}) => {
+    const selectedSet = new Set(ids || []);
+    const targets = inventoryItems.value.filter(i => selectedSet.has(i.$id) || (i.id && selectedSet.has(i.id)));
+    for (const it of targets) {
+        if (placement) {
+            const pCheck = canItemBePlacedOrPrinted(it, capabilities.value, { userId: user.value?.$id });
+            if (!pCheck.allowed) return pCheck.reason;
+        } else {
+            const acc = evaluateItemAccess(it, capabilities.value, { userId: user.value?.$id });
+            if (requireFull ? !acc.canEditFull : !acc.canSaveAny) {
+                return acc.readOnlyReason || 'You do not have permission to modify one or more selected items.';
+            }
+        }
+    }
+    return '';
+};
 
 // -- 1. CORE DATA COMPOSABLE --
 const { inventoryItems, loading, error, fetchInventory } = useInventory();
@@ -565,7 +601,10 @@ const {
     initFromUrl,
     getVendorName,
     calculateRoi
-} = useInventoryFilters(inventoryItems);
+} = useInventoryFilters(inventoryItems, {
+    ownedPrefixes: computed(() => capabilities.value.ownedPrefixes || []),
+    currentUserId: computed(() => user.value?.$id || '')
+});
 
 const tableKpiStats = computed(() => computeInventoryKpiStats(filteredItems.value));
 
@@ -624,6 +663,13 @@ const isLegacyDropcastStudio = ref(
 const handleStageManifest = async () => {
     if (selectedItems.value.length === 0) return;
     const itemsToStage = getSelectedObjects(inventoryItems.value);
+    for (const it of itemsToStage) {
+        const check = canItemBePlacedOrPrinted(it, capabilities.value, { userId: user.value?.$id });
+        if (!check.allowed) {
+            addToast({ type: 'warning', message: check.reason || 'Lock your Curator SKU prefix on /profile before staging booth drops.' });
+            return;
+        }
+    }
     const locId = activeManifest.value?.locationId || 'MD';
     const locName = activeManifest.value?.locationName || 'Memory Den';
     await addToActiveManifest(itemsToStage, locId, locName, false, true);
@@ -641,7 +687,9 @@ watch(selectedItems, async (newVal) => {
         const addedIds = newVal.filter(id => !currentManifestIds.has(id));
 
         if (addedIds.length > 0) {
-            const itemsToAdd = inventoryItems.value.filter(i => addedIds.includes(i.$id) || (i.id && addedIds.includes(i.id)));
+            const itemsToAdd = inventoryItems.value
+                .filter(i => addedIds.includes(i.$id) || (i.id && addedIds.includes(i.id)))
+                .filter(i => canItemBePlacedOrPrinted(i, capabilities.value, { userId: user.value?.$id }).allowed);
             if (itemsToAdd.length > 0) {
                 const locId = activeManifest.value.locationId || 'MD';
                 const locName = activeManifest.value.locationName || 'Memory Den';
@@ -706,6 +754,11 @@ const handleTableSortUpdate = ({ column, direction }) => {
 const handleQuickAssignTableLocation = async (targetCode) => {
     const ids = selectedItems.value.length > 0 ? [...selectedItems.value] : filteredItems.value.map(i => i.$id).filter(Boolean);
     if (ids.length === 0) return;
+    const blockReason = checkBulkTargetsPermission(ids, { placement: isRetailPlacementLocation(targetCode) });
+    if (blockReason) {
+        addToast({ type: 'warning', message: blockReason });
+        return;
+    }
     await applyBulkLocation(ids, targetCode);
 };
 
@@ -718,16 +771,37 @@ watch(currentPage, () => {
 
 // -- 6. BULK HANDLERS --
 const handleBulkLocation = async (targetLocation) => {
+    const blockReason = checkBulkTargetsPermission(selectedItems.value, {
+        placement: isRetailPlacementLocation(targetLocation)
+    });
+    if (blockReason) {
+        addToast({ type: 'warning', message: blockReason });
+        return;
+    }
     await applyBulkLocation(selectedItems.value, targetLocation);
 };
 
 const handleBulkStatus = async (targetStatus) => {
+    const blockReason = checkBulkTargetsPermission(selectedItems.value, {
+        placement: String(targetStatus || '').toLowerCase() === 'placed'
+    });
+    if (blockReason) {
+        addToast({ type: 'warning', message: blockReason });
+        return;
+    }
     await applyBulkStatus(selectedItems.value, targetStatus);
 };
 
 const handleBulkUnified = async (payload) => {
     if (!payload || !payload.itemIds || payload.itemIds.length === 0) return;
     const { itemIds, updates, clearSelection: shouldClear } = payload;
+    const blockReason = checkBulkTargetsPermission(itemIds, {
+        placement: isPlacementMutation(updates)
+    });
+    if (blockReason) {
+        addToast({ type: 'warning', message: blockReason });
+        return;
+    }
     const success = await applyBulkUnified(itemIds, updates);
     if (success && shouldClear) {
         clearSelection();
@@ -736,6 +810,11 @@ const handleBulkUnified = async (payload) => {
 
 const handleBulkDelete = async () => {
     const ids = [...selectedItems.value];
+    const blockReason = checkBulkTargetsPermission(ids, { requireFull: true });
+    if (blockReason) {
+        addToast({ type: 'warning', message: blockReason });
+        return;
+    }
     const success = await deleteBulkItems(ids);
     if (success) {
         clearSelection();
@@ -877,10 +956,14 @@ const onDrawerSaved = async (payload) => {
             addToast({ type: 'success', message: 'Item updated successfully.' });
         } else if (payload) {
             const effectiveTeamId = currentTeam.value?.$id || user.value?.$id;
+            const createPayload = {
+                ...payload,
+                upcPrefix: payload.upcPrefix || resolveMintingPrefixForMember(capabilities.value, user.value?.$id).prefix
+            };
             const newDoc = await saveItemToInventory(
                 { title: payload.title || 'Untitled Item', identity: payload.title, condition_notes: '' },
                 payload.imageFile,
-                payload,
+                createPayload,
                 effectiveTeamId
             );
             if (newDoc) {
@@ -904,6 +987,17 @@ const onImportComplete = async () => {
 };
 
 const quickFlipStatus = async (item, newStatus) => {
+    if (!canEditItemFull(item)) {
+        addToast({ type: 'warning', message: 'You can only update status on items under your own Curator SKU.' });
+        return;
+    }
+    if (String(newStatus || '').toLowerCase() === 'placed') {
+        const pCheck = canPlaceItemInTable(item);
+        if (!pCheck.allowed) {
+            addToast({ type: 'warning', message: pCheck.reason });
+            return;
+        }
+    }
     try {
         await updateInventoryItem(item.$id, { status: newStatus });
         item.status = newStatus;
@@ -914,6 +1008,10 @@ const quickFlipStatus = async (item, newStatus) => {
 };
 
 const deleteItemConfirm = async (item) => {
+    if (!canEditItemFull(item)) {
+        addToast({ type: 'warning', message: 'You can only delete items under your own Curator SKU.' });
+        return;
+    }
     const confirmed = await confirmDialog({
         title: 'Delete Item',
         message: `Are you sure you want to delete "${item.title}"? This cannot be undone.`,

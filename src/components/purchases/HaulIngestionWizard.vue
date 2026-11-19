@@ -474,6 +474,17 @@ import BulkImport from '../inventory/BulkImport.vue';
 import ItemDrawer from '../common/ItemDrawer.vue';
 import ItemThumbnail from '../common/ItemThumbnail.vue';
 import { printRolloLabels } from '../../lib/rolloLabelPrint';
+import { useAuth } from '../../composables/useAuth';
+import { useMemberCapabilities } from '../../lib/memberAccess';
+import { isRetailPlacementLocation, resolveMintingPrefixForMember } from '../../lib/curatorOwnership';
+
+const { user } = useAuth();
+const { capabilities } = useMemberCapabilities();
+const getWizardMintInfo = () => resolveMintingPrefixForMember(capabilities.value, user.value?.$id);
+const makeWizardSku = () => {
+  const { prefix } = getWizardMintInfo();
+  return `${prefix}${Math.floor(1000 + Math.random() * 9000)}`;
+};
 
 const activeDrawerDoc = ref<any>(null);
 const openingDrawer = ref(false);
@@ -658,7 +669,7 @@ const items = ref<IngestionItem[]>(props.initialItems?.map(i => ({
   destination: normalizeDestinationCode(i.destination),
   category: i.category || '',
   brand: i.brand || '',
-  sku: i.sku || `HUCK-${Math.floor(1000 + Math.random() * 9000)}`,
+  sku: i.sku || makeWizardSku(),
   imagePreview: i.imagePreview || null
 })) || []);
 
@@ -681,7 +692,7 @@ const addLineItem = () => {
     destination: 'HG',
     category: '',
     brand: '',
-    sku: `HUCK-${Math.floor(1000 + Math.random() * 9000)}`
+    sku: makeWizardSku()
   });
 };
 
@@ -824,7 +835,7 @@ const handleCsvImport = async (e: Event) => {
         destination: 'HG',
         orderId: rawOrderId || undefined,
         itemId: rawItemId || undefined,
-        sku: rawItemId ? `SGW-${rawItemId.slice(-6)}` : `HUCK-${Math.floor(1000 + Math.random() * 9000)}`
+        sku: rawItemId ? `SGW-${rawItemId.slice(-6)}` : makeWizardSku()
       };
 
       seenKeys.set(uniqueKey, newItem);
@@ -961,6 +972,11 @@ const runBatchAiEnrich = async () => {
 };
 
 const downloadRicochetCsv = () => {
+  const mintInfo = getWizardMintInfo();
+  if (mintInfo.mode !== 'locked' && capabilities.value.role !== 'founder') {
+    addToast('Lock your Curator SKU prefix on /profile before exporting booth CSVs.', 'warning');
+    return;
+  }
   const header = 'SKU,Item Title,Description,Web Description,Price,Quantity,In-Stock Date,Category,Brand\n';
   const today = new Date().toLocaleDateString('en-US');
   const rows = memoryDenItems.value.map(item => {
@@ -983,30 +999,46 @@ const downloadRicochetCsv = () => {
 
 const printRolloTags = () => {
   if (dustyTigerItems.value.length === 0) return;
+  const mintInfo = getWizardMintInfo();
+  if (mintInfo.mode !== 'locked' && capabilities.value.role !== 'founder') {
+    addToast('Lock your Curator SKU prefix on /profile before printing retail tags.', 'warning');
+    return;
+  }
   printRolloLabels(dustyTigerItems.value, { vendorHeader: 'DUSTY TIGER', size: '2x1' });
 };
 
 const completeIngestion = async () => {
   completing.value = true;
-  showLoader('Activating In-Stock Inventory & Closing PO...', { step: 'Deploying items to active inventory' });
+  showLoader('Activating Inventory & Closing PO...', { step: 'Deploying items to active inventory' });
   try {
     const DB_ID = import.meta.env.PUBLIC_APPWRITE_DB_ID || 'resale_db';
     const collId = getCollectionId();
+    const mintInfo = getWizardMintInfo();
+    const canPlaceBoothOrOnline = mintInfo.mode === 'locked' || capabilities.value.role === 'founder';
+    let divertedToBackstock = 0;
 
     // Update existing items or create new active inventory records (Law 1 & Law 2: Canonical 4 Locations)
     const savePromises = resaleItems.value.map(async item => {
       const dest = normalizeDestinationCode(item.destination);
       let sellingLocations: string[] = [];
       let storageLocation = 'HG';
+      let itemStatus: 'received' | 'placed' = 'received';
 
-      if (dest === 'ONLINE_READY_BIN') {
+      if ((dest === 'ONLINE_READY_BIN' || isRetailPlacementLocation(dest)) && !canPlaceBoothOrOnline) {
+        storageLocation = 'HG';
+        sellingLocations = [];
+        itemStatus = 'received';
+        divertedToBackstock++;
+      } else if (dest === 'ONLINE_READY_BIN') {
         sellingLocations = ['ONLINE_READY_BIN'];
         storageLocation = 'HG';
+        itemStatus = 'received';
       } else {
         const meta = getLocationSettingMeta(dest);
         storageLocation = meta.code;
         if (meta.commissionRate > 0) {
           sellingLocations = [meta.shortName];
+          itemStatus = 'placed';
         }
       }
 
@@ -1015,7 +1047,7 @@ const completeIngestion = async () => {
           title: item.title,
           cost: item.cost || 0,
           resalePrice: item.price || 0,
-          status: 'in-stock',
+          status: itemStatus,
           storageLocation,
           sellingLocations: sellingLocations.length ? sellingLocations : undefined,
           identity: item.sku,
@@ -1038,15 +1070,19 @@ const completeIngestion = async () => {
             cost: item.cost || 0,
             price: item.price || 0,
             quantity: item.quantity || 1,
-            status: 'in-stock',
+            status: itemStatus,
             storageLocation,
-            sellingLocations: sellingLocations.length ? sellingLocations : undefined
+            sellingLocations: sellingLocations.length ? sellingLocations : undefined,
+            upcPrefix: mintInfo.prefix
           }
         );
       }
     });
 
     await Promise.all(savePromises);
+    if (divertedToBackstock > 0) {
+      addToast(`${divertedToBackstock} item(s) saved to HG backstock because your Curator SKU isn't locked on /profile yet.`, 'warning');
+    }
 
     // Close / update Purchase Order
     const urlParams = new URLSearchParams(window.location.search);
@@ -1106,7 +1142,7 @@ onMounted(async () => {
             ) as any,
             category: d.category || '',
             brand: d.brand || '',
-            sku: d.identity || d.locationSku || d.upc || `HUCK-${Math.floor(1000 + Math.random() * 9000)}`,
+            sku: d.identity || d.locationSku || d.upc || makeWizardSku(),
             imagePreview: d.imageId ? getItemImageUrl(d.imageId) : (d.imageUrl || null)
           }));
 

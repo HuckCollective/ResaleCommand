@@ -3,10 +3,11 @@
         <div class="flex items-center gap-2">
             <!-- AI Button (⚡ Quick Scout for unacquired vs 🔍 Deep Scan for acquired) -->
             <button 
+                v-if="canSave"
                 type="button"
                 class="btn btn-outline btn-secondary h-11 md:h-8 btn-sm shadow-xs gap-1.5 font-bold active:scale-95 transition-all" 
                 @click="emit('analyze')" 
-                :disabled="analyzing || !canAnalyze"
+                :disabled="analyzing || !canAnalyze || !canSave"
                 :title="isAcquired ? 'Run full multimodal deep scan & lot exit playbook' : 'Run quick scout for rapid appraisal'"
             >
                 <span v-if="analyzing" class="loading loading-spinner loading-xs"></span>
@@ -24,17 +25,25 @@
         </div>
 
         <div class="flex items-center gap-2">
-            <button type="button" class="btn btn-ghost h-11 md:h-8 btn-sm font-semibold" @click="emit('cancel')">Cancel</button>
+            <button type="button" class="btn btn-ghost h-11 md:h-8 btn-sm font-semibold" @click="emit('cancel')">{{ canSave ? 'Cancel' : 'Close' }}</button>
             <button 
+                v-if="canSave"
                 type="button" 
                 class="btn btn-primary text-primary-content h-11 md:h-8 btn-sm font-black px-6 shadow-md border border-primary-content/25 active:scale-95 transition-all" 
                 @click="emit('save')" 
-                :disabled="processing"
+                :disabled="processing || !canSave"
             >
                 <span v-if="processing" class="loading loading-spinner loading-xs mr-1"></span>
                 <Icon v-else icon="solar:diskette-bold" class="w-4 h-4 mr-1" />
-                Save Item
+                {{ saveLabel }}
             </button>
+            <span
+                v-else
+                class="badge badge-ghost border border-base-300 font-bold text-xs px-3 h-8 gap-1 cursor-help"
+                :title="readOnlyReason || 'Read-Only Collective View'"
+            >
+                👁️ Read-Only
+            </span>
         </div>
     </div>
 </template>
@@ -79,6 +88,18 @@ defineProps({
     isAcquired: {
         type: Boolean,
         default: true
+    },
+    canSave: {
+        type: Boolean,
+        default: true
+    },
+    saveLabel: {
+        type: String,
+        default: 'Save Item'
+    },
+    readOnlyReason: {
+        type: String,
+        default: ''
     }
 });
 

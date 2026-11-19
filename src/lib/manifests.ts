@@ -4,6 +4,7 @@ import { Permission, Role } from 'appwrite';
 import { DB_ID, getCollectionId, updateInventoryItem } from './inventory';
 import { withRateLimitRetry } from './retry';
 import { findFacility } from './warehouses';
+import { getCoopJwtHeaders } from './coopLedgerClient';
 
 export const MANIFESTS_COL = 'manifests';
 
@@ -314,10 +315,11 @@ export const manifestsApi = {
 
         // 1. FAST PATH: Server Bulk Update API (elevated server privileges)
         let updatedItem: any = null;
+        let authError = '';
         try {
             const resp = await fetch('/api/inventory/bulk-update', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: await getCoopJwtHeaders(),
                 body: JSON.stringify({
                     itemIds: [itemId],
                     updates: itemUpdates,
@@ -325,7 +327,10 @@ export const manifestsApi = {
                     dbId: DB_ID
                 })
             });
-            if (resp.ok) {
+            if (resp.status === 401 || resp.status === 403) {
+                const errData = await resp.json().catch(() => ({}));
+                authError = errData?.error || 'You do not have permission to place or update this item.';
+            } else if (resp.ok) {
                 const res = await resp.json();
                 if (res.success) {
                     updatedItem = { $id: itemId, ...itemUpdates };
@@ -333,6 +338,10 @@ export const manifestsApi = {
             }
         } catch (serverErr) {
             console.warn('[manifestsApi.verifyItemPlacement] Server API fallback:', serverErr);
+        }
+
+        if (authError) {
+            throw new Error(authError);
         }
 
         // 2. FALLBACK PATH: Client-side direct update
@@ -397,10 +406,11 @@ export const manifestsApi = {
         if (itemIdsToRevert.length > 0) {
             // 1. FAST PATH: Server Bulk Update API (elevated server permissions)
             let serverSuccess = false;
+            let authError = '';
             try {
                 const resp = await fetch('/api/inventory/bulk-update', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: await getCoopJwtHeaders(),
                     body: JSON.stringify({
                         itemIds: itemIdsToRevert,
                         updates: itemUpdates,
@@ -408,12 +418,19 @@ export const manifestsApi = {
                         dbId: DB_ID
                     })
                 });
-                if (resp.ok) {
+                if (resp.status === 401 || resp.status === 403) {
+                    const errData = await resp.json().catch(() => ({}));
+                    authError = errData?.error || 'You do not have permission to roll back one or more items.';
+                } else if (resp.ok) {
                     const res = await resp.json();
                     if (res.success) serverSuccess = true;
                 }
             } catch (serverErr) {
                 console.warn('[manifestsApi.rollbackManifest] Server bulk update fallback:', serverErr);
+            }
+
+            if (authError) {
+                throw new Error(authError);
             }
 
             // 2. FALLBACK PATH: Client-side rate-limit retry
@@ -461,10 +478,12 @@ export const manifestsApi = {
                 sellingLocations: []
             };
 
+            let serverSuccess = false;
+            let authError = '';
             try {
-                await fetch('/api/inventory/bulk-update', {
+                const resp = await fetch('/api/inventory/bulk-update', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: await getCoopJwtHeaders(),
                     body: JSON.stringify({
                         itemIds: placedIds,
                         updates: itemUpdates,
@@ -472,8 +491,22 @@ export const manifestsApi = {
                         dbId: DB_ID
                     })
                 });
+                if (resp.status === 401 || resp.status === 403) {
+                    const errData = await resp.json().catch(() => ({}));
+                    authError = errData?.error || 'You do not have permission to reset these manifest items.';
+                } else if (resp.ok) {
+                    const res = await resp.json();
+                    if (res.success) serverSuccess = true;
+                }
             } catch (err) {
                 console.warn('[manifestsApi.unverifyManifestItems] Bulk update fallback:', err);
+            }
+
+            if (authError) {
+                throw new Error(authError);
+            }
+
+            if (!serverSuccess) {
                 for (const id of placedIds) {
                     try {
                         await withRateLimitRetry(() => updateInventoryItem(id, itemUpdates));
@@ -563,10 +596,11 @@ export const manifestsApi = {
         };
 
         // 1. FAST PATH: Server Bulk Update API (bypasses browser client rate limits)
+        let authError = '';
         try {
             const resp = await fetch('/api/inventory/bulk-update', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: await getCoopJwtHeaders(),
                 body: JSON.stringify({
                     itemIds: confirmedItemIds,
                     updates: itemUpdates,
@@ -575,7 +609,10 @@ export const manifestsApi = {
                 })
             });
 
-            if (resp.ok) {
+            if (resp.status === 401 || resp.status === 403) {
+                const errData = await resp.json().catch(() => ({}));
+                authError = errData?.error || 'You do not have permission to deploy one or more staged items.';
+            } else if (resp.ok) {
                 const result = await resp.json();
                 if (result.success) {
                     updatedCount = result.updatedCount ?? total;
@@ -584,6 +621,10 @@ export const manifestsApi = {
             }
         } catch (serverErr) {
             console.warn('[manifestsApi.deployManifest] Server bulk update fallback:', serverErr);
+        }
+
+        if (authError) {
+            throw new Error(authError);
         }
 
         // 2. FALLBACK PATH: If server update failed, update individually with rate-limit retries

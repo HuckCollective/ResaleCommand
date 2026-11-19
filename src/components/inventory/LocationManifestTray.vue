@@ -815,6 +815,22 @@ import { BUCKET_ID, getAssetUrl, updateInventoryItem } from '../../lib/inventory
 import { hasOnlineReadyTag } from '../../lib/onlineCoCuration';
 import { useBodyScrollLock } from '../../composables/useBodyScrollLock';
 import { addToast } from '../../stores/toast';
+import { useAuth } from '../../composables/useAuth';
+import { useMemberCapabilities } from '../../lib/memberAccess';
+import { canItemBePlacedOrPrinted } from '../../lib/curatorOwnership';
+
+const { user } = useAuth();
+const { capabilities } = useMemberCapabilities();
+
+const checkStagedItemsPlacementAllowed = (): string => {
+  for (const item of stagedItems.value || []) {
+    const res = canItemBePlacedOrPrinted(item, capabilities.value, {
+      userId: user.value?.$id,
+    });
+    if (!res.allowed) return res.reason;
+  }
+  return '';
+};
 
 const ItemDrawer = defineAsyncComponent(() => import('../common/ItemDrawer.vue'));
 
@@ -1092,6 +1108,11 @@ const saveTitle = async () => {
 const isExporting = ref(false);
 const handleExportCsv = async () => {
   if (isExporting.value) return;
+  const blockReason = checkStagedItemsPlacementAllowed();
+  if (blockReason) {
+    addToast({ type: 'warning', message: blockReason });
+    return;
+  }
   isExporting.value = true;
   try {
     await exportManifestCsv('ricochet');
@@ -1134,6 +1155,11 @@ const handleReconcileFile = async (e: Event) => {
 
 // Lock / Unlock Handlers
 const handleLock = async () => {
+  const blockReason = checkStagedItemsPlacementAllowed();
+  if (blockReason) {
+    addToast({ type: 'warning', message: blockReason });
+    return;
+  }
   await lockActiveManifest();
   emit('drop-changed');
 };
@@ -1247,6 +1273,17 @@ const toggleAllVerified = () => {
 
 const confirmPlacement = async () => {
   if (!activeManifest.value || verifiedItemIds.value.size === 0 || isDeploying.value) return;
+  const targetSet = new Set(verifiedItemIds.value);
+  for (const item of stagedItems.value || []) {
+    if (!targetSet.has(item.$id)) continue;
+    const res = canItemBePlacedOrPrinted(item, capabilities.value, {
+      userId: user.value?.$id,
+    });
+    if (!res.allowed) {
+      addToast({ type: 'warning', message: res.reason });
+      return;
+    }
+  }
   isDeploying.value = true;
   
   const targetLoc = activeManifest.value.locationName || 'Memory Den';

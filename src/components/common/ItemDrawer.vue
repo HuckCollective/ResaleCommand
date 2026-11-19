@@ -16,6 +16,7 @@
           :suggestedTitleStr="suggestedTitleStr"
           :suggestedTagTitleStr="suggestedTagTitleStr"
           :activeTab="mainTab"
+          :canEdit="itemAccess.canSaveAny"
           @close="closeDrawer"
           @dismiss-shop-update="handleDismissShopUpdate"
           @flag-shop-update="handleFlagShopUpdate"
@@ -94,6 +95,48 @@
           </div>
         </div>
 
+        <!-- 2B. ACCESS & PRE-PLACEMENT BANNERS (Inline, zero stacked drawers §16) -->
+        <div
+          v-if="props.item?.$id && itemAccess.accessLevel === 'readonly'"
+          class="mx-4 sm:mx-6 mt-3 px-3.5 py-2.5 rounded-xl bg-info/10 border border-info/30 flex flex-wrap items-center justify-between gap-2 text-xs">
+          <div class="flex items-center gap-2 min-w-0">
+            <span class="font-bold text-base-content">👁️ Read-Only Collective View</span>
+            <span class="text-base-content/75">
+              {{ itemAccess.readOnlyReason }}
+            </span>
+          </div>
+          <button
+            v-if="canShowOnlineBinTab && mainTab !== 'online'"
+            type="button"
+            class="btn btn-xs btn-info text-info-content font-bold shrink-0"
+            @click="mainTab = 'online'">
+            🤝 Request Co-Curation
+          </button>
+        </div>
+
+        <div
+          v-else-if="itemAccess.accessLevel === 'co_curator'"
+          class="mx-4 sm:mx-6 mt-3 px-3.5 py-2.5 rounded-xl bg-secondary/10 border border-secondary/35 flex flex-wrap items-center justify-between gap-2 text-xs">
+          <div class="flex items-center gap-2 min-w-0">
+            <span class="badge badge-xs badge-secondary text-secondary-content font-bold shrink-0">Co-Curator Active</span>
+            <span class="text-base-content/85">
+              You can update photos, title, description, price, and location. Cost basis, barcode, splits, and sold status stay locked to {{ itemAccess.ownerPrefix || 'the owner' }}.
+            </span>
+          </div>
+        </div>
+
+        <div
+          v-if="itemAccess.canSaveAny && !itemAccess.canPlaceOrPrintTag"
+          class="mx-4 sm:mx-6 mt-2 px-3.5 py-2.5 rounded-xl bg-warning/15 border border-warning/40 flex flex-wrap items-center justify-between gap-2 text-xs">
+          <div class="flex items-center gap-2 min-w-0">
+            <span class="font-bold text-warning-content">🔒 Pre-Placement SKU Lock</span>
+            <span class="text-base-content/85">{{ itemAccess.placementBlockReason }}</span>
+          </div>
+          <a href="/profile" class="btn btn-xs btn-warning font-bold shrink-0">
+            Lock SKU on /profile ➔
+          </a>
+        </div>
+
         <!-- 3. LISTING DETAILS TAB (Extracted Subcomponent) -->
         <div
           class="flex-1 overflow-y-auto p-4 sm:p-6 space-y-6"
@@ -104,6 +147,10 @@
             :parentItem="parentItem"
             :lotChildren="lotChildren"
             v-model:isAcquisitionUnlocked="isAcquisitionUnlocked"
+            :canEditFull="itemAccess.canEditFull"
+            :canEditCoCurator="itemAccess.canEditCoCurator"
+            :canPlaceOrPrintTag="itemAccess.canPlaceOrPrintTag"
+            :placementBlockReason="itemAccess.placementBlockReason"
             v-model:showOnStorefront="showOnStorefront"
             v-model:saveIndividually="saveIndividually"
             v-model:descTab="descTab"
@@ -173,6 +220,7 @@
             :parentItem="parentItem"
             :lotChildren="lotChildren"
             :siblingItems="siblingItems"
+            :canEditFull="itemAccess.canEditFull"
             :uncombining="uncombining"
             :lotDashboardItem="lotDashboardItem"
             :totalSplitResaleValue="totalSplitResaleValue"
@@ -209,7 +257,10 @@
           :analyzing="analyzing"
           :analysisStatus="analysisStatus"
           :hasScoutResult="!!scoutResult"
-          :canAnalyze="canAnalyze"
+          :canAnalyze="canAnalyze && itemAccess.canSaveAny"
+          :canSave="itemAccess.canSaveAny"
+          :saveLabel="itemAccess.accessLevel === 'co_curator' ? 'Save Co-Curator Edits' : 'Save Item'"
+          :readOnlyReason="itemAccess.readOnlyReason"
           :processing="processing"
           :is-acquired="isAcquiredItem"
           @analyze="analyzeExistingItem"
@@ -416,6 +467,16 @@ import { saveItemToInventory, updateInventoryItem, getCollectionId, BUCKET_ID, R
 import { purchasesAPI } from '../../lib/purchases';
 import { account, databases, Query } from '../../lib/appwrite';
 import { useAuth } from '../../composables/useAuth';
+import { useMemberCapabilities } from '../../lib/memberAccess';
+import { getCoopJwtHeaders } from '../../lib/coopLedgerClient';
+import {
+    evaluateItemAccess,
+    extractItemOwnerPrefix,
+    isDraftPlaceholderUpc,
+    isPlacementMutation,
+    resolveMintingPrefixForMember,
+    sanitizeCoCuratorUpdatePayload,
+} from '../../lib/curatorOwnership';
 import { addToast } from '../../stores/toast';
 import { confirmDialog } from '../../stores/confirm';
 import { useLoader } from '../../composables/useLoader';
@@ -424,6 +485,7 @@ import { cleanTagTitle, condenseTitleForTag } from '../../lib/exportUtils';
 import { mergeAppraisalHistory } from '../../lib/appraisalCalibration';
 
 const { user, currentTeam } = useAuth();
+const { capabilities } = useMemberCapabilities();
 const { showLoader, hideLoader, updateLoader } = useLoader();
 const DB_ID = import.meta.env.PUBLIC_APPWRITE_DB_ID || 'resale_db';
 const orgPlacedLocations = ref([]);
@@ -518,16 +580,28 @@ const mergedInventoryItems = computed(() => {
 });
 
 function handleOpenBundle(targetItem) {
+    if (!itemAccess.value.canEditFull) {
+        addToast({ type: 'warning', message: itemAccess.value.readOnlyReason || 'Only the item owner or an Account Steward can build bundles.' });
+        return;
+    }
     closeDrawer();
     emit('open-bundle', targetItem || props.item);
 }
 
 function handleOpenCombine(targetItem) {
+    if (!itemAccess.value.canEditFull) {
+        addToast({ type: 'warning', message: itemAccess.value.readOnlyReason || 'Only the item owner or an Account Steward can combine items.' });
+        return;
+    }
     closeDrawer();
     emit('open-combine', targetItem || props.item);
 }
 
 function handleOpenRestock(targetItem) {
+    if (!itemAccess.value.canEditFull) {
+        addToast({ type: 'warning', message: itemAccess.value.readOnlyReason || 'Only the item owner or an Account Steward can restock items.' });
+        return;
+    }
     closeDrawer();
     emit('open-restock', targetItem || props.item);
 }
@@ -540,6 +614,51 @@ const {
     initForm: initFormState
 } = useItemDrawerForm();
 
+const activeCoCurationRecord = ref(null);
+const coCurationOwnerMatch = ref(false);
+
+const itemAccess = computed(() =>
+    evaluateItemAccess(props.item, capabilities.value, {
+        userId: user.value?.$id,
+        purchaseBuyerId: coCurationOwnerMatch.value ? user.value?.$id : undefined,
+        activeCoCuration: activeCoCurationRecord.value,
+    })
+);
+
+watch(
+    () => itemAccess.value.canEditFull,
+    (canFull) => {
+        if (!canFull) isAcquisitionUnlocked.value = false;
+    },
+    { immediate: true }
+);
+
+watch(
+    () => [props.item?.$id, capabilities.value.role, user.value?.$id],
+    async ([itemId, role, uid]) => {
+        activeCoCurationRecord.value = null;
+        coCurationOwnerMatch.value = false;
+        if (!itemId || !uid || role === 'founder') return;
+        const preliminary = evaluateItemAccess(props.item, capabilities.value, { userId: uid });
+        if (preliminary.accessLevel !== 'readonly' && preliminary.ownerPrefix) return;
+        try {
+            const headers = await getCoopJwtHeaders();
+            if (!headers['X-Appwrite-JWT']) return;
+            const res = await fetch(`/api/coop/co-curation?itemId=${encodeURIComponent(itemId)}`, {
+                headers,
+            });
+            if (!res.ok) return;
+            const data = await res.json();
+            if (props.item?.$id !== itemId) return;
+            if (data?.record) activeCoCurationRecord.value = data.record;
+            if (data?.access?.isOwner) coCurationOwnerMatch.value = true;
+        } catch {
+            // Non-blocking ownership lookup
+        }
+    },
+    { immediate: true }
+);
+
 const mainTab = ref('details');
 const descTab = ref('edit');
 const processing = ref(false);
@@ -549,6 +668,9 @@ const canShowOnlineBinTab = computed(() => checkCoCurationEligibility(props.item
 const isOnlineReadyActive = computed(() => hasOnlineReadyTag(editForm) || hasOnlineReadyTag(props.item));
 
 const handleCoCurationSaved = (payload) => {
+    if (payload?.record !== undefined) {
+        activeCoCurationRecord.value = payload.record;
+    }
     const updated = payload?.item;
     if (updated) {
         if (updated.storageLocation) {
@@ -588,6 +710,10 @@ const lotSplitterItemData = computed(() => {
 });
 
 const handleOpenSplitter = (payload = null) => {
+    if (!itemAccess.value.canEditFull) {
+        addToast({ type: 'warning', message: itemAccess.value.readOnlyReason || 'Only the item owner or an Account Steward can split lots.' });
+        return;
+    }
     const itemData = {
         ...(lotSplitterItemData.value || props.item),
         exitPlaybook: payload?.exitPlaybook || lotSplitterItemData.value?.exitPlaybook || props.item?.exitPlaybook
@@ -1345,6 +1471,10 @@ const handleFlagShopUpdate = async () => {
 const uncombining = ref(false);
 const uncombineLot = async () => {
     if (!props.item || !props.item.$id) return;
+    if (!itemAccess.value.canEditFull) {
+        addToast({ type: 'warning', message: itemAccess.value.readOnlyReason || 'Only the item owner or an Account Steward can undo a combine.' });
+        return;
+    }
     const count = lotChildren.value.length;
     const confirmMsg = count > 0
         ? `Rollback & uncombine this lot? This will restore all ${count} individual items back to active inventory and delete this combined Main Lot.`
@@ -1539,9 +1669,13 @@ const generateDescription = async () => {
 };
 
 const saveEdit = async () => {
+    if (!itemAccess.value.canSaveAny) {
+        addToast({ type: 'warning', message: itemAccess.value.readOnlyReason || 'Read-Only Collective View — edits are disabled.' });
+        return;
+    }
     processing.value = true;
     showLoader("Saving Item...", {
-        step: "Uploading media & updating database...",
+        step: "Uploading media & updating listing...",
         progress: 70,
         basket: 'solar:diskette-bold-duotone',
         cancelable: false
@@ -1585,6 +1719,39 @@ const saveEdit = async () => {
                     ? JSON.stringify(verifyChecklist.value)
                     : null)
         };
+
+        let finalPayload =
+            itemAccess.value.accessLevel === 'co_curator'
+                ? sanitizeCoCuratorUpdatePayload(payload, props.item)
+                : payload;
+
+        if (isPlacementMutation(finalPayload) && !itemAccess.value.canPlaceOrPrintTag) {
+            processing.value = false;
+            hideLoader();
+            addToast({
+                type: 'warning',
+                message: itemAccess.value.placementBlockReason || 'Lock your Curator SKU prefix on /profile before placing items in booths or Online Ready.'
+            });
+            return;
+        }
+
+        if (!props.item?.$id) {
+            const mintInfo = resolveMintingPrefixForMember(capabilities.value, user.value?.$id);
+            finalPayload.upcPrefix = mintInfo.prefix;
+        } else if (
+            itemAccess.value.canEditFull &&
+            isDraftPlaceholderUpc(props.item?.upc) &&
+            (capabilities.value.prefixStatus === 'locked' || capabilities.value.role === 'founder')
+        ) {
+            const mintInfo = resolveMintingPrefixForMember(capabilities.value, user.value?.$id);
+            if (!isDraftPlaceholderUpc(mintInfo.prefix)) {
+                finalPayload.upcPrefix = mintInfo.prefix;
+                if (isDraftPlaceholderUpc(finalPayload.upc)) {
+                    delete finalPayload.upc;
+                }
+            }
+        }
+
         let completed = false;
         const finishSave = () => {
             if (completed) return;
@@ -1592,17 +1759,17 @@ const saveEdit = async () => {
             processing.value = false;
             hideLoader();
         };
-        Object.defineProperty(payload, '__markAsync', {
+        Object.defineProperty(finalPayload, '__markAsync', {
             value: () => {},
             enumerable: false
         });
-        Object.defineProperty(payload, '__onSaveComplete', {
+        Object.defineProperty(finalPayload, '__onSaveComplete', {
             value: finishSave,
             enumerable: false
         });
         // Safety fallback in case a parent listener doesn't invoke updateInventoryItem/saveItemToInventory
         setTimeout(finishSave, 15000);
-        emit('save', payload);
+        emit('save', finalPayload);
     } catch (e) {
         processing.value = false;
         hideLoader();
@@ -2323,6 +2490,10 @@ const deconstructAiLot = () => {
 
 const sellOneQuantity = async () => {
     if (!props.item || editForm.quantity <= 1) return;
+    if (!itemAccess.value.canEditFull) {
+        addToast({ type: 'warning', message: itemAccess.value.readOnlyReason || 'Only the item owner or an Account Steward can extract sold units.' });
+        return;
+    }
     const defaultUnitPrice = Number(parseFloat(editForm.resalePrice || 0) || 0).toFixed(2);
     const unitSoldPriceRaw = window.prompt("How much did this 1 item sell for? (Enter a number)", defaultUnitPrice);
     if (unitSoldPriceRaw === null) return;
@@ -2357,7 +2528,10 @@ const sellOneQuantity = async () => {
             galleryImageIds: mediaPayload.galleryImageIds,
             quantity: 1,
             parentLotId: props.item.$id,
-            purchaseId: props.item.purchaseId || null
+            purchaseId: props.item.purchaseId || null,
+            upcPrefix:
+                extractItemOwnerPrefix(props.item) ||
+                resolveMintingPrefixForMember(capabilities.value, user.value?.$id).prefix
         };
 
         const extractedDoc = await saveItemToInventory(
@@ -2397,6 +2571,10 @@ const sellOneQuantity = async () => {
 
 const restockQuantity = async ({ mode = 'walkin', sourceItem = null, unitsToAdd, addedCostBasis, vendor = null }) => {
     if (!props.item || unitsToAdd < 1) return;
+    if (!itemAccess.value.canEditFull) {
+        addToast({ type: 'warning', message: itemAccess.value.readOnlyReason || 'Only the item owner or an Account Steward can restock this bin.' });
+        return;
+    }
     try {
         const currentQty = Math.max(1, Number(editForm.quantity || props.item.quantity || 1));
         const newQty = currentQty + Number(unitsToAdd);
@@ -2540,6 +2718,10 @@ const restockQuantity = async ({ mode = 'walkin', sourceItem = null, unitsToAdd,
 
 const splitOneActive = async () => {
     if (!props.item || editForm.quantity <= 1) return;
+    if (!itemAccess.value.canEditFull) {
+        addToast({ type: 'warning', message: itemAccess.value.readOnlyReason || 'Only the item owner or an Account Steward can split items.' });
+        return;
+    }
     try {
         const unitCost = Number(Number(Number(editForm.cost || 0) / Number(editForm.quantity || 1)).toFixed(2));
         const unitResale = parseFloat(editForm.resalePrice || 0);
@@ -2554,18 +2736,23 @@ const splitOneActive = async () => {
         }, { copyAll: false });
 
         const isRetail = /^(MD|DT)\b/i.test(editForm.storageLocation || '');
+        const allowRetail = isRetail && itemAccess.value.canPlaceOrPrintTag;
+        const rawLoc = String(editForm.storageLocation || props.item?.storageLocation || '').trim() || 'HG';
         const extraData = {
             cost: unitCost,
             resalePrice: unitResale,
-            status: editForm.status === 'sold' ? 'acquired' : (isRetail ? 'placed' : 'received'),
+            status: editForm.status === 'sold' ? 'acquired' : (allowRetail ? 'placed' : 'received'),
             sourcingLocation: editForm.sourcingLocation,
             orderId: editForm.orderId,
-            storageLocation: String(editForm.storageLocation || props.item?.storageLocation || '').trim() || 'HG',
+            storageLocation: allowRetail ? rawLoc : (isRetail ? 'HG' : rawLoc),
             imageId: mediaPayload.imageId,
             galleryImageIds: mediaPayload.galleryImageIds,
             quantity: 1,
             parentLotId: props.item.$id,
-            purchaseId: props.item.purchaseId || null
+            purchaseId: props.item.purchaseId || null,
+            upcPrefix:
+                extractItemOwnerPrefix(props.item) ||
+                resolveMintingPrefixForMember(capabilities.value, user.value?.$id).prefix
         };
 
         const splitDoc = await saveItemToInventory(

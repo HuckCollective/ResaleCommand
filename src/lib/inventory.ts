@@ -3,6 +3,7 @@ import type { Models } from 'appwrite';
 import { Permission, Role } from 'appwrite';
 import { withRateLimitRetry } from './retry';
 import { renderScoutReportMarkdown } from './scoutReportSections';
+import { isDraftPlaceholderUpc } from './curatorOwnership';
 
 import { isAlphaMode } from '../stores/env';
 
@@ -1371,7 +1372,14 @@ export async function saveItemToInventory(itemData: any, imageFile: File | null,
         // Guaranteed UPC barcode generation for all created and imported items (Goodwill, thrift receipts, POs)
         const prefix = extraData.upcPrefix || 'HUCK-';
         let finalUpc = extraData.upc;
-        if (!isValidOrgUpc(finalUpc, prefix)) {
+        if (isDraftPlaceholderUpc(finalUpc)) {
+            finalUpc = String(finalUpc).trim().toUpperCase();
+        } else if (isDraftPlaceholderUpc(prefix)) {
+            const cleanPrefix = String(prefix).trim().toUpperCase().endsWith('-')
+                ? String(prefix).trim().toUpperCase()
+                : `${String(prefix).trim().toUpperCase()}-`;
+            finalUpc = `${cleanPrefix}${Math.floor(1000 + Math.random() * 9000)}`;
+        } else if (!isValidOrgUpc(finalUpc, prefix)) {
             try {
                 finalUpc = await generateAutoUpc(prefix, teamId);
             } catch {
@@ -1798,10 +1806,24 @@ export async function updateInventoryItem(documentId: string, updates: Partial<a
         if (updates.purchaseId !== undefined) data.purchaseId = updates.purchaseId === '' ? null : updates.purchaseId;
         if (updates.saleId !== undefined) data.saleId = updates.saleId === '' ? null : updates.saleId;
         
-        // Ensure every updated item has a guaranteed valid UPC
+        // Ensure updated items retain draft placeholders unless a locked non-draft prefix upgrades them
+        const requestedLockedPrefix =
+            updates.upcPrefix && !isDraftPlaceholderUpc(updates.upcPrefix)
+                ? String(updates.upcPrefix).trim().toUpperCase()
+                : '';
         if (updates.upc !== undefined) {
-            if (isValidOrgUpc(updates.upc)) {
+            if (isDraftPlaceholderUpc(updates.upc)) {
+                if (requestedLockedPrefix) {
+                    data.upc = await generateAutoUpc(requestedLockedPrefix, currentDoc?.tenantId);
+                } else {
+                    data.upc = String(updates.upc).trim().toUpperCase();
+                }
+            } else if (isValidOrgUpc(updates.upc)) {
                 data.upc = updates.upc.trim().toUpperCase();
+            } else if (requestedLockedPrefix) {
+                data.upc = await generateAutoUpc(requestedLockedPrefix, currentDoc?.tenantId);
+            } else if (currentDoc && isDraftPlaceholderUpc(currentDoc?.upc)) {
+                data.upc = String(currentDoc.upc).trim().toUpperCase();
             } else if (currentDoc && !isValidOrgUpc(currentDoc?.upc)) {
                 const prefix = currentDoc?.upcPrefix || 'HUCK-';
                 data.upc = await generateAutoUpc(prefix, currentDoc?.tenantId);
@@ -1809,8 +1831,14 @@ export async function updateInventoryItem(documentId: string, updates: Partial<a
                 data.upc = String(updates.upc).trim().toUpperCase();
             }
         } else if (currentDoc && !isValidOrgUpc(currentDoc.upc)) {
-            const prefix = currentDoc.upcPrefix || 'HUCK-';
-            data.upc = await generateAutoUpc(prefix, currentDoc.tenantId);
+            if (isDraftPlaceholderUpc(currentDoc.upc)) {
+                if (requestedLockedPrefix) {
+                    data.upc = await generateAutoUpc(requestedLockedPrefix, currentDoc.tenantId);
+                }
+            } else {
+                const prefix = requestedLockedPrefix || currentDoc.upcPrefix || 'HUCK-';
+                data.upc = await generateAutoUpc(prefix, currentDoc.tenantId);
+            }
         }
 
         if (updates.locationSku !== undefined) data.locationSku = updates.locationSku === '' ? null : updates.locationSku;

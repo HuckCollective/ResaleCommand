@@ -6,6 +6,21 @@
     </div>
 
     <template v-else>
+      <div
+        v-if="isEdit && !purchaseAccess.canEdit"
+        class="alert alert-info rounded-2xl border border-info/30 text-xs flex flex-wrap items-center justify-between gap-2"
+      >
+        <span>
+          <strong>👁️ Read-Only Collective View:</strong> {{ purchaseAccess.readOnlyReason }}
+        </span>
+        <span
+          v-if="purchaseAccess.ownerBadge"
+          class="badge badge-sm badge-outline font-mono font-bold"
+        >
+          {{ purchaseAccess.ownerBadge }}
+        </span>
+      </div>
+
       <!-- 1. TOP HERO CARD: RECEIPT PHOTO & AI SCANNER (PhotoGalleryManager UI Pattern) -->
       <div class="card bg-base-100 shadow-xl border border-base-200 overflow-hidden">
         <!-- Header -->
@@ -108,7 +123,7 @@
                   <Icon icon="solar:magnifer-zoom-in-bold" class="w-4 h-4" />
                 </button>
                 <button 
-                  v-if="(isEdit && editMode) || !isEdit"
+                  v-if="purchaseAccess.canEdit && ((isEdit && editMode) || !isEdit)"
                   type="button" 
                   class="btn btn-sm btn-circle btn-error text-error-content shadow-md"
                   @click="removeReceiptPhoto"
@@ -126,7 +141,7 @@
             </div>
 
             <!-- Action Strip for Attached Receipt -->
-            <div class="flex flex-wrap items-center gap-2 pt-1">
+            <div v-if="!isEdit || purchaseAccess.canEdit" class="flex flex-wrap items-center gap-2 pt-1">
               <button 
                 type="button" 
                 class="btn btn-sm btn-warning text-warning-content font-black gap-1.5 rounded-xl shadow-xs active:scale-95 border border-warning-content/25"
@@ -217,7 +232,7 @@
             <div class="divider divider-horizontal my-0 hidden sm:flex"></div>
 
             <!-- Edit Mode Toggle -->
-            <div class="flex items-center" @click.stop>
+            <div v-if="purchaseAccess.canEdit" class="flex items-center" @click.stop>
               <label class="label cursor-pointer gap-2 py-1 px-2.5 rounded-xl bg-base-200/50 hover:bg-base-200 border border-base-300/40 transition-colors">
                 <span class="label-text text-xs font-bold uppercase tracking-wider text-base-content/70">Edit</span>
                 <input type="checkbox" class="toggle toggle-primary toggle-sm" v-model="editMode" />
@@ -1014,9 +1029,9 @@
 
         <!-- Tier 2: Ergonomic Command Actions -->
         <div class="max-w-xl w-full mx-auto px-2 py-1.5 flex items-center justify-between sm:justify-center gap-2 h-14">
-          <!-- Action 1: Delete PO (when isEdit) -->
+          <!-- Action 1: Delete PO (when isEdit & allowed) -->
           <button 
-            v-if="isEdit"
+            v-if="isEdit && purchaseAccess.canDelete"
             type="button"
             class="h-11 my-auto px-3 rounded-2xl flex flex-col items-center justify-center gap-0.5 transition-all duration-200 bg-base-200/80 hover:bg-error/15 text-error font-bold border border-error/25 shadow-xs active:scale-95 cursor-pointer"
             @click="handleDelete"
@@ -1027,9 +1042,9 @@
             <span class="font-extrabold uppercase text-[10px] tracking-tight leading-none whitespace-nowrap">Delete PO</span>
           </button>
 
-          <!-- Action 2: Receive All / Purchase (when isEdit) -->
+          <!-- Action 2: Receive All / Purchase (when isEdit & allowed) -->
           <button 
-            v-if="isEdit && (isDraft || hasUnreceivedItems)" 
+            v-if="isEdit && purchaseAccess.canEdit && (isDraft || hasUnreceivedItems)" 
             type="button"
             @click="handleReceiveOrPurchase(defaultBackstock)" 
             class="h-11 my-auto px-3 rounded-2xl flex flex-col items-center justify-center gap-0.5 transition-all duration-200 bg-success/15 hover:bg-success/25 text-success font-black border border-success/40 active:scale-95 cursor-pointer"
@@ -1041,6 +1056,7 @@
 
           <!-- Action 3: Save / Create PO (Elevated Solid Hero Action) -->
           <button 
+            v-if="!isEdit || purchaseAccess.canEdit"
             type="button"
             @click="editMode || !isEdit ? savePurchase() : (editMode = true)" 
             :disabled="saving"
@@ -1055,6 +1071,13 @@
               </span>
             </template>
           </button>
+
+          <span
+            v-else
+            class="badge badge-ghost border border-base-300 font-bold text-xs px-3 h-9"
+          >
+            👁️ Read-Only Collective PO
+          </span>
         </div>
       </div>
     </Teleport>
@@ -1069,6 +1092,8 @@ import { getItemsByPurchaseId, searchItems, linkItemToPurchase, updateInventoryI
 import { databases, storage, client, ID } from '../../lib/appwrite';
 import { Query } from 'appwrite';
 import { useAuth } from '../../composables/useAuth';
+import { useMemberCapabilities } from '../../lib/memberAccess';
+import { buildCuratorPoNumber, evaluatePurchaseAccess, resolveMintingPrefixForMember } from '../../lib/curatorOwnership';
 import { useDockClearance } from '../../composables/useDockClearance';
 import { useLoader } from '../../composables/useLoader';
 
@@ -1082,7 +1107,9 @@ import ScannerWidget from '../common/ScannerWidget.vue';
 import SlideOverDrawer from '../common/SlideOverDrawer.vue';
 import { getDefaultStorageLocation } from '../../lib/warehouses';
 
-const { currentTeam } = useAuth();
+const { currentTeam, user } = useAuth();
+const { capabilities } = useMemberCapabilities();
+const existingPurchaseBuyerId = ref('');
 const { showLoader, hideLoader } = useLoader();
 
 const defaultBackstock = computed(() => getDefaultStorageLocation(currentTeam.value));
@@ -1569,6 +1596,7 @@ onMounted(async () => {
             const p = await purchasesAPI.findPurchase(props.purchaseId);
             if (p) {
                 activeDocId.value = p.$id;
+                existingPurchaseBuyerId.value = String(p.buyerId || '').trim();
                 form.value = {
                     poNumber: p.poNumber || '',
                     vendor: p.vendor || '',
@@ -1584,16 +1612,23 @@ onMounted(async () => {
                     receiptImageId: p.receiptImageId || '',
                     tenantId: p.tenantId || null
                 };
-                
-                if (form.value.status === 'Draft' || !form.value.receiptImageId) {
-                    isExpanded.value = true;
-                    editMode.value = true;
-                }
 
                 await Promise.all([
                     loadLinkedItems(),
                     loadExpenses()
                 ]);
+                const canAutoEdit = evaluatePurchaseAccess(
+                    { $id: p.$id, poNumber: p.poNumber, buyerId: p.buyerId },
+                    items.value,
+                    capabilities.value,
+                    user.value?.$id
+                ).canEdit;
+                if ((form.value.status === 'Draft' || !form.value.receiptImageId) && canAutoEdit) {
+                    isExpanded.value = true;
+                    editMode.value = true;
+                } else {
+                    editMode.value = false;
+                }
                 await checkAndSyncPoStatus();
                 initRealtime();
             } else {
@@ -1947,11 +1982,14 @@ const scanReceiptImage = async (fileOrBlob = null, uploadedImageId = null) => {
         if (parsed.items && Array.isArray(parsed.items) && parsed.items.length > 0) {
             if (isEdit.value) {
                 const docId = activeDocId.value || props.purchaseId;
+                const mintInfo = resolveMintingPrefixForMember(capabilities.value, user.value?.$id);
                 await purchasesAPI.savePurchaseOrder({
                     purchaseId: docId,
                     poNumber: form.value.poNumber,
                     vendor: form.value.vendor || 'Receipt Purchase',
                     tenantId: currentTeam.value?.$id || null,
+                    buyerId: existingPurchaseBuyerId.value || user.value?.$id || null,
+                    upcPrefix: purchaseAccess.value.ownerPrefix || mintInfo.prefix,
                     receiptImageId: form.value.receiptImageId || targetImageId || undefined,
                     items: parsed.items
                 });
@@ -2019,7 +2057,42 @@ const loadLinkedItems = async () => {
     }
 };
 
+const purchaseAccess = computed(() => {
+    if (!isEdit.value) {
+        return {
+            isMine: true,
+            canEdit: !capabilities.value.isConsignor,
+            canDelete: !capabilities.value.isConsignor,
+            ownerPrefix: '',
+            ownerBadge: '',
+            readOnlyReason: capabilities.value.isConsignor ? 'Consignor view is read-only.' : '',
+        };
+    }
+    return evaluatePurchaseAccess(
+        {
+            $id: activeDocId.value || props.purchaseId,
+            poNumber: form.value.poNumber,
+            buyerId: existingPurchaseBuyerId.value,
+        },
+        items.value,
+        capabilities.value,
+        user.value?.$id
+    );
+});
+
+watch(
+    () => purchaseAccess.value.canEdit,
+    (allowed) => {
+        if (isEdit.value && !allowed) editMode.value = false;
+    },
+    { immediate: true }
+);
+
 const savePurchase = async () => {
+    if (isEdit.value && !purchaseAccess.value.canEdit) {
+        addToast(purchaseAccess.value.readOnlyReason || 'Read-Only Collective PO — edits are disabled.', 'warning');
+        return;
+    }
     saving.value = true;
     showLoader("Saving Purchase...");
     try {
@@ -2040,8 +2113,9 @@ const savePurchase = async () => {
             addToast("Purchase Order updated successfully!", "success");
         } else {
             // New PO! Route through savePurchaseOrder so receiptFile is uploaded safely and items are linked
+            const mintInfo = resolveMintingPrefixForMember(capabilities.value, user.value?.$id);
             const res = await purchasesAPI.savePurchaseOrder({
-                poNumber: form.value.poNumber || undefined,
+                poNumber: form.value.poNumber || buildCuratorPoNumber(mintInfo.prefix),
                 orderId: form.value.orderId || undefined,
                 vendor: form.value.vendor || 'Receipt Purchase',
                 purchaseDate: form.value.purchaseDate || new Date().toISOString(),
@@ -2050,6 +2124,8 @@ const savePurchase = async () => {
                 feeTotal: (form.value.shippingTotal || 0) + (form.value.handlingTotal || 0) + (form.value.taxTotal || 0) + (form.value.feeTotal || 0),
                 grandTotal: computedGrandTotal.value,
                 tenantId: currentTeam.value?.$id || null,
+                buyerId: user.value?.$id || null,
+                upcPrefix: mintInfo.prefix,
                 receiptFile: pendingReceiptFile.value || undefined,
                 receiptImageId: form.value.receiptImageId || undefined,
                 items: items.value.map(i => ({
@@ -2076,6 +2152,10 @@ const savePurchase = async () => {
 };
 
 const handleDelete = async () => {
+    if (!purchaseAccess.value.canDelete) {
+        addToast(purchaseAccess.value.readOnlyReason || 'Only the Purchase Order owner or an Account Steward can delete this PO.', 'warning');
+        return;
+    }
     const ok = await confirmDialog(
         'Deleting this Purchase Order removes this inbound record from Resale Command. All linked inventory items and recorded expenses will remain safely preserved in your inventory, but will no longer be linked to this PO. This action cannot be undone.',
         'Delete Purchase Order',

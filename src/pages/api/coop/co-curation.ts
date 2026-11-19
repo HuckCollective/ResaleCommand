@@ -26,6 +26,7 @@ import {
   type CoCurationRecord,
 } from '../../../lib/onlineCoCuration';
 import { addCalendarDaysYmd } from '../../../lib/salesChannels';
+import { extractItemOwnerPrefix, normalizeUpcPrefix } from '../../../lib/curatorOwnership';
 
 export const prerender = false;
 
@@ -36,19 +37,36 @@ const MAX_SNAPSHOT_CHARS = 16_000;
  * Original buyer = the `buyerId` on the item's purchase record. Items have no per-user owner field,
  * so legacy items without a purchase return '' and fall back to Founder-only decisions.
  */
-async function resolveItemOwnerUserId(ctx: CoopServerContext, itemDoc: any): Promise<string> {
+async function resolveItemOwnerUserId(
+  ctx: CoopServerContext,
+  itemDoc: any,
+  rosterMembers: readonly any[] = []
+): Promise<string> {
   const purchaseId = String(itemDoc?.purchaseId || '').trim();
-  if (!purchaseId) return '';
-  try {
-    const purchase: any = await ctx.databases.getDocument(
-      ctx.dbId,
-      getPurchasesCollectionId(),
-      purchaseId
-    );
-    return String(purchase?.buyerId || '').trim();
-  } catch {
-    return '';
+  if (purchaseId) {
+    try {
+      const purchase: any = await ctx.databases.getDocument(
+        ctx.dbId,
+        getPurchasesCollectionId(),
+        purchaseId
+      );
+      const buyerId = String(purchase?.buyerId || '').trim();
+      if (buyerId) return buyerId;
+    } catch {
+      // Fallback to SKU prefix lookup below
+    }
   }
+  const itemPrefix = extractItemOwnerPrefix(itemDoc);
+  if (itemPrefix && Array.isArray(rosterMembers)) {
+    const matched = rosterMembers.find((m: any) => {
+      const primary = normalizeUpcPrefix(m?.inventoryPrefix);
+      if (primary && primary === itemPrefix) return true;
+      const historical = Array.isArray(m?.historicalPrefixes) ? m.historicalPrefixes : [];
+      return historical.some((hp: any) => normalizeUpcPrefix(hp) === itemPrefix);
+    });
+    if (matched?.userId) return String(matched.userId).trim();
+  }
+  return '';
 }
 
 function docPayloadFor(record: CoCurationRecord, itemId: string, notes: string) {
@@ -202,7 +220,7 @@ export const GET: APIRoute = async ({ request, url }) => {
       let ownerUserId = '';
       try {
         const itemDoc = await ctx.databases.getDocument(ctx.dbId, getItemsCollectionId(), itemId);
-        ownerUserId = await resolveItemOwnerUserId(ctx, itemDoc);
+        ownerUserId = await resolveItemOwnerUserId(ctx, itemDoc, caller.rosterMembers || []);
       } catch {
         ownerUserId = '';
       }
@@ -275,15 +293,16 @@ export const POST: APIRoute = async ({ request }) => {
     const isActiveExisting =
       existing && (existing.status === 'claimed' || existing.status === 'listed' || existing.status === 'sold');
 
-    // Who may approve? The original buyer (purchase buyerId) or a Founder. Unknown owner => Founder only.
-    const ownerUserId = await resolveItemOwnerUserId(ctx, itemDoc);
+    // Who may approve? The original buyer (purchase buyerId or SKU owner) or a Founder. Unknown owner => Founder only.
+    const ownerUserId = await resolveItemOwnerUserId(ctx, itemDoc, caller.rosterMembers || []);
     const callerIsOwner = Boolean(ownerUserId) && ownerUserId === caller.userId;
     const canDecide = callerIsOwner || caller.isFounder;
     const callerIsRequester = Boolean(existing && existing.listerUserId === caller.userId);
     const existingIsPending = Boolean(existing && isPendingCoCurationStatus(existing.status));
     const callerDisplayName0 = caller.linkedMemberName || caller.name;
-    const requesterPrefix: 'HUCK-' | 'PDXGL-' | 'SWEAT-' =
-      caller.linkedPartner === 'PDXGL' ? 'PDXGL-' : caller.linkedPartner === 'SWEAT' ? 'SWEAT-' : 'HUCK-';
+    const requesterPrefix =
+      caller.linkedPrefix ||
+      (caller.linkedPartner ? `${String(caller.linkedPartner).replace(/-+$/, '')}-` : 'HUCK-');
 
     // ---------- Request-and-approve actions ----------
     if (action === 'request') {
@@ -526,12 +545,17 @@ export const POST: APIRoute = async ({ request }) => {
     // Build / merge claim_or_update
     const incoming = body?.record || {};
     const callerDisplayName = caller.linkedMemberName || caller.name;
-    const callerDefaultPrefix: 'HUCK-' | 'PDXGL-' | 'SWEAT-' =
-      caller.linkedPartner === 'PDXGL'
-        ? 'PDXGL-'
-        : caller.linkedPartner === 'SWEAT'
-          ? 'SWEAT-'
-          : 'HUCK-';
+    const callerDefaultPrefix =
+      caller.linkedPrefix ||
+      (caller.linkedPartner ? `${String(caller.linkedPartner).replace(/-+$/, '')}-` : 'HUCK-');
+
+    if (!caller.isFounder && caller.prefixStatus !== 'locked' && (callerIsOwner || !ownerUserId)) {
+      throw new CoopHttpError(
+        403,
+        'Lock your Curator SKU prefix on /profile before placing items in the Online Ready Bin.',
+        'PREFIX_NOT_LOCKED'
+      );
+    }
 
     // Terms agreed through request-and-approve (approvedAt) are locked for good; legacy claims lock once listed.
     const wasFrozen =

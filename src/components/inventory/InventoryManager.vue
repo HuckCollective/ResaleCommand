@@ -26,7 +26,7 @@
                                 </div>
                             </div>
                             <div class="card-actions justify-end mt-2">
-                                <button class="btn btn-sm btn-ghost text-error" @click="confirmDelete(item.$id)" :disabled="processingId === item.$id">✕</button>
+                                <button v-if="canEditItemFull(item)" class="btn btn-sm btn-ghost text-error" @click="confirmDelete(item.$id)" :disabled="processingId === item.$id">✕</button>
                                 <button class="btn btn-sm btn-primary" @click="openCheckout(item)">
                                     Purchase <Icon icon="solar:dollar-linear" class="w-4 h-4 ml-1 inline" />
                                 </button>
@@ -142,6 +142,10 @@
                             v-model:filterLocation="filterBinLocation"
                             v-model:filterSmartQueue="filterSmartQueue"
                             v-model:filterBarcode="filterUpcPrefix"
+                            :myPrefix="capabilities.prefixStatus === 'locked' ? capabilities.prefix : ''"
+                            :ownedPrefixes="capabilities.ownedPrefixes || []"
+                            :currentUserId="user?.$id || ''"
+                            :isConsignor="capabilities.isConsignor"
                             :filteredCount="filteredInventory.length"
                             :selectedCount="selectedItems.length"
                             :sortColumn="sortColumn"
@@ -296,12 +300,13 @@
                                     type="button"
                                     @click.stop.prevent="openEdit(item)" 
                                     class="btn btn-sm flex-1 btn-primary font-bold rounded-xl gap-1.5 h-8 min-h-8 text-xs touch-manipulation active:scale-95 shadow-2xs" 
-                                    title="Edit item in drawer"
+                                    :title="canEditItemFull(item) ? 'Edit item in drawer' : 'View item details'"
                                 >
-                                    <Icon icon="solar:pen-2-bold" class="w-3.5 h-3.5" />
-                                    <span>Edit</span>
+                                    <Icon :icon="canEditItemFull(item) ? 'solar:pen-2-bold' : 'solar:eye-bold'" class="w-3.5 h-3.5" />
+                                    <span>{{ canEditItemFull(item) ? 'Edit' : 'View' }}</span>
                                 </button>
                                 <button 
+                                    v-if="canEditItemFull(item)"
                                     type="button"
                                     @click.stop.prevent="confirmDelete(item.$id)" 
                                     class="btn btn-sm btn-ghost text-error/80 hover:text-error hover:bg-error/15 h-8 min-h-8 w-8 min-w-8 p-0 rounded-xl touch-manipulation active:scale-90" 
@@ -644,6 +649,17 @@ import { purchasesAPI, syncPurchaseStatusForItems } from '../../lib/purchases';
 import { generateGenericCsv, generateEbayCsv, generatePoshmarkCsv, generateRicochetCsv, downloadCsv } from '../../lib/exportUtils';
 import { warehousesApi } from '../../lib/warehouses';
 import { useInventoryBulkActions } from '../../composables/useInventoryBulkActions';
+import { useMemberCapabilities } from '../../lib/memberAccess';
+import { getCoopJwtHeaders } from '../../lib/coopLedgerClient';
+import {
+    canItemBePlacedOrPrinted,
+    evaluateItemAccess,
+    extractItemOwnerPrefix,
+    isDraftPlaceholderUpc,
+    isPlacementMutation,
+    isRetailPlacementLocation,
+    resolveMintingPrefixForMember,
+} from '../../lib/curatorOwnership';
 
 const props = defineProps({
     viewMode: {
@@ -787,6 +803,10 @@ const onLotSplitCompleted = async (payload) => {
 
 const handleDockSplitOneUnit = async (lotItem) => {
     if (!lotItem || Number(lotItem.quantity || 1) <= 1) return;
+    if (!canEditItemFull(lotItem)) {
+        addToast({ type: 'warning', message: 'Only the item owner or an Account Steward can split units from this batch.' });
+        return;
+    }
     showLoader("Splitting 1 Unit from Batch...", {
         step: "Allocating cost basis and generating dedicated SKU..."
     });
@@ -803,18 +823,24 @@ const handleDockSplitOneUnit = async (lotItem) => {
         }, { copyAll: false });
 
         const isRetail = /^(MD|DT)\b/i.test(lotItem.storageLocation || '');
+        const placementCheck = canItemBePlacedOrPrinted(lotItem, capabilities.value, { userId: user.value?.$id });
+        const allowRetail = isRetail && placementCheck.allowed;
+        const mintInfo = resolveMintingPrefixForMember(capabilities.value, user.value?.$id);
+        const ownerOrMintPrefix = extractItemOwnerPrefix(lotItem) || mintInfo.prefix;
+        const rawLoc = String(lotItem.storageLocation || '').trim() || 'HG';
         const extraData = {
             cost: unitCost,
             resalePrice: unitResale,
-            status: lotItem.status === 'sold' ? 'acquired' : (isRetail ? 'placed' : 'received'),
+            status: lotItem.status === 'sold' ? 'acquired' : (allowRetail ? 'placed' : 'received'),
             sourcingLocation: lotItem.sourcingLocation,
             orderId: lotItem.orderId,
-            storageLocation: String(lotItem.storageLocation || '').trim() || 'HG',
+            storageLocation: allowRetail ? rawLoc : (isRetail ? 'HG' : rawLoc),
             imageId: mediaPayload.imageId,
             galleryImageIds: mediaPayload.galleryImageIds,
             quantity: 1,
             parentLotId: lotItem.$id,
-            purchaseId: lotItem.purchaseId || null
+            purchaseId: lotItem.purchaseId || null,
+            upcPrefix: ownerOrMintPrefix
         };
 
         const splitDoc = await saveItemToInventory(
@@ -872,6 +898,12 @@ const onBundleSuccess = async (bundleId) => {
 
 const handleBulkDelete = async () => {
     if (selectedItems.value.length === 0) return;
+    const selectedObjects = inventoryItems.value.filter(i => selectedItems.value.includes(i.$id));
+    const blockReason = checkBulkItemsPermission(selectedObjects, { requireFull: true });
+    if (blockReason) {
+        addToast({ type: 'warning', message: blockReason });
+        return;
+    }
     const count = selectedItems.value.length;
     processing.value = true;
     try {
@@ -978,6 +1010,25 @@ const BUCKET = BUCKET_ID;
 
 // Use Composable
 const { currentTeam, user, loading: authLoading } = useAuth();
+const { capabilities } = useMemberCapabilities();
+
+const canEditItemFull = (item) =>
+    evaluateItemAccess(item, capabilities.value, { userId: user.value?.$id }).canEditFull;
+
+const checkBulkItemsPermission = (items, { requireFull = false, placement = false } = {}) => {
+    for (const it of items || []) {
+        if (placement) {
+            const pCheck = canItemBePlacedOrPrinted(it, capabilities.value, { userId: user.value?.$id });
+            if (!pCheck.allowed) return pCheck.reason;
+        } else {
+            const acc = evaluateItemAccess(it, capabilities.value, { userId: user.value?.$id });
+            if (requireFull ? !acc.canEditFull : !acc.canSaveAny) {
+                return acc.readOnlyReason || 'You do not have permission to modify one or more selected items.';
+            }
+        }
+    }
+    return '';
+};
 
 const { inventoryItems, totalItems, loading, error, fetchInventory, hasMore, loadNextPage, generateUpcs, getNextUpc } = useInventory();
 const loadMore = loadNextPage; // Alias for template
@@ -1062,7 +1113,9 @@ const {
 } = useInventoryFilters(inventoryItems, {
     purchases: allPurchases,
     orgPlacedLocations,
-    knownPrefixes: knownTeamPrefixes
+    knownPrefixes: knownTeamPrefixes,
+    ownedPrefixes: computed(() => capabilities.value.ownedPrefixes || []),
+    currentUserId: computed(() => user.value?.$id || '')
 });
 
 watch(currentTeam, (n) => { 
@@ -1393,6 +1446,11 @@ const isLegacyDropcastStudio = ref(
 const stageSelectedItemsToManifest = async () => {
     if (selectedItems.value.length === 0) return;
     const itemsToStage = inventoryItems.value.filter(i => selectedItems.value.includes(i.$id));
+    const blockReason = checkBulkItemsPermission(itemsToStage, { placement: true });
+    if (blockReason) {
+        addToast({ type: 'warning', message: blockReason });
+        return;
+    }
     const locId = activeManifest.value?.locationId || 'MD';
     const locName = activeManifest.value?.locationName || 'Memory Den';
     await addToActiveManifest(itemsToStage, locId, locName, false, true);
@@ -1423,7 +1481,9 @@ watch(selectedItems, async (newVal, oldVal) => {
         const addedIds = newVal.filter(id => !currentManifestIds.has(id));
 
         if (addedIds.length > 0) {
-            const itemsToAdd = inventoryItems.value.filter(i => addedIds.includes(i.$id) || (i.id && addedIds.includes(i.id)));
+            const itemsToAdd = inventoryItems.value
+                .filter(i => addedIds.includes(i.$id) || (i.id && addedIds.includes(i.id)))
+                .filter(i => canItemBePlacedOrPrinted(i, capabilities.value, { userId: user.value?.$id }).allowed);
             if (itemsToAdd.length > 0) {
                 const locId = activeManifest.value.locationId || 'MD';
                 const locName = activeManifest.value.locationName || 'Memory Den';
@@ -1438,7 +1498,9 @@ watch(selectedItems, async (newVal, oldVal) => {
         const addedIds = newVal.filter(id => !currentCastIds.has(String(id)));
 
         if (addedIds.length > 0) {
-            const itemsToAdd = inventoryItems.value.filter(i => addedIds.includes(i.$id) || (i.id && addedIds.includes(i.id)));
+            const itemsToAdd = inventoryItems.value
+                .filter(i => addedIds.includes(i.$id) || (i.id && addedIds.includes(i.id)))
+                .filter(i => canItemBePlacedOrPrinted(i, capabilities.value, { userId: user.value?.$id }).allowed);
             if (itemsToAdd.length > 0) {
                 stageItemsForCast(itemsToAdd, { openTray: false, silent: false });
             }
@@ -1479,23 +1541,40 @@ const pruneFilteredOutSelections = () => {
     selectedItems.value = selectedItems.value.filter(id => validItemIds.has(id));
 };
 
-const handleGenerateUpcs = async (targetPrefix = 'HUCK-') => {
-    const prefix = targetPrefix || currentTeam.value?.prefs?.upcPrefix || user.value?.prefs?.upcPrefix || 'HUCK-';
-    const missingCount = inventoryItems.value.filter(i => !i.upc).length;
-    if (missingCount === 0) {
-        addToast({ type: 'info', message: 'All items already have a UPC!' });
+const handleGenerateUpcs = async (targetPrefix = '') => {
+    const mintInfo = resolveMintingPrefixForMember(capabilities.value, user.value?.$id);
+    if (capabilities.value.role !== 'founder' && capabilities.value.prefixStatus !== 'locked') {
+        addToast({ type: 'warning', message: 'Lock your Curator SKU prefix on /profile before generating permanent barcodes.' });
+        return;
+    }
+    const prefix = capabilities.value.role === 'founder'
+        ? (targetPrefix || mintInfo.prefix || 'HUCK-')
+        : mintInfo.prefix;
+    const missingOwnItems = inventoryItems.value.filter(i => !i.upc && canEditItemFull(i));
+    if (missingOwnItems.length === 0) {
+        addToast({ type: 'info', message: 'All of your owned items already have a UPC!' });
         return;
     }
     const confirmed = await confirmDialog(
         `Generate ${prefix} UPCs`,
-        `You have ${missingCount} items without a UPC. This will automatically assign unique sequential IDs (e.g. ${prefix}0001) to each of them. Continue?`,
+        `You have ${missingOwnItems.length} item(s) without a UPC. This will automatically assign unique sequential IDs (e.g. ${prefix}0001) to each of them. Continue?`,
         'Generate',
         'cancel'
     );
     if (!confirmed) return;
     
     try {
-        const count = await generateUpcs(prefix);
+        let count = 0;
+        if (capabilities.value.role === 'founder' && missingOwnItems.length === inventoryItems.value.filter(i => !i.upc).length) {
+            count = await generateUpcs(prefix);
+        } else {
+            for (const item of missingOwnItems) {
+                const newUpc = getNextUpc(prefix);
+                await updateInventoryItem(item.$id, { upc: newUpc, upcPrefix: prefix });
+                item.upc = newUpc;
+                count++;
+            }
+        }
         pruneFilteredOutSelections();
         addToast({ type: 'success', message: `Successfully generated ${count} "${prefix}" UPCs!` });
     } catch (e) {
@@ -1504,6 +1583,10 @@ const handleGenerateUpcs = async (targetPrefix = 'HUCK-') => {
 };
 
 const handleCustomGenerateUpcs = async () => {
+    if (capabilities.value.role !== 'founder') {
+        addToast({ type: 'warning', message: 'Only Account Stewards can generate custom team prefixes.' });
+        return;
+    }
     const custom = window.prompt("Enter custom UPC Prefix (e.g. MYORG-):");
     if (!custom || !custom.trim()) return;
     let clean = custom.trim().toUpperCase();
@@ -1523,9 +1606,21 @@ const applyBulkUpc = async () => {
     bulkCustomUpcPrefix.value = '';
 };
 
-const bulkReassignUpc = async (prefix = 'HUCK-') => {
+const bulkReassignUpc = async (prefixArg = '') => {
     if (selectedItems.value.length === 0) return;
-    const count = selectedItems.value.length;
+    const mintInfo = resolveMintingPrefixForMember(capabilities.value, user.value?.$id);
+    if (capabilities.value.role !== 'founder' && capabilities.value.prefixStatus !== 'locked') {
+        addToast({ type: 'warning', message: 'Lock your Curator SKU prefix on /profile before reassigning barcodes.' });
+        return;
+    }
+    const selectedObjects = inventoryItems.value.filter(i => selectedItems.value.includes(i.$id));
+    const blockReason = checkBulkItemsPermission(selectedObjects, { requireFull: true });
+    if (blockReason) {
+        addToast({ type: 'warning', message: blockReason });
+        return;
+    }
+    const prefix = capabilities.value.role === 'founder' ? (prefixArg || mintInfo.prefix || 'HUCK-') : mintInfo.prefix;
+    const count = selectedObjects.length;
     const confirmed = await confirmDialog(
         `Reassign to ${prefix} UPCs`,
         `Are you sure you want to assign/replace barcodes for ${count} selected items with sequential "${prefix}" barcodes?`,
@@ -1537,14 +1632,11 @@ const bulkReassignUpc = async (prefix = 'HUCK-') => {
     processingBulk.value = true;
     try {
         let updated = 0;
-        for (const id of selectedItems.value) {
-            const item = inventoryItems.value.find(i => i.$id === id);
-            if (item) {
-                const newUpc = getNextUpc(prefix);
-                await updateInventoryItem(id, { upc: newUpc });
-                item.upc = newUpc;
-                updated++;
-            }
+        for (const item of selectedObjects) {
+            const newUpc = getNextUpc(prefix);
+            await updateInventoryItem(item.$id, { upc: newUpc, upcPrefix: prefix });
+            item.upc = newUpc;
+            updated++;
         }
         pruneFilteredOutSelections();
         addToast({ type: 'success', message: `Successfully updated ${updated} items to "${prefix}" UPCs!` });
@@ -1559,9 +1651,18 @@ const bulkReassignUpc = async (prefix = 'HUCK-') => {
 const applyBulkStatus = async () => {
     if (!bulkStatusTarget.value || selectedItems.value.length === 0) return;
     
-    processingBulk.value = true;
     const targetStatus = bulkStatusTarget.value;
     const itemIdsToUpdate = [...selectedItems.value];
+    const itemsToUpdate = inventoryItems.value.filter(i => itemIdsToUpdate.includes(i.$id));
+    const blockReason = checkBulkItemsPermission(itemsToUpdate, {
+        placement: String(targetStatus || '').toLowerCase() === 'placed'
+    });
+    if (blockReason) {
+        addToast({ type: 'warning', message: blockReason });
+        return;
+    }
+
+    processingBulk.value = true;
     const total = itemIdsToUpdate.length;
     
     const { showLoader, hideLoader } = useLoader();
@@ -1572,12 +1673,13 @@ const applyBulkStatus = async () => {
     });
     
     try {
-        // 1. Fast Server Path (uses elevated admin API key to bypass client rate limits)
+        // 1. Fast Server Path (uses elevated admin key to bypass client rate limits)
         let serverSuccess = false;
+        let authError = '';
         try {
             const resp = await fetch('/api/inventory/bulk-update', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: await getCoopJwtHeaders(),
                 body: JSON.stringify({
                     itemIds: itemIdsToUpdate,
                     updates: { status: targetStatus },
@@ -1586,7 +1688,10 @@ const applyBulkStatus = async () => {
                 })
             });
 
-            if (resp.ok) {
+            if (resp.status === 401 || resp.status === 403) {
+                const errData = await resp.json().catch(() => ({}));
+                authError = errData?.error || 'You do not have permission to update status for one or more selected items.';
+            } else if (resp.ok) {
                 const data = await resp.json();
                 if (data.success) {
                     serverSuccess = true;
@@ -1603,6 +1708,11 @@ const applyBulkStatus = async () => {
             }
         } catch (serverErr) {
             console.warn("Server bulk-update fell back to client execution:", serverErr);
+        }
+
+        if (authError) {
+            addToast({ type: 'error', message: authError });
+            return;
         }
 
         // 2. Client Fallback Path if server endpoint was unreachable
@@ -1674,10 +1784,18 @@ const applyBulkLocation = async () => {
     const rawTarget = bulkLocationTarget.value === '__custom__' ? bulkCustomLocation.value.trim() : bulkLocationTarget.value;
     if (!rawTarget || selectedItems.value.length === 0) return;
     
-    processingBulkLoc.value = true;
     const targetLoc = rawTarget;
     const isBooth = isRetailBoothLocation(targetLoc);
     const itemsToUpdate = inventoryItems.value.filter(i => selectedItems.value.includes(i.$id));
+    const blockReason = checkBulkItemsPermission(itemsToUpdate, {
+        placement: isBooth || isRetailPlacementLocation(targetLoc)
+    });
+    if (blockReason) {
+        addToast({ type: 'warning', message: blockReason });
+        return;
+    }
+
+    processingBulkLoc.value = true;
     const total = itemsToUpdate.length;
     let successCount = 0;
     
@@ -1689,11 +1807,12 @@ const applyBulkLocation = async () => {
     });
     
     try {
-        // Fast Server Path (bypasses browser rate limits with server admin API key)
+        // Fast Server Path (bypasses browser rate limits)
+        let authError = '';
         try {
             const resp = await fetch('/api/inventory/bulk-update', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: await getCoopJwtHeaders(),
                 body: JSON.stringify({
                     itemIds: selectedItems.value,
                     updates: { storageLocation: targetLoc },
@@ -1702,7 +1821,10 @@ const applyBulkLocation = async () => {
                 })
             });
 
-            if (resp.ok) {
+            if (resp.status === 401 || resp.status === 403) {
+                const errData = await resp.json().catch(() => ({}));
+                authError = errData?.error || 'You do not have permission to move one or more selected items.';
+            } else if (resp.ok) {
                 const data = await resp.json();
                 if (data.success) {
                     itemsToUpdate.forEach(item => {
@@ -1726,6 +1848,11 @@ const applyBulkLocation = async () => {
             }
         } catch (serverErr) {
             console.warn("Server bulk update fallback in InventoryManager:", serverErr);
+        }
+
+        if (authError) {
+            addToast({ type: 'error', message: authError });
+            return;
         }
 
         // Fallback Client Loop with pacing
@@ -1854,6 +1981,15 @@ const openFilterTray = () => {
 const onDockApplyBulkUnified = async (payload) => {
     const { itemIds, updates, clearSelection } = payload;
     if (!itemIds || itemIds.length === 0 || !updates) return;
+
+    const targetObjects = inventoryItems.value.filter(i => itemIds.includes(i.$id));
+    const blockReason = checkBulkItemsPermission(targetObjects, {
+        placement: isPlacementMutation(updates)
+    });
+    if (blockReason) {
+        addToast({ type: 'warning', message: blockReason });
+        return;
+    }
 
     processingBulk.value = true;
     try {
@@ -2304,11 +2440,14 @@ const saveEdit = async (payload) => {
     try {
         const targetItem = activeItem.value;
         const targetId = targetItem?.$id || targetItem?.id;
+        const mintInfo = resolveMintingPrefixForMember(capabilities.value, user.value?.$id);
         if (targetId) {
             // UPDATE EXISTING
-            const prefix = currentTeam.value?.prefs?.upcPrefix || user.value?.prefs?.upcPrefix || 'HUCK-';
+            const prefix = payload.upcPrefix || extractItemOwnerPrefix(targetItem) || mintInfo.prefix;
             if (!payload.upc && !targetItem.upc) {
-                payload.upc = getNextUpc(prefix);
+                payload.upc = isDraftPlaceholderUpc(prefix)
+                    ? `${prefix}${Math.floor(1000 + Math.random() * 9000)}`
+                    : getNextUpc(prefix);
             }
 
             const updatedDoc = await updateInventoryItem(targetId, payload);
@@ -2322,9 +2461,11 @@ const saveEdit = async (payload) => {
             }
         } else {
             // CREATE NEW
-            const prefix = currentTeam.value?.prefs?.upcPrefix || user.value?.prefs?.upcPrefix || 'HUCK-';
+            const prefix = payload.upcPrefix || mintInfo.prefix;
             if (!payload.upc) {
-                payload.upc = getNextUpc(prefix);
+                payload.upc = isDraftPlaceholderUpc(prefix)
+                    ? `${prefix}${Math.floor(1000 + Math.random() * 9000)}`
+                    : getNextUpc(prefix);
             }
             const effectiveTeamId = currentTeamId.value || user.value?.$id;
              const newDoc = await saveItemToInventory(
@@ -2429,6 +2570,11 @@ const capturePhoto = (context) => {
 
 // General
 const confirmDelete = async (id) => {
+    const targetItem = inventoryItems.value.find(i => i.$id === id);
+    if (targetItem && !canEditItemFull(targetItem)) {
+        addToast({ type: 'warning', message: 'You can only delete items under your own Curator SKU.' });
+        return;
+    }
     if (!(await confirmDialog('Are you sure you want to delete this item?', 'Delete Item', 'Delete', 'Cancel', 'btn-error'))) return;
     processingId.value = id;
     try {
@@ -2516,6 +2662,13 @@ const closeDeconstructModal = () => {
 
 const submitDeconstruct = async () => {
     if (!deconstructItemData.value || deconstructCount.value < 2) return;
+    if (!canEditItemFull(deconstructItemData.value)) {
+        addToast({ type: 'warning', message: 'Only the item owner or an Account Steward can split this lot.' });
+        return;
+    }
+    const splitMintInfo = resolveMintingPrefixForMember(capabilities.value, user.value?.$id);
+    const parentOwnerPrefix = extractItemOwnerPrefix(deconstructItemData.value) || splitMintInfo.prefix;
+    const isDraftSplit = isDraftPlaceholderUpc(parentOwnerPrefix);
     
     isDeconstructing.value = true;
     try {
@@ -2721,16 +2874,20 @@ const submitDeconstruct = async () => {
                 condition_notes: notes
             };
             
+            const rawChildLoc = String(parent.storageLocation || '').trim() || 'HG';
+            const childIsRetail = isRetailPlacementLocation(rawChildLoc);
+            const rawChildStatus = (parent.status === 'inbound' || parent.status === 'raw_lot') ? 'received' : parent.status;
             const extraData = {
                 cost: costPerUnit,
-                status: (parent.status === 'inbound' || parent.status === 'raw_lot') ? 'received' : parent.status,
+                status: isDraftSplit ? 'received' : (rawChildStatus === 'placed' && !childIsRetail ? 'received' : rawChildStatus),
                 sourcingLocation: "", // Clear sourcing location for child
-                storageLocation: String(parent.storageLocation || '').trim() || 'HG',
+                storageLocation: isDraftSplit && childIsRetail ? 'HG' : rawChildLoc,
                 imageId: childImageId || cloneItemMediaPayload(parent).imageId,
                 galleryImageIds: [], // Clear gallery images
                 keywords: parent.keywords,
                 quantity: 1,
                 parentLotId: parent.$id,
+                upcPrefix: parentOwnerPrefix,
                 ...(aiData ? { scoutData: aiData } : {})
             };
             
@@ -2939,12 +3096,21 @@ const closeCombineModal = () => {
 const submitCombine = async () => {
     const items = selectedItemsObjects.value;
     if (items.length < 2) return;
+    const blockReason = checkBulkItemsPermission(items, { requireFull: true });
+    if (blockReason) {
+        addToast({ type: 'warning', message: blockReason });
+        return;
+    }
+    const combineMintInfo = resolveMintingPrefixForMember(capabilities.value, user.value?.$id);
     
     savingCombine.value = true;
     try {
         if (combineMode.value === 'add_to_existing') {
             const targetLot = inventoryItems.value.find(i => i.$id === selectedTargetLotId.value);
             if (!targetLot) throw new Error("Destination Main Lot not found.");
+            if (!canEditItemFull(targetLot)) {
+                throw new Error('Only the destination lot owner or an Account Steward can merge items into it.');
+            }
 
             const itemsToAdd = items.filter(i => i.$id !== targetLot.$id);
             if (itemsToAdd.length === 0) throw new Error("No items selected to add to this lot.");
@@ -3052,12 +3218,14 @@ const submitCombine = async () => {
         const totalResale = items.reduce((sum, i) => sum + (parseFloat(i.resalePrice || i.listPrice || 0) || 0), 0);
 
         // 3. Create the new combined item document representing the combined lot (do not attach purchaseId to avoid double-counting on PO)
+        const combinedLotPrefix = extractItemOwnerPrefix(primaryItem) || combineMintInfo.prefix;
         const extraData = {
             cost: combineCost.value,
             resalePrice: totalResale ? Number(totalResale ?? 0).toFixed(2) : undefined,
-            status: primaryItem.status === 'acquired' ? 'in-stock' : (primaryItem.status || 'in-stock'),
+            status: primaryItem.status === 'acquired' ? 'received' : (primaryItem.status || 'received'),
             sourcingLocation: 'Combined Lot', // Fresh custom lot: no old auction URL
             storageLocation: primaryItem.storageLocation || 'HG',
+            upcPrefix: combinedLotPrefix,
             imageId: mainImageId,
             galleryImageIds: combinedGallery,
             keywords: Array.from(new Set(items.flatMap(i => i.keywords || []))),

@@ -46,6 +46,8 @@ export interface SavePurchaseOrderPayload {
     feeTotal?: number;
     grandTotal?: number;
     tenantId?: string | null;
+    buyerId?: string | null;
+    upcPrefix?: string | null;
     receiptImageId?: string | null;
     receiptFile?: File | null;
     items?: PurchaseLineItem[];
@@ -288,7 +290,8 @@ export const purchasesAPI = {
                     subtotal,
                     feeTotal,
                     grandTotal,
-                    tenantId: tenantId || undefined
+                    tenantId: tenantId || undefined,
+                    buyerId: payload.buyerId || undefined
                 };
                 if (receiptImageId) createPayload.receiptImageId = receiptImageId;
                 const created = await purchasesAPI.createPurchase(createPayload);
@@ -341,7 +344,8 @@ export const purchasesAPI = {
                         status: 'acquired',
                         storageLocation: safeLoc,
                         sourcingLocation: vendor,
-                        receiptImageId: receiptImageId || undefined
+                        receiptImageId: receiptImageId || undefined,
+                        upcPrefix: payload.upcPrefix || undefined
                     },
                     tenantId || undefined
                 );

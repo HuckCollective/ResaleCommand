@@ -1416,6 +1416,7 @@ import { account, storage, databases, ID } from '../../lib/appwrite';
 import { Permission, Role } from 'appwrite';
 import { useAuth } from '../../composables/useAuth';
 import { useMemberCapabilities } from '../../lib/memberAccess';
+import { isDraftPlaceholderUpc, isRetailPlacementLocation, resolveMintingPrefixForMember } from '../../lib/curatorOwnership';
 import { useCart } from '../../composables/useCart';
 import { useScoutPurchase } from '../../composables/useScoutPurchase';
 import { useBodyScrollLock } from '../../composables/useBodyScrollLock';
@@ -3546,21 +3547,34 @@ async function saveDirectToInventory(payload: any) {
         permissions = [Permission.read(role), Permission.update(role), Permission.delete(role)];
     }
 
+    const mintInfo = resolveMintingPrefixForMember(capabilities.value, user.value?.$id);
+    const targetPrefix = payload.upcPrefix || mintInfo.prefix;
     let finalUpc = payload.upc;
     if (!finalUpc) {
-        try {
-            finalUpc = await generateAutoUpc('HUCK-', teamId);
-        } catch {
-            finalUpc = `HUCK-${Math.floor(1000 + Math.random() * 9000)}`;
+        if (isDraftPlaceholderUpc(targetPrefix)) {
+            finalUpc = `${targetPrefix}${Math.floor(1000 + Math.random() * 9000)}`;
+        } else {
+            try {
+                finalUpc = await generateAutoUpc(targetPrefix, teamId);
+            } catch {
+                finalUpc = `${targetPrefix}${Math.floor(1000 + Math.random() * 9000)}`;
+            }
         }
     }
 
+    const rawLoc = String(payload.storageLocation || '').trim() || 'HG';
+    const allowRetail = !isDraftPlaceholderUpc(finalUpc) && (mintInfo.mode === 'locked' || capabilities.value.role === 'founder');
+    const safeLoc = !allowRetail && isRetailPlacementLocation(rawLoc) ? 'HG' : rawLoc;
+    const safeStatus = !allowRetail && String(payload.status || '').toLowerCase() === 'placed'
+        ? 'received'
+        : (payload.status || 'acquired');
+
     const doc: any = {
         ...payload,
-        storageLocation: String(payload.storageLocation || '').trim() || 'HG',
+        storageLocation: safeLoc,
         upc: finalUpc,
         tenantId: teamId || null,
-        status: payload.status || 'acquired'
+        status: safeStatus
     };
 
     // Defensively sanitize imageId and galleryImageIds against schema violations (Appwrite 255 char limit)

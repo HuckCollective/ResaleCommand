@@ -53,8 +53,29 @@
           </button>
         </div>
 
-        <!-- Right Side: Item Count & Quick Actions -->
-        <div class="flex items-center gap-2 justify-between sm:justify-end text-xs shrink-0">
+        <!-- Right Side: My/All Segmented Toggle, Item Count & Quick Actions -->
+        <div class="flex items-center gap-2 justify-between sm:justify-end text-xs shrink-0 flex-wrap">
+          <div
+            v-if="!capabilities.isConsignor"
+            class="join border border-base-300 rounded-xl overflow-hidden shrink-0"
+          >
+            <button
+              type="button"
+              class="btn btn-xs join-item h-8 px-2.5 font-bold cursor-pointer"
+              :class="ownerScope === 'mine' ? 'btn-primary text-primary-content' : 'btn-ghost bg-base-200/70 text-base-content/80'"
+              @click="ownerScope = 'mine'; currentPage = 1"
+            >
+              My Purchases
+            </button>
+            <button
+              type="button"
+              class="btn btn-xs join-item h-8 px-2.5 font-bold cursor-pointer"
+              :class="ownerScope === 'all' ? 'btn-neutral text-neutral-content' : 'btn-ghost bg-base-200/70 text-base-content/75'"
+              @click="ownerScope = 'all'; currentPage = 1"
+            >
+              All Collective
+            </button>
+          </div>
           <span class="badge badge-sm badge-ghost font-mono opacity-70">
             {{ filteredPurchases.length }} purchase{{ filteredPurchases.length === 1 ? '' : 's' }}
           </span>
@@ -247,14 +268,22 @@
         <!-- Card Header: PO Number + Price + Status -->
         <div class="flex items-start justify-between gap-2">
           <div class="space-y-1">
-            <a 
-              :href="`/purchases/${purchase.poNumber || purchase.$id}`" 
-              class="btn btn-xs btn-primary text-primary-content font-mono font-black gap-1.5 shadow-xs px-2.5 rounded-lg inline-flex items-center"
-              title="Open Purchase Order"
-            >
-              <Icon icon="solar:document-text-bold" class="w-3.5 h-3.5 shrink-0" />
-              <span>{{ purchase.poNumber || 'PO-Pending' }}</span>
-            </a>
+            <div class="flex items-center gap-1.5 flex-wrap">
+              <a 
+                :href="`/purchases/${purchase.poNumber || purchase.$id}`" 
+                class="btn btn-xs btn-primary text-primary-content font-mono font-black gap-1.5 shadow-xs px-2.5 rounded-lg inline-flex items-center"
+                title="Open Purchase Order"
+              >
+                <Icon icon="solar:document-text-bold" class="w-3.5 h-3.5 shrink-0" />
+                <span>{{ purchase.poNumber || 'PO-Pending' }}</span>
+              </a>
+              <span
+                v-if="getPurchaseAccess(purchase).ownerBadge"
+                class="badge badge-xs badge-outline font-mono font-bold"
+              >
+                {{ getPurchaseAccess(purchase).ownerBadge }}
+              </span>
+            </div>
             <div class="text-[11px] font-medium opacity-70 flex items-center gap-2 flex-wrap pt-0.5">
               <span class="flex items-center gap-1" title="Purchase / Receipt Date">
                 <Icon icon="solar:calendar-linear" class="w-3 h-3 text-primary" />
@@ -341,6 +370,7 @@
           </button>
 
           <button 
+            v-if="getPurchaseAccess(purchase).canDelete"
             @click="deletePurchaseOrder(purchase)" 
             class="btn btn-sm btn-ghost text-error hover:bg-error/10 btn-square rounded-xl min-h-[38px] w-10 shrink-0" 
             title="Delete Purchase Order"
@@ -401,14 +431,22 @@
             <tr v-for="purchase in paginatedPurchases" :key="purchase.$id" class="hover:bg-base-200/40 transition-colors">
               <!-- PO Number (Open PO Button with Code) -->
               <td class="py-3 px-4 font-bold whitespace-nowrap">
-                <a 
-                  :href="`/purchases/${purchase.poNumber || purchase.$id}`" 
-                  class="btn btn-xs btn-primary text-primary-content font-mono font-black gap-1.5 shadow-xs px-2.5 h-8 rounded-lg inline-flex items-center hover:scale-105 transition-transform"
-                  title="Open Purchase Order"
-                >
-                  <Icon icon="solar:document-text-bold" class="w-3.5 h-3.5 shrink-0" />
-                  <span>{{ purchase.poNumber || 'PO-Pending' }}</span>
-                </a>
+                <div class="inline-flex items-center gap-1.5">
+                  <a 
+                    :href="`/purchases/${purchase.poNumber || purchase.$id}`" 
+                    class="btn btn-xs btn-primary text-primary-content font-mono font-black gap-1.5 shadow-xs px-2.5 h-8 rounded-lg inline-flex items-center hover:scale-105 transition-transform"
+                    title="Open Purchase Order"
+                  >
+                    <Icon icon="solar:document-text-bold" class="w-3.5 h-3.5 shrink-0" />
+                    <span>{{ purchase.poNumber || 'PO-Pending' }}</span>
+                  </a>
+                  <span
+                    v-if="getPurchaseAccess(purchase).ownerBadge"
+                    class="badge badge-xs badge-outline font-mono font-bold"
+                  >
+                    {{ getPurchaseAccess(purchase).ownerBadge }}
+                  </span>
+                </div>
               </td>
 
               <!-- External ID / Tracking -->
@@ -511,6 +549,7 @@
                   </button>
 
                   <button 
+                    v-if="getPurchaseAccess(purchase).canDelete"
                     @click="deletePurchaseOrder(purchase)" 
                     class="btn btn-xs btn-ghost text-error hover:bg-error/10 btn-square h-8 w-8 rounded-lg" 
                     title="Delete this Purchase Order"
@@ -589,6 +628,7 @@ import { purchasesAPI, getPurchasesCollectionId } from '../../lib/purchases';
 import { getCollectionId, DB_ID, BUCKET_ID } from '../../lib/inventory';
 import { isRefundedPurchaseOrder, parseTrackingNumbers } from '../../lib/shipmentTracking';
 import { useMemberCapabilities } from '../../lib/memberAccess';
+import { evaluatePurchaseAccess } from '../../lib/curatorOwnership';
 import { Query } from 'appwrite';
 import { databases, storage, client } from '../../lib/appwrite';
 import { addToast } from '../../stores/toast';
@@ -604,11 +644,49 @@ const BulkImport = defineAsyncComponent(() => import('../inventory/BulkImport.vu
 
 import { usePurchases } from '../../composables/usePurchases';
 import { useInventory } from '../../composables/useInventory';
+import { useAuth } from '../../composables/useAuth';
 
 const { showLoader, hideLoader } = useLoader();
+const { user } = useAuth();
 const { purchases, loading, fetchPurchases } = usePurchases();
 const { inventoryItems, fetchInventory } = useInventory();
 const { capabilities } = useMemberCapabilities();
+const ownerScope = ref('all');
+
+const linkedItemsByPurchaseKey = computed(() => {
+    const map = new Map();
+    const appendKey = (rawKey, item) => {
+        const key = String(rawKey || '').trim();
+        if (!key) return;
+        if (!map.has(key)) map.set(key, []);
+        map.get(key).push(item);
+    };
+    for (const item of inventoryItems.value || []) {
+        appendKey(item.purchaseId, item);
+        appendKey(item.orderId, item);
+        appendKey(item.cartId, item);
+    }
+    return map;
+});
+
+const getLinkedItemsForPurchase = (p) => {
+    if (!p) return [];
+    const out = [];
+    const seen = new Set();
+    for (const key of [p.$id, p.orderId, p.poNumber]) {
+        const matches = linkedItemsByPurchaseKey.value.get(String(key || '').trim()) || [];
+        for (const it of matches) {
+            const id = it.$id || it.id || it.upc;
+            if (id && seen.has(id)) continue;
+            if (id) seen.add(id);
+            out.push(it);
+        }
+    }
+    return out;
+};
+
+const getPurchaseAccess = (p) =>
+    evaluatePurchaseAccess(p, getLinkedItemsForPurchase(p), capabilities.value, user.value?.$id);
 
 // Un-acquired Scout Buy Trackers (status === 'Draft' or SC- draft trackers) live strictly in /scout/trackers until acquired
 const isUnacquiredBuyTracker = (p) => {
@@ -798,6 +876,11 @@ const getTimestamp = (p) => {
 
 const filteredPurchases = computed(() => {
     let list = acquiredPurchases.value || [];
+
+    // 0. Owner Scope Filter (My Purchases vs All Collective)
+    if (ownerScope.value === 'mine') {
+        list = list.filter(p => getPurchaseAccess(p).isMine);
+    }
     
     // 1. Status Filter Pills
     if (statusFilter.value === 'needs-action') {
@@ -1107,6 +1190,11 @@ const handleUndoImport = async () => {
 const cleaningEmpty = ref(false);
 
 const deletePurchaseOrder = async (purchase) => {
+    const acc = getPurchaseAccess(purchase);
+    if (!acc.canDelete) {
+        addToast(acc.readOnlyReason || 'Only the Purchase Order owner or an Account Steward can delete this Purchase Order.', 'warning');
+        return;
+    }
     const label = purchase.poNumber || purchase.orderId || purchase.$id;
     const ok = await confirmDialog(
         `Delete Purchase Order "${label}"? (Active inventory items will not be affected).`,
@@ -1157,8 +1245,9 @@ const cleanEmptyPurchases = async () => {
             }
         }
 
-        // 2. Identify POs with 0 active items (never auto-delete active Buy Trackers)
+        // 2. Identify owner-permitted POs with 0 active items (never auto-delete active Buy Trackers or other Curators' POs)
         const emptyPOs = acquiredPurchases.value.filter(p => {
+            if (!getPurchaseAccess(p).canDelete) return false;
             const hasPurchaseId = activePurchaseIds.has(p.$id);
             const hasCartId = p.orderId && activePurchaseIds.has(String(p.orderId).trim());
             return !hasPurchaseId && !hasCartId;

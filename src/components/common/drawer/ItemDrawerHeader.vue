@@ -130,6 +130,7 @@
                         Needs Shop Update
                     </span>
                     <button 
+                        v-if="canEdit"
                         type="button" 
                         class="btn btn-xs btn-success text-[10px] h-6 min-h-0 px-2 font-bold gap-1 shadow-xs"
                         @click.stop="emit('dismiss-shop-update')"
@@ -142,7 +143,7 @@
 
                 <!-- Optional Quick Flag when not set -->
                 <button
-                    v-else-if="item?.$id"
+                    v-else-if="item?.$id && canEdit"
                     type="button"
                     class="btn btn-xs btn-ghost border border-dashed border-base-300 text-base-content/60 hover:text-base-content hover:border-base-content/40 text-[10px] h-6 min-h-0 px-2 hidden sm:inline-flex items-center gap-1"
                     @click.stop="emit('flag-shop-update')"
@@ -384,6 +385,10 @@ const props = defineProps({
     activeTab: {
         type: String,
         default: 'details'
+    },
+    canEdit: {
+        type: Boolean,
+        default: true
     }
 });
 

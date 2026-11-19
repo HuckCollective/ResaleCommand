@@ -33,7 +33,7 @@ export interface MdVerifyRow {
   upc: string;
   expectedRcUpc: string;
   verifyStatus: 'VERIFIED_MATCH' | 'MISSING_IN_MD' | 'MISMATCH_UPC' | 'UNLINKED_IN_RC';
-  partner?: 'HUCK' | 'PDXGL' | 'BB' | 'UNLINKED';
+  partner?: string;
   conflictReason?: string;
   name: string;
   agreedPrice: number;
@@ -56,7 +56,7 @@ export interface MdVerifyReportPayload {
 
 export interface MdSkuMeta {
   upc: string;
-  partner: 'HUCK' | 'PDXGL' | 'BB';
+  partner: string;
   title: string;
   price: number;
   status: string;
@@ -340,18 +340,22 @@ async function savePersistedLivePayloadToAppwrite(
   }
 }
 
-function detectPartnerFromUpcOrTitle(upc: string, title = ''): 'HUCK' | 'PDXGL' | 'BB' {
-  const u = cleanCatalogSku(upc).toUpperCase();
-  if (u.startsWith('BB-') || isBbConsignorRow({ upc: u, title })) return 'BB';
-  if (u.startsWith('PDXGL-')) return 'PDXGL';
-  return 'HUCK';
-}
-
 function isValidProductionUpc(upc: string): boolean {
   const u = cleanCatalogSku(upc).toUpperCase();
-  if (!u || !/^(HUCK-|PDXGL-|BB-)/i.test(u)) return false;
+  if (!u || /^0EJ/i.test(u)) return false;
+  if (/^(DRAFT|TEMP|PENDING|COMMONS|SWEAT|UNASSIGNED|PO|SC|ITEM)-/i.test(u)) return false;
   if (/test|demo|sample/i.test(u)) return false;
-  return true;
+  const head = u.split('-')[0] || '';
+  if (!/[A-Z]/.test(head)) return false;
+  return /^[A-Z0-9]{2,8}-\d{3,6}$/i.test(u);
+}
+
+function detectPartnerFromUpcOrTitle(upc: string, title = ''): string {
+  const u = cleanCatalogSku(upc).toUpperCase();
+  if (u.startsWith('BB-') || isBbConsignorRow({ upc: u, title })) return 'BB';
+  const m = u.match(/^([A-Z0-9]{2,8})-/);
+  if (m && isValidProductionUpc(u)) return m[1];
+  return 'HUCK';
 }
 
 export async function buildLiveMdPayloadFromAppwrite(locCode = 'MD'): Promise<{
@@ -378,7 +382,7 @@ export async function buildLiveMdPayloadFromAppwrite(locCode = 'MD'): Promise<{
   const allDocs: any[] = [];
   const candidatesBySku = new Map<string, any[]>();
   const allExistingUpcs = new Set<string>();
-  let maxHuckNum = 9740;
+  const maxNumByPrefix = new Map<string, number>([['HUCK-', 9740]]);
   const databasesClient = apiKey && databases ? databases : null;
 
   if (databases) {
@@ -397,10 +401,12 @@ export async function buildLiveMdPayloadFromAppwrite(locCode = 'MD'): Promise<{
           const title = String(doc?.title || doc?.identity || '');
           if (upc) {
             allExistingUpcs.add(upc);
-            const m = upc.match(/^HUCK-(\d{4})$/);
-            if (m) {
-              const n = parseInt(m[1], 10);
-              if (n > maxHuckNum && n < 9900) maxHuckNum = n;
+            const m = upc.match(/^([A-Z0-9]{2,8}-)(\d{3,5})$/);
+            if (m && isValidProductionUpc(upc)) {
+              const pfx = m[1];
+              const n = parseInt(m[2], 10);
+              const prevMax = maxNumByPrefix.get(pfx) ?? 1000;
+              if (n > prevMax && n < 9900) maxNumByPrefix.set(pfx, n);
             }
           }
           if (!sku || !/^0EJ/i.test(sku) || !isValidProductionUpc(upc)) continue;
@@ -417,15 +423,19 @@ export async function buildLiveMdPayloadFromAppwrite(locCode = 'MD'): Promise<{
     }
   }
 
-  const allocateUniqueHuckUpc = (preferred?: string): string => {
+  const allocateUniqueUpcForPrefix = (targetPrefix = 'HUCK-', preferred?: string): string => {
+    const cleanPfx =
+      (String(targetPrefix || 'HUCK-').trim().toUpperCase().replace(/-+$/, '') || 'HUCK') + '-';
     if (preferred && !usedUpcs.has(preferred) && !allExistingUpcs.has(preferred)) {
       usedUpcs.add(preferred);
       allExistingUpcs.add(preferred);
       return preferred;
     }
+    let nextNum = maxNumByPrefix.get(cleanPfx) ?? (cleanPfx === 'HUCK-' ? 9740 : 1000);
     while (true) {
-      maxHuckNum++;
-      const cand = `HUCK-${String(maxHuckNum).padStart(4, '0')}`;
+      nextNum++;
+      maxNumByPrefix.set(cleanPfx, nextNum);
+      const cand = `${cleanPfx}${String(nextNum).padStart(4, '0')}`;
       if (!usedUpcs.has(cand) && !allExistingUpcs.has(cand)) {
         usedUpcs.add(cand);
         allExistingUpcs.add(cand);
@@ -480,7 +490,12 @@ export async function buildLiveMdPayloadFromAppwrite(locCode = 'MD'): Promise<{
 
     if (!chosen && docsForSku.length > 0) {
       const fallbackDoc = docsForSku[0];
-      const newUniqueUpc = allocateUniqueHuckUpc();
+      const existingUpcMatch = cleanCatalogSku(fallbackDoc?.upc)
+        .toUpperCase()
+        .match(/^([A-Z0-9]{2,8}-)/);
+      const preservePrefix =
+        existingUpcMatch && isValidProductionUpc(fallbackDoc?.upc) ? existingUpcMatch[1] : 'HUCK-';
+      const newUniqueUpc = allocateUniqueUpcForPrefix(preservePrefix);
       if (databasesClient && fallbackDoc?.$id) {
         try {
           await databasesClient.updateDocument(dbId, itemsCol, fallbackDoc.$id, {
@@ -622,7 +637,7 @@ export async function buildLiveMdPayloadFromAppwrite(locCode = 'MD'): Promise<{
     let resolvedPrice = 0;
     let resolvedStatus = 'placed';
 
-    if (!/^(HUCK-|PDXGL-|BB-)/i.test(resolvedUpc)) {
+    if (!isValidProductionUpc(resolvedUpc)) {
       const matchedDoc = byId.get(String(rawUpcOrId).trim());
       if (matchedDoc?.upc) {
         resolvedUpc = cleanCatalogSku(matchedDoc.upc).toUpperCase();

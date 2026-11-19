@@ -58,13 +58,14 @@
             <input
               type="text"
               v-model="editForm.sourcingLocation"
+              :disabled="!isAnyEditAllowed"
               placeholder="Paste ShopGoodwill Item # or Listing URL..."
               class="input input-bordered input-sm join-item grow font-mono text-xs bg-base-100 rounded-l-xl h-10"
               @keydown.enter.prevent="$emit('fetch-source-data')" />
             <button
               class="btn btn-primary btn-sm join-item shrink-0 gap-1.5 font-bold rounded-r-xl h-10 px-4"
               @click="$emit('fetch-source-data')"
-              :disabled="!editForm.sourcingLocation || fetchingImages"
+              :disabled="!isAnyEditAllowed || !editForm.sourcingLocation || fetchingImages"
               title="Fetch photos & metadata from listing">
               <span
                 v-if="fetchingImages"
@@ -194,8 +195,9 @@
             </div>
           </div>
 
-          <!-- Lock / Unlock Toggle Button -->
+          <!-- Lock / Unlock Toggle Button (Full Owners & Founders Only) -->
           <button
+            v-if="canEditFull"
             type="button"
             class="btn btn-xs gap-1 font-bold transition-all shadow-xs"
             :class="
@@ -594,6 +596,7 @@
                 <button
                   v-if="
                     item &&
+                    canEditFull &&
                     Number(editForm.quantity) <= 1 &&
                     !isSold &&
                     !isRestockOpen
@@ -610,7 +613,8 @@
                 step="1"
                 min="1"
                 v-model.number="editForm.quantity"
-                class="input input-bordered input-sm w-full h-8 min-h-8 text-center font-bold font-mono bg-base-100 rounded-lg" />
+                :disabled="isSold || !canEditFull"
+                class="input input-bordered input-sm w-full h-8 min-h-8 text-center font-bold font-mono bg-base-100 rounded-lg disabled:bg-base-200/70" />
             </div>
 
             <!-- List Price (Per Item) -->
@@ -642,8 +646,9 @@
                   type="number"
                   step="0.01"
                   v-model="editForm.resalePrice"
+                  :disabled="!isAnyEditAllowed"
                   placeholder="0.00"
-                  class="input input-bordered input-sm w-full h-8 min-h-8 pl-6 font-mono font-bold bg-base-100 rounded-lg"
+                  class="input input-bordered input-sm w-full h-8 min-h-8 pl-6 font-mono font-bold bg-base-100 rounded-lg disabled:bg-base-200/70"
                   :class="{ 'pr-8': Number(editForm.quantity) > 1 }" />
                 <span
                   v-if="Number(editForm.quantity) > 1"
@@ -677,8 +682,9 @@
                   type="number"
                   step="0.01"
                   v-model="editForm.soldPrice"
+                  :disabled="!canEditFull"
                   placeholder="0.00"
-                  class="input input-bordered input-sm w-full h-8 min-h-8 pl-6 font-mono font-bold bg-base-100 rounded-lg" />
+                  class="input input-bordered input-sm w-full h-8 min-h-8 pl-6 font-mono font-bold bg-base-100 rounded-lg disabled:bg-base-200/70" />
               </div>
             </div>
           </div>
@@ -711,7 +717,7 @@
               </div>
               <div class="flex items-center gap-1.5 flex-wrap">
                 <button
-                  v-if="Number(editForm.quantity) > 1"
+                  v-if="canEditFull && Number(editForm.quantity) > 1"
                   @click.prevent="$emit('sell-one-quantity')"
                   class="btn btn-xs btn-success font-bold gap-1 shadow-xs"
                   title="Log sale of 1 unit at per-item price and subtract unit cost">
@@ -719,7 +725,7 @@
                   Sell 1 Unit
                 </button>
                 <button
-                  v-if="Number(editForm.quantity) > 1"
+                  v-if="canEditFull && Number(editForm.quantity) > 1"
                   @click.prevent="$emit('split-one-active')"
                   class="btn btn-xs btn-outline btn-secondary font-bold gap-1 shadow-xs"
                   title="Extract 1 unit as a new active inventory item">
@@ -727,6 +733,7 @@
                   Split 1 Active
                 </button>
                 <button
+                  v-if="canEditFull"
                   @click.prevent="isRestockOpen = !isRestockOpen"
                   class="btn btn-xs btn-primary font-bold gap-1 shadow-xs"
                   :class="{ 'btn-active': isRestockOpen }"
@@ -1156,12 +1163,14 @@
             </label>
             <select
               v-model="selectedFacility"
-              class="select select-bordered select-sm w-full h-8 min-h-8 font-bold text-xs bg-base-100">
+              :disabled="!isAnyEditAllowed"
+              class="select select-bordered select-sm w-full h-8 min-h-8 font-bold text-xs bg-base-100 disabled:bg-base-200/70">
               <option
                 v-for="fac in facilityOptions"
                 :key="fac.code"
-                :value="fac.code">
-                {{ fac.icon }} {{ fac.name }} ({{ fac.code }})
+                :value="fac.code"
+                :disabled="!canPlaceOrPrintTag && isFacilityRetailOption(fac.code)">
+                {{ fac.icon }} {{ fac.name }} ({{ fac.code }}){{ !canPlaceOrPrintTag && isFacilityRetailOption(fac.code) ? ' — Lock SKU on /profile first' : '' }}
               </option>
               <option value="__custom__">Custom / Other Location...</option>
             </select>
@@ -1182,9 +1191,10 @@
             <input
               type="text"
               v-model="facilityBin"
+              :disabled="!isAnyEditAllowed"
               list="facility-bins-list"
               placeholder="e.g. RED BIN-16, 04..."
-              class="input input-bordered input-sm w-full h-8 min-h-8 font-mono text-xs bg-base-100 uppercase" />
+              class="input input-bordered input-sm w-full h-8 min-h-8 font-mono text-xs bg-base-100 uppercase disabled:bg-base-200/70" />
             <datalist id="facility-bins-list">
               <option
                 v-for="bin in availableBinsForFacility"
@@ -1201,8 +1211,9 @@
             <input
               type="text"
               v-model="customFacilityText"
+              :disabled="!isAnyEditAllowed"
               placeholder="Enter custom location name..."
-              class="input input-bordered input-sm w-full h-8 min-h-8 text-xs bg-base-100" />
+              class="input input-bordered input-sm w-full h-8 min-h-8 text-xs bg-base-100 disabled:bg-base-200/70" />
           </div>
         </div>
 
@@ -1217,15 +1228,17 @@
           </label>
           <select
             v-model="editForm.status"
-            :disabled="isSold"
+            :disabled="isSold || !isAnyEditAllowed"
             class="select select-bordered select-sm w-full font-bold text-xs bg-base-100 disabled:bg-base-200/70">
             <option value="acquired">Acquired (Backlog)</option>
             <option value="received">Received</option>
-            <option value="placed">Placed (In Booth)</option>
-            <option value="tracked">Tracked</option>
-            <option value="combined">Combined</option>
-            <option value="sold">Sold</option>
-            <option value="archived">Archived</option>
+            <option value="placed" :disabled="!canPlaceOrPrintTag">
+              {{ canPlaceOrPrintTag ? 'Placed (In Booth)' : 'Placed (In Booth — Lock SKU on /profile first)' }}
+            </option>
+            <option value="tracked" :disabled="!canEditFull">Tracked</option>
+            <option value="combined" :disabled="!canEditFull">Combined</option>
+            <option value="sold" :disabled="!canEditFull">Sold</option>
+            <option value="archived" :disabled="!canEditFull">Archived</option>
           </select>
           <div
             v-if="isSold"
@@ -1264,6 +1277,7 @@
           <input
             type="checkbox"
             :checked="showOnStorefront"
+            :disabled="!isAnyEditAllowed"
             @change="$emit('update:showOnStorefront', $event.target.checked)"
             class="checkbox checkbox-primary checkbox-sm" />
         </div>
@@ -1294,7 +1308,8 @@
         </div>
         <textarea
           v-model="editForm.condition_notes"
-          class="textarea textarea-bordered w-full h-24 text-xs font-medium bg-base-100 focus:ring-1 focus:ring-secondary/30"
+          :disabled="!isAnyEditAllowed"
+          class="textarea textarea-bordered w-full h-24 text-xs font-medium bg-base-100 focus:ring-1 focus:ring-secondary/30 disabled:bg-base-200/70"
           placeholder="e.g. Tested motor works, light turns on, missing battery cap, minor wear on bottom, purchased from estate sale...">
         </textarea>
       </div>
@@ -1942,7 +1957,7 @@
 
             <!-- Physical Split Action (Acquired+ Only — Never on Tracked Items) -->
             <div
-              v-if="isAcquiredItem && parsedComponents.length > 1"
+              v-if="canEditFull && isAcquiredItem && parsedComponents.length > 1"
               class="mt-3 pt-2.5 border-t border-base-300 flex items-center justify-between gap-2">
               <span class="text-[11px] font-semibold opacity-75">
                 Ready to unpack into individual inventory items?
@@ -2071,7 +2086,8 @@
         <div v-if="descTab === 'edit'">
           <textarea
             v-model="editForm.description"
-            class="textarea textarea-bordered w-full h-36 font-mono text-xs bg-base-100 focus:ring-1 focus:ring-primary/30"
+            :disabled="!isAnyEditAllowed"
+            class="textarea textarea-bordered w-full h-36 font-mono text-xs bg-base-100 focus:ring-1 focus:ring-primary/30 disabled:bg-base-200/70"
             placeholder="Product details, condition, measurements, flaws for customer listing..."></textarea>
         </div>
         <div
@@ -2146,6 +2162,22 @@ const props = defineProps({
     isAcquisitionUnlocked: {
         type: Boolean,
         default: false
+    },
+    canEditFull: {
+        type: Boolean,
+        default: true
+    },
+    canEditCoCurator: {
+        type: Boolean,
+        default: false
+    },
+    canPlaceOrPrintTag: {
+        type: Boolean,
+        default: true
+    },
+    placementBlockReason: {
+        type: String,
+        default: ''
     },
     allLocations: {
         type: Array,
@@ -2257,6 +2289,11 @@ const emit = defineEmits([
 ]);
 
 const facilityOptions = computed(() => getAllLocationSettingMetas());
+const isAnyEditAllowed = computed(() => Boolean(props.canEditFull || props.canEditCoCurator));
+const isFacilityRetailOption = (code) => {
+    const c = String(code || '').trim().toUpperCase();
+    return c === 'MD' || c === 'DT';
+};
 
 const isSold = computed(() => {
     return (props.editForm?.status || props.item?.status) === 'sold';

@@ -641,6 +641,15 @@ import { ref, computed, watch, shallowRef } from 'vue';
 import { Icon } from '@iconify/vue';
 import ItemThumbnail from '../common/ItemThumbnail.vue';
 import { useAuth } from '../../composables/useAuth';
+import { useMemberCapabilities } from '../../lib/memberAccess';
+import {
+  canItemBePlacedOrPrinted,
+  evaluateItemAccess,
+  extractItemOwnerPrefix,
+  isDraftPlaceholderUpc,
+  isRetailPlacementLocation,
+  resolveMintingPrefixForMember,
+} from '../../lib/curatorOwnership';
 import { useItemDrawer } from '../../composables/useItemDrawer';
 import { useLotSplitter } from '../../composables/useLotSplitter';
 import { useLoader } from '../../composables/useLoader';
@@ -744,6 +753,7 @@ interface ParsedItem {
 const allItems = ref<ParsedItem[]>([]);
 
 const { currentTeam, user } = useAuth();
+const { capabilities } = useMemberCapabilities();
 const { openItemDrawer } = useItemDrawer();
 const { closeLotSplitter, updateActiveLotItem } = useLotSplitter();
 const { showLoader, hideLoader } = useLoader();
@@ -1495,9 +1505,18 @@ async function executeSplit() {
     return;
   }
 
+  const parent = props.lotItem;
+  const parentAccess = evaluateItemAccess(parent, capabilities.value, { userId: user.value?.$id });
+  if (!parentAccess.canEditFull) {
+    addToast({
+      type: 'warning',
+      message: parentAccess.readOnlyReason || 'Only the lot owner or an Account Steward can split this lot.'
+    });
+    return;
+  }
+
   isSubmitting.value = true;
   try {
-    const parent = props.lotItem;
     const parentDocId = parent.$id || parent.id;
 
     // 0. Clean up any existing split children for this parent lot to prevent duplicates on re-split
@@ -1515,8 +1534,14 @@ async function executeSplit() {
       }
     }
 
-    // 1. Calculate starting sequential UPC barcode prefix
-    const prefix = (currentTeam.value as any)?.prefs?.upcPrefix || (user.value as any)?.prefs?.upcPrefix || 'HUCK';
+    // 1. Resolve owner/member SKU prefix (DRAFT-<UID4>- when unlocked — never HUCK- for unlocked/non-Huck Curators)
+    const mintInfo = resolveMintingPrefixForMember(capabilities.value, user.value?.$id);
+    const prefix = extractItemOwnerPrefix(parent) || mintInfo.prefix;
+    const isDraftPrefix = isDraftPlaceholderUpc(prefix);
+    const mintSplitUpc = async (pfx: string): Promise<string> =>
+      isDraftPlaceholderUpc(pfx)
+        ? `${pfx}${Math.floor(1000 + Math.random() * 9000)}`
+        : await generateNextUpc(pfx);
 
     // Helper to get clean brand/subject for retail booth tags
     const getCleanParentSubject = (parentTitle: string): string => {
@@ -1533,8 +1558,11 @@ async function executeSplit() {
     // 2. Create Documents for each tier
     let createdCount = 0;
     const createdDocs: any[] = [];
-    const targetLocation = String(parent.storageLocation || '').trim() || 'HG';
-    const isRetailBooth = /^(MD|DT)\b/i.test(targetLocation);
+    const rawTargetLocation = String(parent.storageLocation || '').trim() || 'HG';
+    const wantRetail = isRetailPlacementLocation(rawTargetLocation);
+    const placementAllowed = !isDraftPrefix && (!wantRetail || canItemBePlacedOrPrinted(parent, capabilities.value, { userId: user.value?.$id }).allowed);
+    const targetLocation = isDraftPrefix || (wantRetail && !placementAllowed) ? 'HG' : rawTargetLocation;
+    const isRetailBooth = placementAllowed && isRetailPlacementLocation(targetLocation);
     const childStatus = isRetailBooth ? 'placed' : 'received';
 
     for (const tier of tiers.value) {
@@ -1546,7 +1574,7 @@ async function executeSplit() {
       if (tier.mode === 'single') {
         // Create 1 document per item with individual custom price & unique UPC
         for (const item of tierItems) {
-          const itemUpc = await generateNextUpc(prefix);
+          const itemUpc = await mintSplitUpc(prefix);
           const media = await resolveItemMedia(item);
           const mainImgId = media.imageId || extractFileId(item.image_url) || extractFileId(parent.images?.[0]) || parent.imageId || null;
           const individualPrice = item.customPrice || tier.targetPrice;
@@ -1581,7 +1609,7 @@ async function executeSplit() {
         }
       } else if (tier.mode === 'multi_qty') {
         // Create 1 multi-quantity document (Memory Den SKU) & unique UPC
-        const itemUpc = await generateNextUpc(prefix);
+        const itemUpc = await mintSplitUpc(prefix);
         const issueListNotes = tierItems.map((it, i) => `${i + 1}. ${it.title}`).join('\n');
         const tierMedia = await resolveTierMedia(tierItems);
         const firstImgId = tierMedia.imageId || extractFileId(tierItems[0]?.image_url) || extractFileId(parent.images?.[0]) || parent.imageId || null;
@@ -1624,7 +1652,7 @@ async function executeSplit() {
         }
       } else if (tier.mode === 'bundle') {
         // Create 1 bundled lot set document & unique UPC
-        const itemUpc = await generateNextUpc(prefix);
+        const itemUpc = await mintSplitUpc(prefix);
         const bundleTotal = tier.targetPrice * tierItems.length;
         const totalBundleCost = unitCost * tierItems.length;
         const issueListNotes = tierItems.map((it, i) => `${i + 1}. ${it.title}`).join('\n');

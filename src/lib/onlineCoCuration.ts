@@ -14,6 +14,11 @@
  */
 import { sanitizeHttpsUrl } from './flagshipContent';
 import { addCalendarDaysYmd } from './salesChannels';
+import {
+  extractItemOwnerPrefix,
+  isDraftPlaceholderUpc,
+  normalizeUpcPrefix,
+} from './curatorOwnership';
 
 export const ONLINE_READY_SELLING_TAG = 'ONLINE_READY_BIN';
 export const ONLINE_READY_DISPLAY_LABEL = '🌐 Online Ready';
@@ -183,7 +188,7 @@ export function formatSellingLocationBadge(rawTag: string): string {
 export function checkCoCurationEligibility(item: any): {
   eligible: boolean;
   reason?: string;
-  ogPrefix: 'HUCK-' | 'PDXGL-';
+  ogPrefix: string;
 } {
   if (!item) {
     return { eligible: false, reason: 'Item not loaded.', ogPrefix: 'HUCK-' };
@@ -204,6 +209,13 @@ export function checkCoCurationEligibility(item: any): {
     };
   }
   const upcUpper = String(item.upc || item.sku || '').trim().toUpperCase();
+  if (isDraftPlaceholderUpc(upcUpper)) {
+    return {
+      eligible: false,
+      reason: 'This item needs a locked Curator SKU prefix before it can enter the Online Ready Bin.',
+      ogPrefix: 'HUCK-',
+    };
+  }
   if (upcUpper.startsWith('BB-') || upcUpper.startsWith('COMMONS-')) {
     return {
       eligible: false,
@@ -211,7 +223,7 @@ export function checkCoCurationEligibility(item: any): {
       ogPrefix: 'HUCK-',
     };
   }
-  const ogPrefix: 'HUCK-' | 'PDXGL-' = upcUpper.startsWith('PDXGL-') ? 'PDXGL-' : 'HUCK-';
+  const ogPrefix = extractItemOwnerPrefix(item) || 'HUCK-';
   return { eligible: true, ogPrefix };
 }
 
@@ -253,15 +265,12 @@ export function normalizeCoCurationRecord(raw: any): CoCurationRecord {
       ? raw.mode
       : 'self_listed';
 
-  const ogBuyerPrefix: 'HUCK-' | 'PDXGL-' =
-    String(raw?.ogBuyerPrefix || '').toUpperCase().startsWith('PDXGL') ? 'PDXGL-' : 'HUCK-';
+  const ogBuyerPrefix = normalizeUpcPrefix(raw?.ogBuyerPrefix) || 'HUCK-';
 
-  const rawListerPrefix = String(raw?.listerPrefix || '').toUpperCase();
-  const listerPrefix: 'HUCK-' | 'PDXGL-' | 'SWEAT-' = rawListerPrefix.startsWith('PDXGL')
-    ? 'PDXGL-'
-    : rawListerPrefix.startsWith('SWEAT')
-      ? 'SWEAT-'
-      : 'HUCK-';
+  const rawListerPrefix = String(raw?.listerPrefix || '').trim().toUpperCase();
+  const listerPrefix = rawListerPrefix.startsWith('SWEAT')
+    ? 'SWEAT-'
+    : normalizeUpcPrefix(raw?.listerPrefix) || 'HUCK-';
 
   const binFacility: 'HG' | 'HH' =
     String(raw?.binFacility || '').toUpperCase() === 'HG' ? 'HG' : 'HH';

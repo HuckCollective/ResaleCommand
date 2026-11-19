@@ -82,8 +82,39 @@
         </button>
       </div>
 
-      <!-- Right: Compact Partner Select + Sort Select + Conditional Select All / Clear -->
+      <!-- Right: My SKU Toggle + Dynamic Partner Select + Sort Select + Conditional Select All / Clear -->
       <div class="flex items-center justify-between lg:justify-end gap-1.5 flex-wrap sm:flex-nowrap shrink-0">
+        <div
+          v-if="!isConsignor"
+          class="join border border-base-300 rounded-lg overflow-hidden shrink-0"
+        >
+          <button
+            type="button"
+            class="btn btn-xs join-item h-11 md:h-7 px-2 font-bold gap-1 cursor-pointer"
+            :class="filterBarcode === '__mine__' ? 'btn-primary text-primary-content' : 'btn-ghost bg-base-200/70 text-base-content/80'"
+            :title="myPrefix ? `Show only my SKU (${myPrefix})` : 'Show only my draft items'"
+            @click="emit('update:filterBarcode', '__mine__')"
+          >
+            <span class="text-[11px] whitespace-nowrap">🏷️ My SKU</span>
+            <span
+              v-if="myPrefix"
+              class="badge badge-2xs font-mono font-extrabold border-0 px-1 bg-base-100/25 text-current hidden sm:inline"
+            >{{ myPrefix }}</span>
+            <span class="badge badge-2xs font-mono font-extrabold border-0 px-1 bg-base-100/25 text-current">
+              {{ mySkuCount }}
+            </span>
+          </button>
+          <button
+            type="button"
+            class="btn btn-xs join-item h-11 md:h-7 px-2 font-bold cursor-pointer"
+            :class="filterBarcode !== '__mine__' ? 'btn-neutral text-neutral-content' : 'btn-ghost bg-base-200/70 text-base-content/75'"
+            title="Show all Collective items"
+            @click="emit('update:filterBarcode', 'all')"
+          >
+            <span class="text-[11px] whitespace-nowrap">All</span>
+          </button>
+        </div>
+
         <select
           :value="currentPartnerValue"
           aria-label="Filter by Partner Barcode Prefix"
@@ -91,7 +122,7 @@
           class="select select-bordered select-xs h-11 md:h-7 rounded-lg font-mono font-bold text-[11px] bg-base-200/70 border-base-300 text-base-content pr-6 pl-2 cursor-pointer"
           @change="onPartnerChange"
         >
-          <option v-for="p in PARTNER_PREFIXES" :key="p.id" :value="p.id">
+          <option v-for="p in dynamicPartnerOptions" :key="p.id" :value="p.id">
             {{ p.id === 'all' ? 'All Partners' : p.label }} ({{ partnerCounts[p.id] || 0 }})
           </option>
         </select>
@@ -223,6 +254,11 @@ import {
   getBackstockStorageMetas,
   getSellingBoothMetas,
 } from '../../lib/warehouses';
+import {
+  extractItemOwnerPrefix,
+  matchesMySkuFilter,
+  normalizeUpcPrefix,
+} from '../../lib/curatorOwnership';
 
 const props = withDefaults(
   defineProps<{
@@ -230,6 +266,10 @@ const props = withDefaults(
     filterLocation: string;
     filterSmartQueue: string;
     filterBarcode: string;
+    myPrefix?: string;
+    ownedPrefixes?: string[];
+    currentUserId?: string;
+    isConsignor?: boolean;
     filteredCount?: number;
     selectedCount?: number;
     sortColumn?: string;
@@ -240,6 +280,7 @@ const props = withDefaults(
   {
     showSort: true,
     showQuickAssign: true,
+    isConsignor: false,
   }
 );
 
@@ -258,9 +299,48 @@ const storageFacilities = getBackstockStorageMetas();
 const sellingBoothFacilities = getSellingBoothMetas();
 const triageTargets = getAllLocationSettingMetas();
 
-const currentPartnerValue = computed<PartnerPrefixId>(() => {
+const effectiveOwnedPrefixes = computed<string[]>(() => {
+  const out = new Set<string>();
+  for (const p of props.ownedPrefixes || []) {
+    const norm = normalizeUpcPrefix(p);
+    if (norm) out.add(norm);
+  }
+  if (props.myPrefix) {
+    const norm = normalizeUpcPrefix(props.myPrefix);
+    if (norm) out.add(norm);
+  }
+  return Array.from(out);
+});
+
+const mySkuCount = computed(() =>
+  activeItems.value.filter((item) =>
+    matchesMySkuFilter(item, effectiveOwnedPrefixes.value, props.currentUserId || '')
+  ).length
+);
+
+const dynamicPartnerOptions = computed<Array<{ id: string; label: string }>>(() => {
+  const map = new Map<string, string>();
+  for (const p of PARTNER_PREFIXES) {
+    map.set(p.id, p.label);
+  }
+  for (const pfx of effectiveOwnedPrefixes.value) {
+    if (!map.has(pfx)) map.set(pfx, pfx);
+  }
+  for (const item of activeItems.value) {
+    const pfx = extractItemOwnerPrefix(item);
+    if (pfx && !map.has(pfx)) {
+      map.set(pfx, pfx);
+    }
+  }
+  return Array.from(map.entries()).map(([id, label]) => ({ id, label }));
+});
+
+const currentPartnerValue = computed<string>(() => {
   const raw = (props.filterBarcode || 'all').trim();
-  const found = PARTNER_PREFIXES.find((p) => p.id.toUpperCase() === raw.toUpperCase());
+  if (raw === '__mine__') return 'all';
+  const found = dynamicPartnerOptions.value.find(
+    (p) => p.id.toUpperCase() === raw.toUpperCase()
+  );
   return found ? found.id : 'all';
 });
 
@@ -284,7 +364,7 @@ const currentSortValue = computed(() => {
 });
 
 function onPartnerChange(e: Event) {
-  const val = (e.target as HTMLSelectElement).value as PartnerPrefixId;
+  const val = (e.target as HTMLSelectElement).value;
   emit('update:filterBarcode', val || 'all');
 }
 
@@ -324,13 +404,12 @@ const locationCounts = computed<Record<string, number>>(() => {
 const partnerCounts = computed<Record<string, number>>(() => {
   const counts: Record<string, number> = {
     all: activeItems.value.length,
-    'HUCK-': 0,
-    'PDXGL-': 0,
-    'BB-': 0,
-    '0EJ': 0,
   };
+  for (const p of dynamicPartnerOptions.value) {
+    if (p.id !== 'all') counts[p.id] = 0;
+  }
   for (const item of activeItems.value) {
-    for (const p of PARTNER_PREFIXES) {
+    for (const p of dynamicPartnerOptions.value) {
       if (p.id === 'all') continue;
       if (matchesPartnerPrefix(item, p.id)) {
         counts[p.id] = (counts[p.id] || 0) + 1;

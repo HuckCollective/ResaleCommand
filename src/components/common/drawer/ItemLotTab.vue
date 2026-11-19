@@ -30,7 +30,7 @@
                 <!-- Active Play Primary CTA & AI Catalog Matching Shortcuts -->
                 <div class="flex items-center gap-1.5 flex-wrap shrink-0">
                     <button 
-                        v-if="currentPlay"
+                        v-if="currentPlay && canEditFull"
                         type="button" 
                         class="btn btn-xs sm:btn-sm font-black gap-1.5 shadow-sm shrink-0 active:scale-95 transition-all"
                         :class="currentPlay.strategyType === 'lot_split' 
@@ -56,6 +56,7 @@
                     </button>
 
                     <button 
+                        v-if="canEditFull"
                         type="button" 
                         class="btn btn-xs btn-outline btn-secondary font-bold gap-1 shrink-0" 
                         @click="$emit('open-combine', item)" 
@@ -65,6 +66,7 @@
                         <span>📦 Combine Similar</span>
                     </button>
                     <button 
+                        v-if="canEditFull"
                         type="button" 
                         class="btn btn-xs btn-outline btn-accent font-bold gap-1 shrink-0" 
                         @click="$emit('open-bundle', item)" 
@@ -398,6 +400,7 @@
                         </span>
                     </div>
                     <button 
+                        v-if="canEditFull"
                         type="button" 
                         class="btn btn-2xs sm:btn-xs btn-outline btn-error font-bold gap-1 shrink-0" 
                         @click="$emit('uncombine')" 
@@ -459,6 +462,7 @@
                         </span>
                     </div>
                     <button 
+                        v-if="canEditFull"
                         type="button" 
                         class="btn btn-2xs sm:btn-xs btn-warning font-black gap-1 shrink-0 shadow-xs" 
                         @click="$emit('open-splitter')"
@@ -636,6 +640,10 @@ const props = defineProps({
     parentItem: {
         type: Object,
         default: null
+    },
+    canEditFull: {
+        type: Boolean,
+        default: true
     },
     lotChildren: {
         type: Array,
