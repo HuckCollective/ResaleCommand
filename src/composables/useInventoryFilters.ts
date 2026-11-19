@@ -796,6 +796,14 @@ export function useInventoryFilters(
             let display = filterLocation.value;
             if (filterLocation.value === '__unassigned__') {
                 display = '🚨 Unassigned';
+            } else if (filterLocation.value === '__storage__') {
+                display = '📦 All Storage';
+            } else if (filterLocation.value === '__selling__') {
+                display = '🏪 All Selling';
+            } else if (filterLocation.value === '__online__') {
+                display = '🌐 Online';
+            } else if (filterLocation.value === '__events__') {
+                display = '🎪 Events / Pop-Ups';
             } else if (filterLocation.value.toUpperCase() === 'HD') {
                 display = '🛋️ HD';
             } else {

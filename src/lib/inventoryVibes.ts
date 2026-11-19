@@ -1,7 +1,22 @@
-import { matchesLocationFilter } from './warehouses';
+import {
+    matchesLocationFilter,
+    getBackstockStorageMetas,
+    getSellingBoothMetas,
+} from './warehouses';
 import { hasOnlineReadyTag } from './onlineCoCuration';
 
-export type SpatialLocationId = 'all' | '__unassigned__' | 'MD' | 'DT' | 'HG' | 'HH' | 'HD';
+export type SpatialLocationId =
+    | 'all'
+    | '__unassigned__'
+    | '__storage__'
+    | '__selling__'
+    | '__online__'
+    | '__events__'
+    | 'MD'
+    | 'DT'
+    | 'HG'
+    | 'HH'
+    | 'HD';
 export type SmartQueueId =
     | 'md_restock'
     | 'dt_restock'
@@ -370,9 +385,78 @@ export function matchesPartnerPrefix(item: any, prefix: string | null | undefine
     return upc.startsWith(cleanTarget) || upc.includes(cleanTarget) || locSku.startsWith(cleanTarget);
 }
 
+const ONLINE_CHANNEL_REGEX =
+    /\b(online|ebay|poshmark|posh|depop|whatnot|district|mercari|etsy|storefront|instagram|tiktok|direct|dm)\b|online_ready/i;
+
+const EVENT_CHANNEL_REGEX =
+    /\b(event|events|pop-?up|pop-?ups|market|fair|swap|expo|festival)\b/i;
+
+function getSellingLocationsList(item: any): string[] {
+    if (!item?.sellingLocations) return [];
+    const arr = Array.isArray(item.sellingLocations)
+        ? item.sellingLocations
+        : [item.sellingLocations];
+    return arr.map((v: any) => String(v || '').trim()).filter(Boolean);
+}
+
+/**
+ * True if an item is staged in the Online Ready Bin or tagged on any online marketplace.
+ * Keeps the toolbar clean as one single "Online" channel while platform details live on the item.
+ */
+export function isOnlineChannelItem(item: any): boolean {
+    if (!item) return false;
+    if (hasOnlineReadyTag(item)) return true;
+    return getSellingLocationsList(item).some((loc) => ONLINE_CHANNEL_REGEX.test(loc));
+}
+
+/**
+ * True if an item is tagged for a pop-up market, swap, or Co-op event channel.
+ */
+export function isEventChannelItem(item: any): boolean {
+    if (!item) return false;
+    return getSellingLocationsList(item).some((loc) => EVENT_CHANNEL_REGEX.test(loc));
+}
+
+/**
+ * True if an item's physical storageLocation belongs to any backstock storage facility (dynamically from warehouses.ts).
+ */
+export function isBackstockStorageItem(item: any): boolean {
+    if (!item) return false;
+    const sl = typeof item.storageLocation === 'string' ? item.storageLocation.trim() : '';
+    if (!sl || isUnassignedLocation(item)) return false;
+    const backstockMetas = getBackstockStorageMetas();
+    if (
+        backstockMetas.some((m) =>
+            matchesPhysicalStorageCode(sl, m.code as 'HG' | 'HH' | 'HD' | 'MD' | 'DT')
+        )
+    ) {
+        return true;
+    }
+    return matchesPhysicalStorageCode(sl, 'HD');
+}
+
+/**
+ * True if an item is active on any selling channel: a physical retail booth (MD/DT), Online, or Pop-Up Event.
+ */
+export function isSellingChannelItem(item: any): boolean {
+    if (!item) return false;
+    const sl = typeof item.storageLocation === 'string' ? item.storageLocation.trim() : '';
+    const boothMetas = getSellingBoothMetas();
+    for (const m of boothMetas) {
+        const code = m.code.toUpperCase() as 'MD' | 'DT';
+        if (sl && !isUnassignedLocation(item)) {
+            if (matchesPhysicalStorageCode(sl, code)) return true;
+        } else if (hasSellingLocationMatch(item, code)) {
+            return true;
+        }
+    }
+    return isOnlineChannelItem(item) || isEventChannelItem(item);
+}
+
 /**
  * Strictly evaluates spatial location filter against physical item.storageLocation
- * (including '__unassigned__', 'MD', 'DT', 'HG', 'HH', 'HD', full facility names like 'Dusty Tiger', or custom bins).
+ * (including '__unassigned__', '__storage__', '__selling__', '__online__', '__events__',
+ * 'MD', 'DT', 'HG', 'HH', 'HD', full facility names like 'Dusty Tiger', or custom bins).
  * Never matches item.purchaseLocation. Only falls back to sellingLocations for MD/DT when storageLocation is empty.
  */
 export function matchesSpatialLocation(item: any, locationFilter: string | null | undefined): boolean {
@@ -382,6 +466,18 @@ export function matchesSpatialLocation(item: any, locationFilter: string | null 
     const target = locationFilter.trim();
     if (target === '__unassigned__') {
         return isUnassignedLocation(item);
+    }
+    if (target === '__storage__') {
+        return isBackstockStorageItem(item);
+    }
+    if (target === '__online__') {
+        return isOnlineChannelItem(item);
+    }
+    if (target === '__events__') {
+        return isEventChannelItem(item);
+    }
+    if (target === '__selling__') {
+        return isSellingChannelItem(item);
     }
     const upper = target.toUpperCase();
     const sl = typeof item?.storageLocation === 'string' ? item.storageLocation.trim() : '';

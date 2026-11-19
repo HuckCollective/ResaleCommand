@@ -1,14 +1,14 @@
 <template>
   <div class="space-y-1.5">
-    <!-- Calm 1-Row Reseller Spatial Bar: Storage (Garage/Hideout) vs Selling Booths (Memory Den/Dusty Tiger) + Partner & Sort -->
+    <!-- Calm 1-Row Reseller Spatial Bar: All + Storage Select + Selling Select | Owner Scope + Sort -->
     <div class="bg-base-100 border border-base-300 rounded-xl p-1.5 sm:px-2.5 sm:py-2 shadow-2xs flex flex-col lg:flex-row lg:items-center justify-between gap-2">
-      <!-- Left: All + 📦 Storage Group + 🏪 Selling Booths Group + 🚨 Unassigned -->
-      <div class="flex items-center gap-1 overflow-x-auto scrollbar-none max-w-full">
+      <!-- Left: All + 📦 Storage Dropdown + 🏪 Selling Dropdown + Conditional 🚨 Unassigned -->
+      <div class="flex items-center gap-1.5 flex-wrap">
         <button
           type="button"
           class="btn btn-xs h-11 md:h-7 px-2.5 rounded-lg font-bold gap-1 shrink-0 transition-all cursor-pointer"
           :class="getLocationTabClass('all', locationCounts.all || 0)"
-          title="All active working stock across Storage and Selling Booths"
+          title="Show all active working stock across Storage and Selling channels"
           @click="selectLocation('all')"
         >
           <span class="whitespace-nowrap text-[11px] sm:text-xs">All</span>
@@ -20,49 +20,48 @@
           </span>
         </button>
 
-        <span class="text-[10px] font-extrabold uppercase tracking-wider text-base-content/50 pl-1 hidden xl:inline shrink-0">
-          Storage:
-        </span>
-        <button
-          v-for="loc in storageFacilities"
-          :key="loc.code"
-          type="button"
-          class="btn btn-xs h-11 md:h-7 px-2.5 rounded-lg font-bold gap-1 shrink-0 transition-all cursor-pointer"
-          :class="getLocationTabClass(loc.code as SpatialLocationId, locationCounts[loc.code] || 0)"
-          :title="`${loc.shortName} (${loc.code}) — Backstock Storage`"
-          @click="selectLocation(loc.code as SpatialLocationId)"
+        <select
+          :value="currentStorageSelectValue"
+          aria-label="Filter by Storage Location"
+          title="Backstock & Storage Locations"
+          class="select select-bordered select-xs h-11 md:h-7 rounded-lg font-bold text-[11px] pr-6 pl-2 cursor-pointer transition-all"
+          :class="currentStorageSelectValue ? 'border-primary bg-primary/15 text-primary ring-1 ring-primary/40' : 'bg-base-200/70 border-base-300 text-base-content'"
+          @change="onStorageSelectChange"
         >
-          <span class="whitespace-nowrap text-[11px] sm:text-xs">{{ loc.icon }} {{ loc.shortName }}</span>
-          <span
-            class="badge badge-2xs font-mono font-extrabold border-0 px-1.5 whitespace-nowrap shrink-0"
-            :class="getLocationBadgeClass(loc.code as SpatialLocationId, locationCounts[loc.code] || 0)"
+          <option value="">📦 Storage ({{ locationCounts.__storage__ || 0 }})</option>
+          <option value="__storage__">📦 All Storage ({{ locationCounts.__storage__ || 0 }})</option>
+          <option v-for="loc in storageFacilities" :key="loc.code" :value="loc.code">
+            {{ loc.icon }} {{ loc.shortName }} ({{ locationCounts[loc.code] || 0 }})
+          </option>
+          <option
+            v-if="(locationCounts.__unassigned__ || 0) > 0 || filterLocation === '__unassigned__'"
+            value="__unassigned__"
           >
-            {{ locationCounts[loc.code] || 0 }}
-          </span>
-        </button>
+            🚨 Unassigned ({{ locationCounts.__unassigned__ || 0 }})
+          </option>
+        </select>
 
-        <div class="h-4 w-px bg-base-300 mx-0.5 shrink-0"></div>
-
-        <span class="text-[10px] font-extrabold uppercase tracking-wider text-base-content/50 hidden xl:inline shrink-0">
-          Booths:
-        </span>
-        <button
-          v-for="loc in sellingBoothFacilities"
-          :key="loc.code"
-          type="button"
-          class="btn btn-xs h-11 md:h-7 px-2.5 rounded-lg font-bold gap-1 shrink-0 transition-all cursor-pointer"
-          :class="getLocationTabClass(loc.code as SpatialLocationId, locationCounts[loc.code] || 0)"
-          :title="`${loc.shortName} (${loc.code}) — Selling Booth (${loc.feePct}% fee)`"
-          @click="selectLocation(loc.code as SpatialLocationId)"
+        <select
+          :value="currentSellingSelectValue"
+          aria-label="Filter by Selling Channel or Booth"
+          title="Booths, Online & Pop-Up Selling Channels"
+          class="select select-bordered select-xs h-11 md:h-7 rounded-lg font-bold text-[11px] pr-6 pl-2 cursor-pointer transition-all"
+          :class="currentSellingSelectValue ? 'border-secondary bg-secondary/15 text-secondary ring-1 ring-secondary/40' : 'bg-base-200/70 border-base-300 text-base-content'"
+          @change="onSellingSelectChange"
         >
-          <span class="whitespace-nowrap text-[11px] sm:text-xs">{{ loc.icon }} {{ loc.shortName }}</span>
-          <span
-            class="badge badge-2xs font-mono font-extrabold border-0 px-1.5 whitespace-nowrap shrink-0"
-            :class="getLocationBadgeClass(loc.code as SpatialLocationId, locationCounts[loc.code] || 0)"
+          <option value="">🏪 Selling ({{ locationCounts.__selling__ || 0 }})</option>
+          <option value="__selling__">🏪 All Selling ({{ locationCounts.__selling__ || 0 }})</option>
+          <option v-for="loc in sellingBoothFacilities" :key="loc.code" :value="loc.code">
+            {{ loc.icon }} {{ loc.shortName }} ({{ locationCounts[loc.code] || 0 }})
+          </option>
+          <option value="__online__">🌐 Online ({{ locationCounts.__online__ || 0 }})</option>
+          <option
+            v-if="(locationCounts.__events__ || 0) > 0 || filterLocation === '__events__'"
+            value="__events__"
           >
-            {{ locationCounts[loc.code] || 0 }}
-          </span>
-        </button>
+            🎪 Events / Pop-Ups ({{ locationCounts.__events__ || 0 }})
+          </option>
+        </select>
 
         <button
           v-if="(locationCounts.__unassigned__ || 0) > 0 || filterLocation === '__unassigned__'"
@@ -219,10 +218,13 @@ import {
   SMART_QUEUES,
   PARTNER_PREFIXES,
   isWorkingStockItem,
+  isBackstockStorageItem,
+  isSellingChannelItem,
+  isOnlineChannelItem,
+  isEventChannelItem,
   matchesSpatialLocation,
   matchesPartnerPrefix,
   type SpatialLocationId,
-  type PartnerPrefixId,
 } from '../../lib/inventoryVibes';
 import {
   getAllLocationSettingMetas,
@@ -406,10 +408,43 @@ function onSortChange(e: Event) {
   }
 }
 
+const storageCodeSet = new Set(storageFacilities.map((f) => f.code.toUpperCase()));
+const sellingBoothCodeSet = new Set(sellingBoothFacilities.map((f) => f.code.toUpperCase()));
+
+const currentStorageSelectValue = computed<string>(() => {
+  const raw = (props.filterLocation || 'all').trim();
+  if (raw === '__storage__' || raw === '__unassigned__') return raw;
+  const upper = raw.toUpperCase();
+  if (storageCodeSet.has(upper) || upper === 'HD') return upper;
+  return '';
+});
+
+const currentSellingSelectValue = computed<string>(() => {
+  const raw = (props.filterLocation || 'all').trim();
+  if (raw === '__selling__' || raw === '__online__' || raw === '__events__') return raw;
+  const upper = raw.toUpperCase();
+  if (sellingBoothCodeSet.has(upper)) return upper;
+  return '';
+});
+
+function onStorageSelectChange(e: Event) {
+  const val = (e.target as HTMLSelectElement).value;
+  emit('update:filterLocation', val || 'all');
+}
+
+function onSellingSelectChange(e: Event) {
+  const val = (e.target as HTMLSelectElement).value;
+  emit('update:filterLocation', val || 'all');
+}
+
 const locationCounts = computed<Record<string, number>>(() => {
   const counts: Record<string, number> = {
     all: scopedActiveItems.value.length,
     __unassigned__: 0,
+    __storage__: 0,
+    __selling__: 0,
+    __online__: 0,
+    __events__: 0,
     MD: 0,
     DT: 0,
     HG: 0,
@@ -417,6 +452,10 @@ const locationCounts = computed<Record<string, number>>(() => {
     HD: 0,
   };
   for (const item of scopedActiveItems.value) {
+    if (isBackstockStorageItem(item)) counts.__storage__++;
+    if (isSellingChannelItem(item)) counts.__selling__++;
+    if (isOnlineChannelItem(item)) counts.__online__++;
+    if (isEventChannelItem(item)) counts.__events__++;
     for (const loc of SPATIAL_LOCATIONS) {
       if (loc.id === 'all') continue;
       if (matchesSpatialLocation(item, loc.id)) {
