@@ -146,8 +146,47 @@
             class="hover:bg-base-200/35 align-middle"
           >
             <td class="text-xs">
-              <div class="font-bold text-base-content flex items-center gap-1.5 flex-wrap">
+              <div v-if="editingNameRowId === m.$id" class="flex items-center gap-1.5 flex-wrap">
+                <input
+                  v-model="nameDraft"
+                  type="text"
+                  maxlength="80"
+                  placeholder="Full Name"
+                  aria-label="Member Display Name"
+                  class="input input-bordered input-xs h-10 md:h-7 w-44 rounded-lg text-xs font-bold"
+                  :disabled="savingNameRowId === m.$id"
+                  @keydown.enter.prevent="saveInlineDisplayName(m)"
+                  @keydown.escape.prevent="editingNameRowId = ''"
+                />
+                <button
+                  type="button"
+                  class="btn btn-xs h-10 md:h-7 btn-primary text-primary-content rounded-lg font-black px-2.5"
+                  :disabled="savingNameRowId === m.$id || nameDraft.trim().length < 2"
+                  @click="saveInlineDisplayName(m)"
+                >
+                  {{ savingNameRowId === m.$id ? '…' : 'Save' }}
+                </button>
+                <button
+                  type="button"
+                  class="btn btn-xs h-10 md:h-7 btn-ghost rounded-lg"
+                  :disabled="savingNameRowId === m.$id"
+                  @click="editingNameRowId = ''"
+                >
+                  ✕
+                </button>
+              </div>
+              <div v-else class="font-bold text-base-content flex items-center gap-1.5 flex-wrap">
                 <span>{{ displayNameForMembership(m) }}</span>
+                <button
+                  v-if="canManageLinks"
+                  type="button"
+                  class="btn btn-2xs h-9 min-h-9 md:h-6 md:min-h-0 px-1.5 btn-ghost rounded-lg opacity-70 hover:opacity-100"
+                  title="Edit display name"
+                  aria-label="Edit display name"
+                  @click="openInlineNameEdit(m)"
+                >
+                  ✏️
+                </button>
                 <span
                   v-if="hasBuiltInOwner(m)"
                   class="badge badge-warning text-warning-content badge-xs font-black"
@@ -160,13 +199,23 @@
             </td>
 
             <td class="space-y-1.5">
-              <div>
+              <div class="flex items-center gap-1.5 flex-wrap">
                 <span
                   class="badge badge-xs font-bold whitespace-nowrap"
                   :class="m.confirm ? 'badge-success text-success-content' : 'badge-warning badge-outline'"
                 >
                   {{ m.confirm ? '✅ Active' : '⏳ Pending Invite' }}
                 </span>
+                <button
+                  v-if="m.confirm && canManageLinks && !hasBuiltInOwner(m)"
+                  type="button"
+                  class="btn btn-2xs h-9 md:h-6 min-h-0 px-2 btn-ghost text-error/80 hover:text-error rounded-lg font-bold"
+                  :disabled="pendingActionRowId === m.$id"
+                  title="Remove member access (preserves past SKU payout history)"
+                  @click="confirmRemoveActiveMember(m)"
+                >
+                  {{ pendingActionRowId === m.$id ? '…' : 'Remove' }}
+                </button>
               </div>
               <div
                 v-if="!m.confirm && canManageLinks && !hasBuiltInOwner(m)"
@@ -455,6 +504,7 @@ const props = withDefaults(
 
 const emit = defineEmits<{
   (e: 'update:members', next: CoopMemberProfile[]): void;
+  (e: 'synced:members', next: CoopMemberProfile[]): void;
 }>();
 
 type CustomRoleId = 'founder' | 'curator' | 'promoter' | 'enabler' | 'builder' | 'consignor';
@@ -481,6 +531,9 @@ const savingMembershipId = ref('');
 const pendingActionRowId = ref('');
 const lockingRowId = ref('');
 const editingPrefixRowId = ref('');
+const editingNameRowId = ref('');
+const nameDraft = ref('');
+const savingNameRowId = ref('');
 const cleaningRoster = ref(false);
 const inviting = ref(false);
 const errorMessage = ref('');
@@ -682,7 +735,7 @@ async function lockPrefixForMembership(m: any, rawPrefix: string) {
       throw new Error(data?.error || 'Could not lock SKU prefix.');
     }
     if (Array.isArray(data?.policyConfig?.members)) {
-      emit('update:members', data.policyConfig.members);
+      emit('synced:members', data.policyConfig.members);
     }
     editingPrefixRowId.value = '';
     await refreshCapabilities();
@@ -716,7 +769,7 @@ async function handleCleanupPlaceholders() {
       throw new Error(data?.error || 'Could not clean up stale roster rows.');
     }
     if (Array.isArray(data?.policyConfig?.members)) {
-      emit('update:members', data.policyConfig.members);
+      emit('synced:members', data.policyConfig.members);
     }
     await refreshCapabilities();
     addToast({
@@ -828,6 +881,72 @@ async function toggleCustomRole(membership: any, roleId: CustomRoleId) {
   }
 }
 
+async function openInlineNameEdit(m: any) {
+  const current = displayNameForMembership(m);
+  nameDraft.value = current.includes('@') ? '' : current;
+  editingNameRowId.value = m.$id;
+}
+
+async function saveInlineDisplayName(m: any) {
+  if (!canManageLinks.value) return;
+  const trimmed = nameDraft.value.trim().replace(/\s+/g, ' ');
+  if (trimmed.length < 2 || trimmed.length > 80) {
+    addToast({ type: 'warning', message: 'Enter a full name (at least 2 characters).' });
+    return;
+  }
+  savingNameRowId.value = m.$id;
+  try {
+    const headers = await getCoopJwtHeaders();
+    const res = await fetch('/api/coop/membership-action', {
+      method: 'POST',
+      headers: { ...headers, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        action: 'rename',
+        membershipId: m.$id,
+        userId: m.userId || undefined,
+        name: trimmed,
+      }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(data?.error || 'Could not update display name.');
+    }
+    memberships.value = memberships.value.map((row) =>
+      row.$id === m.$id ? { ...row, userName: data?.name || trimmed } : row
+    );
+    if (Array.isArray(data?.policyConfig?.members)) {
+      emit('synced:members', data.policyConfig.members);
+    }
+    editingNameRowId.value = '';
+    await refreshCoopIdentity(true);
+    addToast({
+      type: 'success',
+      message: `Updated member name to ${data?.name || trimmed}.`,
+    });
+  } catch (err: any) {
+    addToast({
+      type: 'error',
+      message: toUserMessage(err, 'Could not update display name.'),
+    });
+  } finally {
+    savingNameRowId.value = '';
+  }
+}
+
+async function confirmRemoveActiveMember(m: any) {
+  const label = displayNameForMembership(m);
+  const emailHint = m.userEmail ? ` (${m.userEmail})` : '';
+  const ok = await askConfirm(
+    `Remove ${label}${emailHint} from the Collective workspace? Their historical SKU payout records (if any) will be preserved, and you can re-invite them anytime.`,
+    'Remove Active Member',
+    'Remove Member',
+    'Keep Member',
+    'btn-error'
+  );
+  if (!ok) return;
+  await runPendingMembershipAction(m, 'remove');
+}
+
 async function confirmCancelPendingInvite(m: any) {
   const label = m.userEmail || displayNameForMembership(m);
   const ok = await askConfirm(
@@ -841,7 +960,10 @@ async function confirmCancelPendingInvite(m: any) {
   await runPendingMembershipAction(m, 'cancel');
 }
 
-async function runPendingMembershipAction(m: any, action: 'activate' | 'resend' | 'cancel') {
+async function runPendingMembershipAction(
+  m: any,
+  action: 'activate' | 'resend' | 'cancel' | 'remove'
+) {
   if (!canManageLinks.value) return;
   pendingActionRowId.value = m.$id;
   try {
@@ -857,14 +979,24 @@ async function runPendingMembershipAction(m: any, action: 'activate' | 'resend' 
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) {
-      throw new Error(data?.error || 'Could not update pending invitation.');
+      throw new Error(data?.error || 'Could not update member status.');
     }
 
-    if (action === 'cancel') {
+    if (action === 'cancel' || action === 'remove') {
       memberships.value = memberships.value.filter((row) => row.$id !== m.$id);
+      if (Array.isArray(data?.policyConfig?.members)) {
+        emit('synced:members', data.policyConfig.members);
+      }
+      if (action === 'remove') {
+        await refreshCoopIdentity(true);
+        await refreshCapabilities();
+      }
       addToast({
         type: 'info',
-        message: `Cancelled pending invite for ${m.userEmail || displayNameForMembership(m)}.`,
+        message:
+          action === 'remove'
+            ? `Removed ${displayNameForMembership(m)} from the Collective.`
+            : `Cancelled pending invite for ${m.userEmail || displayNameForMembership(m)}.`,
       });
       return;
     }

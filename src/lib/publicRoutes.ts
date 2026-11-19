@@ -20,6 +20,7 @@ export const PUBLIC_EXACT_PATHS: ReadonlySet<string> = new Set([
 
 export const PUBLIC_PREFIXES: readonly string[] = [
   '/subsite', // public customer storefront (tenant rewrite target)
+  '/coop/docs', // public co-op guides (static Markdown, zero private member/ledger data)
   '/scripts/', // live-loader bookmarklet served to the Ricochet domain
   '/_astro',
   '/_server-islands',

@@ -179,8 +179,8 @@
           </button>
         </div>
 
-        <!-- Inline Voter Persona Selector (Steward Proxy or Locked Member Identity) -->
-        <div class="flex items-center gap-2 shrink-0">
+        <!-- Inline Voter Persona Selector (Proposals Tab Only; Steward Proxy or Locked Member Identity) -->
+        <div v-if="activeGovTab === 'proposals'" class="flex items-center gap-2 shrink-0">
           <span class="text-xs font-extrabold uppercase tracking-wider opacity-65 whitespace-nowrap">
             {{ isStewardOrFounder ? '👤 Voting As:' : '🔒 Voting As:' }}
           </span>
@@ -188,9 +188,14 @@
             v-if="isStewardOrFounder"
             v-model="activeVotingMember"
             class="select select-bordered select-sm rounded-xl font-bold text-xs h-9 min-h-9 min-w-44"
+            @change="hasManualVoterOverride = true"
           >
-            <option v-for="m in policyConfig.members" :key="m.name" :value="m.name">
-              {{ m.name }} — [{{ m.partner }}-]
+            <option
+              v-for="m in votingMemberOptions"
+              :key="m.userId || m.email || m.name"
+              :value="m.name"
+            >
+              {{ formatVoterOptionLabel(m) }}
             </option>
           </select>
           <span
@@ -643,6 +648,7 @@
         :consignors="policyConfig.consignors"
         :can-manage-roster-links="canEditGlobalFinancials"
         @update:members="handleRosterMembersUpdated"
+        @synced:members="handleRosterMembersSynced"
       />
     </div>
 
@@ -910,6 +916,7 @@ import {
   saveSingleCoopProposal,
   deleteCoopProposal,
   canUserEditProposal,
+  formatAutoHyphenPrefix,
   pacificTodayYmd,
   DEFAULT_COOP_POLICY_CONFIG,
   CONSIGNOR_DEAL_MODE_LABELS,
@@ -953,6 +960,7 @@ const categoryFilter = ref<string>('all');
 const searchQuery = ref('');
 
 const activeVotingMember = ref(DEFAULT_COOP_POLICY_CONFIG.members[0]?.name || 'Mike (HUCK)');
+const hasManualVoterOverride = ref(false);
 const isNewProposalModalOpen = ref(false);
 const selectedProposalId = ref('');
 const messagesCount = ref(0);
@@ -1022,6 +1030,18 @@ const newProposalExistingImages = ref<string[]>([]);
 const newProposalPhotos = ref<any[]>([]);
 
 const rosterRef = computed(() => policyConfig.value.members);
+const votingMemberOptions = computed(() => {
+  const activeVoters = (policyConfig.value.members || []).filter(
+    (m) => m.canVote !== false && m.partner !== 'BB'
+  );
+  return activeVoters.length > 0 ? activeVoters : policyConfig.value.members;
+});
+
+function formatVoterOptionLabel(m: CoopMemberProfile): string {
+  const pref = m.inventoryPrefix ? formatAutoHyphenPrefix(m.inventoryPrefix) : '';
+  return pref ? `${m.name} (${pref})` : m.name;
+}
+
 const { isFounder, canEditGlobalFinancials, currentMemberName } = useCoopFounderGate(rosterRef);
 
 const isStewardOrFounder = computed(() => {
@@ -1029,11 +1049,28 @@ const isStewardOrFounder = computed(() => {
 });
 
 watch(
-  [currentMemberName, isStewardOrFounder],
-  ([name, isSteward]) => {
+  [currentMemberName, isStewardOrFounder, votingMemberOptions],
+  ([name, isSteward, options]) => {
+    const validNames = new Set((options || []).map((m) => m.name));
+    const currentStillValid = validNames.has(activeVotingMember.value);
+
     if (!isSteward && name) {
       activeVotingMember.value = name;
       newProposal.value.proposer = name;
+      return;
+    }
+
+    if (name && (!hasManualVoterOverride.value || !currentStillValid)) {
+      activeVotingMember.value = name;
+      newProposal.value.proposer = name;
+      return;
+    }
+
+    if (!currentStillValid && options[0]?.name) {
+      activeVotingMember.value = options[0].name;
+      if (!hasManualVoterOverride.value) {
+        newProposal.value.proposer = options[0].name;
+      }
     }
   },
   { immediate: true }
@@ -1214,10 +1251,14 @@ onMounted(async () => {
       email: user.value?.email,
       name: user.value?.name,
     });
-    activeVotingMember.value = matched?.name || policyConfig.value.members[0]?.name || user.value?.name || 'Member';
-    newProposal.value.proposer = activeVotingMember.value;
-  } else if (policyConfig.value.members[0]) {
-    activeVotingMember.value = policyConfig.value.members[0].name;
+    const fallbackName =
+      matched?.name || votingMemberOptions.value[0]?.name || user.value?.name || 'Member';
+    if (!hasManualVoterOverride.value) {
+      activeVotingMember.value = fallbackName;
+    }
+    newProposal.value.proposer = matched?.name || activeVotingMember.value;
+  } else if (votingMemberOptions.value[0] && !hasManualVoterOverride.value) {
+    activeVotingMember.value = votingMemberOptions.value[0].name;
   }
 
   if (props.initialProposalId && proposals.value.some((p) => p.id === props.initialProposalId)) {
@@ -1326,6 +1367,10 @@ const handleRosterMembersUpdated = async (nextMembers: CoopMemberProfile[]) => {
   addToast({ type: 'success', message: 'Saved Co-op Roster account links & hats!' });
 };
 
+const handleRosterMembersSynced = (nextMembers: CoopMemberProfile[]) => {
+  policyConfig.value.members = nextMembers;
+};
+
 const enactConsensusProposal = async (proposal: CoopProposal) => {
   proposal.status = 'passed';
   if (proposal.presetAction === 'mondragon_10_45_45') {
@@ -1368,11 +1413,14 @@ async function handleInspectorVote(payload: { proposalId: string; signal: Loomio
   if (!target) return;
 
   const key = getMemberKey();
-  const partner = activeVotingMember.value.includes('PDX')
-    ? 'PDXGL'
-    : activeVotingMember.value.includes('SWEAT') || activeVotingMember.value.includes('Social')
-      ? 'SWEAT'
-      : 'HUCK';
+  const matchedRoster = policyConfig.value.members.find((m) => m.name === activeVotingMember.value);
+  const partner =
+    matchedRoster?.partner ||
+    (activeVotingMember.value.includes('PDX')
+      ? 'PDXGL'
+      : activeVotingMember.value.includes('SWEAT') || activeVotingMember.value.includes('Social')
+        ? 'SWEAT'
+        : 'HUCK');
 
   target.votes = {
     ...(target.votes || {}),

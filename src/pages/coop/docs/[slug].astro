@@ -9,7 +9,7 @@ const { slug } = Astro.params;
 const entry = slug ? await getEntry('coopDocs', slug) : undefined;
 
 if (!entry) {
-  return Astro.redirect('/coop/governance?tab=docs');
+  return Astro.redirect('/coop');
 }
 
 const { Content } = await render(entry);
@@ -28,8 +28,11 @@ const draftHref = `/coop/governance?draftFromDoc=${encodeURIComponent(entry.id)}
     <!-- Top Breadcrumb & Action Bar -->
     <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-base-100 border border-base-300 rounded-2xl p-4 shadow-xs print:hidden">
       <div class="flex items-center gap-2.5 flex-wrap">
+        <a href="/coop" class="btn btn-xs sm:btn-sm btn-ghost rounded-xl font-bold gap-1">
+          ← Co-op Overview
+        </a>
         <a href="/coop/governance?tab=docs" class="btn btn-xs sm:btn-sm btn-ghost rounded-xl font-bold gap-1">
-          ← All Strategy Docs
+          All Guides
         </a>
         <span class="badge badge-primary badge-sm font-bold">{entry.data.category}</span>
         <span class="text-xs font-mono opacity-60">Updated {entry.data.updatedDate}</span>

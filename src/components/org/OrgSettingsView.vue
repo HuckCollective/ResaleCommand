@@ -63,56 +63,29 @@
       </div>
     </div>
 
-    <!-- Members Management (Owner Only) -->
-    <div v-if="isOwner" class="card bg-base-100 shadow-xl">
-        <div class="card-body">
-            <div class="flex justify-between items-center mb-4">
-                <h3 class="font-bold text-xl">Team Members</h3>
-                <button @click="showInviteModal = true" class="btn btn-outline btn-primary btn-sm h-11 md:h-8 gap-2 font-bold">
-                    <Icon icon="solar:user-plus-linear" class="w-4 h-4" />
-                    Invite Member
-                </button>
-            </div>
-
-            <div class="overflow-x-auto">
-                <table class="table table-zebra w-full">
-                    <thead>
-                        <tr>
-                            <th>Name</th>
-                            <th>Email</th>
-                            <th>Role</th>
-                            <th>Joined</th>
-                            <th>Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <tr v-for="member in resolvedMembers" :key="member.$id">
-                            <td>{{ member.userName || member.name || (member.confirm ? 'Unnamed User' : '(Pending)') }}</td>
-                            <td>{{ member.userEmail || member.email }}</td>
-                            <td>
-                                <span v-if="member.roles.includes('owner')" class="badge badge-primary badge-outline whitespace-nowrap shrink-0">Account Steward</span>
-                                <span v-else class="badge badge-ghost whitespace-nowrap shrink-0">Member</span>
-                            </td>
-                            <td>{{ new Date(member.$createdAt).toLocaleDateString() }}</td>
-                            <td>
-                                <button v-if="!member.confirm" class="btn btn-ghost btn-sm h-11 md:h-8 text-primary" @click="handleResend(member)">Resend</button>
-                                <button v-if="!member.roles.includes('owner')" class="btn btn-ghost btn-sm h-11 md:h-8 text-error" @click="confirmRemove(member)">Remove</button>
-                            </td>
-                        </tr>
-                        <tr v-if="resolvedMembers.length === 0">
-                            <td colspan="5" class="text-center opacity-50">No members found</td>
-                        </tr>
-                    </tbody>
-                </table>
-            </div>
-
-            <!-- Privacy notice -->
-            <div class="mt-4 p-3 bg-base-200 rounded-lg text-xs opacity-80 flex items-start gap-2 border border-base-300">
-                <Icon icon="solar:info-circle-linear" class="w-4 h-4 text-info flex-shrink-0 mt-0.5" />
-                <div data-vendor-ok>
-                    <span class="font-bold">Missing names or emails?</span> Appwrite hides member contact info by default. To make them visible to your team, open your **Appwrite Console &gt; Auth &gt; Security &gt; Memberships privacy** and disable the privacy toggles.
+    <!-- Unified Collective Roster Link Card (Replaces Legacy Duplicate Table) -->
+    <div v-if="isOwner" class="card bg-base-100 border border-primary/25 shadow-sm rounded-2xl">
+        <div class="card-body p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div class="flex items-start gap-3">
+                <div class="w-10 h-10 rounded-xl bg-primary/15 text-primary flex items-center justify-center shrink-0 mt-0.5">
+                    <Icon icon="solar:users-group-two-rounded-bold-duotone" class="w-5 h-5" />
+                </div>
+                <div>
+                    <div class="flex items-center gap-2 flex-wrap">
+                        <h3 class="font-extrabold text-base text-base-content">Collective Roster &amp; Member Access</h3>
+                        <span class="badge badge-primary badge-outline badge-xs font-mono font-bold">
+                            {{ members.length }} {{ members.length === 1 ? 'member' : 'members' }}
+                        </span>
+                    </div>
+                    <p class="text-xs text-base-content/75 mt-1">
+                        Invite new Collective members, edit member names or hats, activate pending invites, and lock unique Curator SKU prefixes in one unified roster.
+                    </p>
                 </div>
             </div>
+            <a href="/coop/governance?tab=roster" class="btn btn-sm h-11 md:h-9 btn-primary rounded-xl font-black gap-1.5 shrink-0">
+                <span>Open Unified Collective Roster</span>
+                <Icon icon="solar:arrow-right-linear" class="w-4 h-4" />
+            </a>
         </div>
     </div>
 
@@ -230,40 +203,6 @@
         </div>
     </div>
 
-    <!-- Invite Drawer -->
-    <SlideOverDrawer
-      v-model="showInviteModal"
-      title="Invite New Member"
-      subtitle="Send an invitation email to join your active Collective workspace."
-      icon="solar:user-plus-bold-duotone"
-    >
-      <div class="space-y-4">
-        <div class="form-control">
-          <label class="label py-1">
-            <span class="label-text text-xs font-bold">Member Email Address</span>
-          </label>
-          <input
-            type="email"
-            autocomplete="email"
-            autocapitalize="none"
-            placeholder="Email Address"
-            class="input input-bordered w-full"
-            v-model="inviteEmail"
-            @keydown.enter.prevent="handleInvite"
-          />
-        </div>
-      </div>
-      <template #footer>
-        <div class="flex items-center justify-end gap-2 w-full">
-          <button class="btn btn-sm btn-ghost" @click="showInviteModal = false">Cancel</button>
-          <button class="btn btn-sm btn-primary font-bold" @click="handleInvite" :disabled="!inviteEmail || inviting">
-            <span v-if="inviting" class="loading loading-spinner loading-xs"></span>
-            Send Invite
-          </button>
-        </div>
-      </template>
-    </SlideOverDrawer>
-
   </div>
 </template>
 
@@ -277,18 +216,13 @@ import { confirmDialog } from '../../stores/confirm';
 import { toUserMessage } from '../../lib/userFacingErrors';
 import { Icon } from '@iconify/vue';
 import { siteConfig } from '../../site-config';
-import SlideOverDrawer from '../common/SlideOverDrawer.vue';
 
 const { user, isAuthenticated, currentTeam, ownedTeam, loading } = useAuth();
 
 const members = ref<Models.Membership[]>([]);
-const inviteEmail = ref('');
-const showInviteModal = ref(false);
-const inviting = ref(false);
 
 const DB_ID = import.meta.env.PUBLIC_APPWRITE_DB_ID || 'resale_db';
 const orgSettings = ref({ $id: null, tenantId: '', placedLocations: [], allowedDomains: [] });
-const newLocation = ref('');
 const newDomain = ref('');
 const savingSettings = ref(false);
 
@@ -388,19 +322,6 @@ const isOwner = computed(() => {
     return myMembership?.roles.includes('owner') || false;
 });
 
-const resolvedMembers = computed(() => {
-    return members.value.map(m => {
-        if (user.value && m.userId === user.value.$id) {
-            return {
-                ...m,
-                userName: m.userName || user.value.name,
-                userEmail: m.userEmail || user.value.email
-            };
-        }
-        return m;
-    });
-});
-
 const fetchMembers = async () => {
     if (!currentTeam.value) return;
     try {
@@ -490,120 +411,6 @@ const removeDomain = async (idx: number) => {
     if (orgSettings.value.allowedDomains) {
         orgSettings.value.allowedDomains.splice(idx, 1);
         saveOrgSettings();
-    }
-};
-
-const addLocation = () => {
-    const loc = newLocation.value.trim();
-    if (!loc) return;
-    if (!orgSettings.value.placedLocations) orgSettings.value.placedLocations = [];
-    if (!orgSettings.value.placedLocations.includes(loc)) {
-        orgSettings.value.placedLocations.push(loc);
-        saveOrgSettings();
-    }
-    newLocation.value = '';
-};
-
-const removeLocation = async (idx: number) => {
-    const loc = orgSettings.value.placedLocations?.[idx];
-    if (!loc) return;
-    const ok = await confirmDialog(
-        `Remove placed location "${loc}"?`,
-        'Remove Placed Location',
-        'Remove Location',
-        'Cancel',
-        'btn-error'
-    );
-    if (!ok) return;
-    if (orgSettings.value.placedLocations) {
-        orgSettings.value.placedLocations.splice(idx, 1);
-        saveOrgSettings();
-    }
-};
-
-const handleInvite = async () => {
-    const cleanEmail = inviteEmail.value.trim().toLowerCase();
-    if (!cleanEmail || !currentTeam.value) return;
-    inviting.value = true;
-    try {
-        const url = `${window.location.origin}/join`;
-        
-        try {
-            // First try: Create new user/membership with explicit ID (Standard for new users)
-            await teams.createMembership(currentTeam.value.$id, ['member'], cleanEmail, ID.unique(), undefined, url);
-        } catch (firstError: any) {
-            console.log("First invite attempt failed, retrying with auto-ID...", firstError);
-            // If that fails (e.g. user exists and ID mismatch, or ID doesn't exist 404),
-            // Try again letting Appwrite handle the ID (lookup by email or auto-gen)
-            // We pass 'undefined' for userId explicitly (or allow the overload if possible, but passing undefined is safer for the param slot)
-            // Note: createMembership signature: (teamId, roles, email, userId, phone, url, name)
-            // We pass undefined for userId.
-            await teams.createMembership(currentTeam.value.$id, ['member'], cleanEmail, undefined, undefined, url);
-        }
-
-        inviteEmail.value = '';
-        showInviteModal.value = false;
-        addToast({ type: 'success', message: 'Invitation sent!' });
-        fetchMembers(); // Refresh list to show pending
-    } catch (e: any) {
-        if (e.message?.includes('unique') || e.code === 409) {
-            addToast({ type: 'warning', message: 'This user is already a member or has a pending invitation.' });
-        } else {
-            addToast({ type: 'error', message: toUserMessage(e, 'Failed to send invitation.') });
-        }
-    } finally {
-        inviting.value = false;
-    }
-};
-
-const confirmRemove = async (member: Models.Membership) => {
-    const displayName = member.userName || member.name || member.userEmail || member.email || 'this member';
-    if (await confirmDialog(`Are you sure you want to remove ${displayName}?`, 'Remove Member', 'Remove', 'Cancel', 'btn-error')) {
-        try {
-            await teams.deleteMembership(currentTeam.value!.$id, member.$id);
-            fetchMembers();
-            addToast({ type: 'success', message: 'Member removed.' });
-        } catch (e: any) {
-             addToast({ type: 'error', message: toUserMessage(e, 'Failed to remove member.') });
-        }
-    }
-};
-
-const handleResend = async (member: Models.Membership) => {
-    const email = member.userEmail || member.email;
-    if (await confirmDialog(`Resend invitation to ${email}? This will generate a new invite link.`, 'Resend Invite', 'Resend', 'Cancel')) {
-        try {
-             // To resend, we delete the old membership (canceling old link) and create a new one
-             try {
-                 await teams.deleteMembership(currentTeam.value!.$id, member.$id);
-             } catch (delErr: any) {
-                 // Ignore 404 (already deleted) but throw others
-                 if (delErr.code !== 404) throw delErr;
-                 console.log("Member already removed, proceeding to re-invite");
-             }
-             
-             const url = `${window.location.origin}/join`;
-             
-             // Small delay to ensure DB consistency after delete
-             await new Promise(r => setTimeout(r, 500));
-
-             try {
-                console.log("Resending invite to:", email); // DEBUG
-                if (!email) throw new Error("Email is missing from membership object");
-                
-                await teams.createMembership(currentTeam.value!.$id, ['member'], email, ID.unique(), undefined, url);
-             } catch (err: any) {
-                console.warn("First resend attempt failed, trying fallback...", err);
-                // Fallback for existing user
-                await teams.createMembership(currentTeam.value!.$id, ['member'], email, undefined, undefined, url);
-             }
-
-             addToast({ type: 'success', message: 'New invitation sent!' });
-             fetchMembers();
-        } catch (e: any) {
-             console.error("Resend flow error:", e);
-             addToast({ type: 'error', message: toUserMessage(e, 'Failed to resend invitation.') });
-        }
     }
 };
 

@@ -1,16 +1,105 @@
 import type { APIRoute } from 'astro';
-import { Users } from 'node-appwrite';
+import { Permission, Role, Users } from 'node-appwrite';
+import {
+  COOP_GOVERNANCE_DOC_ID,
+  deriveMemberHatsFromRoles,
+  formatAutoHyphenPrefix,
+  MEMBER_HAT_META,
+  normalizePolicyConfig,
+  type CoopMemberProfile,
+} from '../../../lib/coopGovernance';
 import {
   COOP_FOUNDER_ROLES,
   CoopHttpError,
   errorResponse,
   getCoopServerContext,
   jsonResponse,
+  loadGovernancePolicyOnServer,
   requireCoopRole,
 } from '../../../lib/coopLedgerServer';
 import { siteConfig } from '../../../site-config';
 
 export const prerender = false;
+
+const MANIFESTS_COL_ID = 'manifests';
+
+async function savePolicyManifestOnServer(
+  ctx: ReturnType<typeof getCoopServerContext>,
+  rawManifestSnapshot: Record<string, any>,
+  manifestExists: boolean,
+  nextPolicyInput: any
+) {
+  const nextPolicy = normalizePolicyConfig(nextPolicyInput);
+  const nextSnapshot: Record<string, any> = {
+    ...rawManifestSnapshot,
+    proposals: Array.isArray(rawManifestSnapshot.proposals) ? rawManifestSnapshot.proposals : [],
+    surplusPolicyMode: rawManifestSnapshot.surplusPolicyMode || 'patronage_90_10',
+    surplusSplitBasis: rawManifestSnapshot.surplusSplitBasis || 'volume',
+    policyConfig: nextPolicy,
+    laborEntries: Array.isArray(rawManifestSnapshot.laborEntries) ? rawManifestSnapshot.laborEntries : [],
+    updatedAt: new Date().toISOString(),
+  };
+
+  const docPayload = {
+    name: 'Co-op Democratic Governance & Surplus Policy Ledger',
+    tenantId: 'huck_collective',
+    locationId: 'COOP_GOVERNANCE',
+    locationName: 'Huckleberry Co-op Governance',
+    status: 'governance_state',
+    itemsSnapshot: JSON.stringify(nextSnapshot),
+    itemCount: nextSnapshot.proposals.length,
+    notes: JSON.stringify({
+      surplusPolicyMode: nextSnapshot.surplusPolicyMode,
+      surplusSplitBasis: nextSnapshot.surplusSplitBasis,
+      curatorSharePct: nextPolicy.curatorSharePct,
+      commonsSharePct: nextPolicy.commonsSharePct,
+      reserveSharePct: nextPolicy.reserveSharePct,
+      salesPatronagePct: nextPolicy.salesPatronagePct,
+      laborPatronagePct: nextPolicy.laborPatronagePct,
+      icaRetainedPct: nextPolicy.icaRetainedPct,
+      sweatSalesPoolMode: nextPolicy.sweatSalesPoolMode,
+      carriedOverShortfall: nextPolicy.carriedOverShortfall,
+      autoApproveReceiptPoMaxUsd: nextPolicy.autoApproveReceiptPoMaxUsd,
+      proposalCount: nextSnapshot.proposals.length,
+      updatedAt: nextSnapshot.updatedAt,
+    }).slice(0, 4900),
+  };
+
+  if (manifestExists) {
+    await ctx.databases.updateDocument(ctx.dbId, MANIFESTS_COL_ID, COOP_GOVERNANCE_DOC_ID, docPayload);
+  } else {
+    await ctx.databases.createDocument(
+      ctx.dbId,
+      MANIFESTS_COL_ID,
+      COOP_GOVERNANCE_DOC_ID,
+      docPayload,
+      [Permission.read(Role.any()), Permission.update(Role.any()), Permission.delete(Role.any())]
+    );
+  }
+
+  return nextPolicy;
+}
+
+function findProfileIndexStrict(
+  members: ReadonlyArray<CoopMemberProfile>,
+  userId: string,
+  email: string
+): number {
+  if (userId) {
+    const byUid = members.findIndex((m) => m.userId && m.userId.trim() === userId);
+    if (byUid >= 0) return byUid;
+  }
+  if (email) {
+    const byEmail = members.findIndex(
+      (m) =>
+        (!m.userId || !userId || m.userId.trim() === userId) &&
+        m.email &&
+        m.email.trim().toLowerCase() === email
+    );
+    if (byEmail >= 0) return byEmail;
+  }
+  return -1;
+}
 
 export const POST: APIRoute = async ({ request }) => {
   try {
@@ -22,9 +111,15 @@ export const POST: APIRoute = async ({ request }) => {
     const membershipId = String(body?.membershipId || '').trim();
 
     if (!membershipId) {
-      throw new CoopHttpError(400, 'Select a pending member invitation first.', 'MISSING_MEMBERSHIP_ID');
+      throw new CoopHttpError(400, 'Select a member first.', 'MISSING_MEMBERSHIP_ID');
     }
-    if (action !== 'activate' && action !== 'resend' && action !== 'cancel') {
+    if (
+      action !== 'activate' &&
+      action !== 'resend' &&
+      action !== 'cancel' &&
+      action !== 'rename' &&
+      action !== 'remove'
+    ) {
       throw new CoopHttpError(400, 'Unsupported membership action.', 'UNSUPPORTED_ACTION');
     }
 
@@ -36,7 +131,7 @@ export const POST: APIRoute = async ({ request }) => {
       });
     } catch (err: any) {
       if (err?.code === 404) {
-        throw new CoopHttpError(404, 'Pending invitation not found.', 'NOT_FOUND');
+        throw new CoopHttpError(404, 'Member record not found.', 'NOT_FOUND');
       }
       throw err;
     }
@@ -45,10 +140,11 @@ export const POST: APIRoute = async ({ request }) => {
       ? existing.roles.map((r: any) => String(r || '').trim().toLowerCase()).filter(Boolean)
       : [];
 
-    if (existingRoles.includes('owner')) {
+    // Allow Account Stewards to rename their own display name inline, while blocking activate/resend/cancel/remove on 'owner'
+    if (existingRoles.includes('owner') && action !== 'rename') {
       throw new CoopHttpError(
         403,
-        'Protected Account Steward membership cannot be altered here.',
+        'Protected Account Steward membership cannot be removed or altered here.',
         'OWNER_PROTECTED'
       );
     }
@@ -63,6 +159,135 @@ export const POST: APIRoute = async ({ request }) => {
       });
     }
 
+    const roles = existingRoles.length > 0 ? existingRoles : ['member', 'curator'];
+    const userId = String(existing?.userId || body?.userId || '').trim();
+    const email = String(existing?.userEmail || '').trim().toLowerCase();
+    const name = String(existing?.userName || '').trim();
+
+    if (action === 'rename') {
+      const nextName = String(body?.name || '').trim().replace(/\s+/g, ' ');
+      if (nextName.length < 2 || nextName.length > 80 || /[<>]/.test(nextName)) {
+        throw new CoopHttpError(
+          400,
+          'Enter a valid display name (2 to 80 characters, without angle brackets).',
+          'INVALID_DISPLAY_NAME'
+        );
+      }
+
+      if (userId) {
+        try {
+          const users = new Users(ctx.keyClient);
+          await users.updateName({ userId, name: nextName });
+        } catch (err: any) {
+          throw new CoopHttpError(
+            502,
+            err?.message || 'Could not update member account name right now.',
+            'UPDATE_NAME_FAILED'
+          );
+        }
+      }
+
+      const { policyConfig, rawManifestSnapshot, manifestExists } =
+        await loadGovernancePolicyOnServer(ctx);
+      const idx = findProfileIndexStrict(policyConfig.members, userId, email);
+      let nextMembers: CoopMemberProfile[];
+
+      if (idx >= 0) {
+        nextMembers = policyConfig.members.map((m, i) =>
+          i === idx
+            ? {
+                ...m,
+                name: nextName,
+                userId: userId || m.userId,
+                email: email || m.email,
+              }
+            : m
+        );
+      } else {
+        const derivedHats = deriveMemberHatsFromRoles(roles);
+        const createdProfile: CoopMemberProfile = {
+          name: nextName,
+          partner: 'CURATOR',
+          role:
+            existingRoles.includes('founder') || existingRoles.includes('owner')
+              ? 'Co-op Member'
+              : 'Partner Curator',
+          canVote: derivedHats.some((h) => MEMBER_HAT_META[h]?.canVote),
+          userId: userId || undefined,
+          email: email || undefined,
+          hats: derivedHats,
+          prefixStatus: 'unset',
+        };
+        nextMembers = [...policyConfig.members, createdProfile];
+      }
+
+      const savedPolicy = await savePolicyManifestOnServer(
+        ctx,
+        rawManifestSnapshot,
+        manifestExists,
+        { ...policyConfig, members: nextMembers }
+      );
+
+      return jsonResponse({
+        ok: true,
+        action: 'rename',
+        name: nextName,
+        membership: { ...existing, userName: nextName },
+        policyConfig: savedPolicy,
+      });
+    }
+
+    if (action === 'remove') {
+      await ctx.teams.deleteMembership({
+        teamId: ctx.coopTeamId,
+        membershipId,
+      });
+
+      const { policyConfig, rawManifestSnapshot, manifestExists } =
+        await loadGovernancePolicyOnServer(ctx);
+      const idx = findProfileIndexStrict(policyConfig.members, userId, email);
+      let nextMembers = policyConfig.members;
+
+      if (idx >= 0) {
+        const target = policyConfig.members[idx];
+        const lockedPref = formatAutoHyphenPrefix(target.inventoryPrefix);
+        const hasOwnedPrefix = Boolean(
+          (lockedPref && (lockedPref !== 'HUCK-' || target.prefixLockedAt)) ||
+            (target.historicalPrefixes && target.historicalPrefixes.length > 0)
+        );
+        if (hasOwnedPrefix) {
+          // Preserve historical SKU prefix ownership so closed & future settlements stay intact
+          nextMembers = policyConfig.members.map((m, i) =>
+            i === idx
+              ? {
+                  ...m,
+                  userId: undefined,
+                  email: undefined,
+                  requestedPrefix: undefined,
+                  canVote: false,
+                }
+              : m
+          );
+        } else {
+          nextMembers = policyConfig.members.filter((_, i) => i !== idx);
+        }
+      }
+
+      const savedPolicy = await savePolicyManifestOnServer(
+        ctx,
+        rawManifestSnapshot,
+        manifestExists,
+        { ...policyConfig, members: nextMembers }
+      );
+
+      return jsonResponse({
+        ok: true,
+        action: 'remove',
+        deletedMembershipId: membershipId,
+        policyConfig: savedPolicy,
+      });
+    }
+
     if (action === 'cancel') {
       await ctx.teams.deleteMembership({
         teamId: ctx.coopTeamId,
@@ -74,11 +299,6 @@ export const POST: APIRoute = async ({ request }) => {
         deletedMembershipId: membershipId,
       });
     }
-
-    const roles = existingRoles.length > 0 ? existingRoles : ['member', 'curator'];
-    const userId = String(existing?.userId || '').trim();
-    const email = String(existing?.userEmail || '').trim().toLowerCase();
-    const name = String(existing?.userName || '').trim();
 
     if (action === 'activate') {
       if (!userId) {
