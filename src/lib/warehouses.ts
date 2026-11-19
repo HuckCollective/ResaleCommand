@@ -333,6 +333,7 @@ export function getLocationManifestDocIds(locOrStr: any, liveWarehouses?: any[])
     payloadDocId: string;
     salesSyncDocId: string;
     rawCsvDocId: string;
+    channelOutboxDocId: string;
 } {
     const defaultRicochetFac = KNOWN_FACILITIES.find(f => f.usesRicochet) || KNOWN_FACILITIES[0];
     const code = (resolveCanonicalLocationCode(locOrStr, liveWarehouses) || defaultRicochetFac.code).toUpperCase();
@@ -343,6 +344,7 @@ export function getLocationManifestDocIds(locOrStr: any, liveWarehouses?: any[])
         payloadDocId: `${ prefix }_live_payload_latest`,
         salesSyncDocId: `${ prefix }_ricochet_sales_sync_latest`,
         rawCsvDocId: `${ prefix }_ricochet_raw_csv_latest`,
+        channelOutboxDocId: `${ prefix }_channel_outbox_latest`,
     };
 }
 

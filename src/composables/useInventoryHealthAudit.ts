@@ -1,4 +1,4 @@
-import { computed, onMounted, ref, watch, type Ref } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref, watch, type Ref } from 'vue';
 import {
   auditInventoryAndPurchaseHealth,
   type HealthAuditScope,
@@ -7,6 +7,38 @@ import {
 import { salesApi } from '../lib/sales';
 import { usePurchases } from './usePurchases';
 import { addToast } from '../stores/toast';
+
+export type HealthBucketTabId =
+  | 'split_lots'
+  | 'sold_ghosts'
+  | 'active_clones'
+  | 'barcodes'
+  | 'stale_pos';
+
+const HEALTH_HASH_TO_TAB: Record<string, HealthBucketTabId | null> = {
+  '#health': null,
+  '#health-split': 'split_lots',
+  '#health-sold': 'sold_ghosts',
+  '#health-clones': 'active_clones',
+  '#health-barcodes': 'barcodes',
+  '#health-pos': 'stale_pos',
+};
+
+const HEALTH_TAB_TO_HASH: Record<HealthBucketTabId, string> = {
+  split_lots: '#health-split',
+  sold_ghosts: '#health-sold',
+  active_clones: '#health-clones',
+  barcodes: '#health-barcodes',
+  stale_pos: '#health-pos',
+};
+
+function parseHealthHash(hash: string): { isHealthHash: boolean; tab: HealthBucketTabId | null } {
+  const clean = String(hash || '').trim().toLowerCase();
+  if (Object.prototype.hasOwnProperty.call(HEALTH_HASH_TO_TAB, clean)) {
+    return { isHealthHash: true, tab: HEALTH_HASH_TO_TAB[clean] };
+  }
+  return { isHealthHash: false, tab: null };
+}
 
 const DISMISSED_HEALTH_STORAGE_KEY = 'rc_dismissed_health_pairs_v1';
 
@@ -39,6 +71,7 @@ export function useInventoryHealthAudit(opts: UseInventoryHealthAuditOptions) {
   const { purchases, fetchPurchases } = usePurchases();
 
   const isHealthAuditTrayOpen = ref(false);
+  const requestedHealthTab = ref<HealthBucketTabId | null>(null);
   const healthAuditScope = ref<HealthAuditScope>(
     opts.capabilities.value?.isConsignor ? 'all' : 'mine'
   );
@@ -154,12 +187,71 @@ export function useInventoryHealthAudit(opts: UseInventoryHealthAuditOptions) {
     ]);
   };
 
+  const replaceHashQuietly = (nextHash: string) => {
+    if (typeof window === 'undefined') return;
+    try {
+      const url = new URL(window.location.href);
+      if (url.hash === nextHash) return;
+      url.hash = nextHash;
+      window.history.replaceState(null, '', url.pathname + url.search + url.hash);
+    } catch {}
+  };
+
+  const syncHealthTabHash = (tab: HealthBucketTabId) => {
+    requestedHealthTab.value = tab;
+    if (isHealthAuditTrayOpen.value) {
+      replaceHashQuietly(HEALTH_TAB_TO_HASH[tab] || '#health');
+    }
+  };
+
+  watch(isHealthAuditTrayOpen, (open) => {
+    if (typeof window === 'undefined') return;
+    if (open) {
+      if (requestedHealthTab.value) {
+        replaceHashQuietly(HEALTH_TAB_TO_HASH[requestedHealthTab.value] || '#health');
+      } else if (!parseHealthHash(window.location.hash).isHealthHash) {
+        replaceHashQuietly('#health');
+      }
+    } else if (parseHealthHash(window.location.hash).isHealthHash) {
+      requestedHealthTab.value = null;
+      replaceHashQuietly('');
+    }
+  });
+
+  const handleHashChange = () => {
+    if (typeof window === 'undefined') return;
+    const parsed = parseHealthHash(window.location.hash);
+    if (parsed.isHealthHash) {
+      requestedHealthTab.value = parsed.tab;
+      if (!isHealthAuditTrayOpen.value) {
+        openHealthAuditTray();
+      }
+    } else if (isHealthAuditTrayOpen.value) {
+      requestedHealthTab.value = null;
+      isHealthAuditTrayOpen.value = false;
+    }
+  };
+
   onMounted(() => {
-    if (
-      typeof window !== 'undefined' &&
-      new URLSearchParams(window.location.search).get('health') === 'audit'
-    ) {
-      openHealthAuditTray();
+    if (typeof window !== 'undefined') {
+      window.addEventListener('hashchange', handleHashChange);
+      const url = new URL(window.location.href);
+      const legacyHealthQuery = url.searchParams.get('health');
+      const parsed = parseHealthHash(url.hash);
+
+      if (legacyHealthQuery === 'audit') {
+        url.searchParams.delete('health');
+        const upgradedHash = parsed.isHealthHash ? url.hash : '#health';
+        url.hash = upgradedHash;
+        try {
+          window.history.replaceState(null, '', url.pathname + url.search + url.hash);
+        } catch {}
+        requestedHealthTab.value = parsed.tab;
+        openHealthAuditTray();
+      } else if (parsed.isHealthHash) {
+        requestedHealthTab.value = parsed.tab;
+        openHealthAuditTray();
+      }
     }
     setTimeout(() => {
       if (allSalesForHealth.value.length === 0) {
@@ -171,13 +263,21 @@ export function useInventoryHealthAudit(opts: UseInventoryHealthAuditOptions) {
     }, 250);
   });
 
+  onBeforeUnmount(() => {
+    if (typeof window !== 'undefined') {
+      window.removeEventListener('hashchange', handleHashChange);
+    }
+  });
+
   return {
     isHealthAuditTrayOpen,
+    requestedHealthTab,
     healthAuditScope,
     dismissedHealthKeys,
     healthReport,
     healthTotalBadgeCount,
     openHealthAuditTray,
+    syncHealthTabHash,
     dismissHealthPair,
     resetDismissedHealthPairs,
     refreshInventoryAndPurchases,

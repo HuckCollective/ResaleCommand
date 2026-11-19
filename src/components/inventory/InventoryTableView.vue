@@ -480,8 +480,10 @@
         <StockHealthAuditTray
             v-model="isHealthAuditTrayOpen"
             v-model:scope="healthAuditScope"
+            :requested-tab="requestedHealthTab"
             :report="healthReport"
             :dismissed-count="dismissedHealthKeys.size"
+            @tab-change="syncHealthTabHash"
             @inspect-item="openItem"
             @dismiss-pair="dismissHealthPair"
             @reset-dismissed="resetDismissedHealthPairs"
@@ -1137,11 +1139,13 @@ const formatSoldTime = (dateStr) => {
 // -- 9. STOCK & PO HEALTH CHECK WORKBENCH (Shared Composable; placed at bottom for strict TDZ order) --
 const {
     isHealthAuditTrayOpen,
+    requestedHealthTab,
     healthAuditScope,
     dismissedHealthKeys,
     healthReport,
     healthTotalBadgeCount,
     openHealthAuditTray,
+    syncHealthTabHash,
     dismissHealthPair,
     resetDismissedHealthPairs,
     refreshInventoryAndPurchases,

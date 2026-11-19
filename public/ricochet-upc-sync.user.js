@@ -61,7 +61,7 @@
   // Fee / rent come ONLY from central Location Settings (injected as __RC_ACTIVE_LOCATION_META__) — no literal fallbacks
   const activeCommissionRate = Number(activeLocMeta.commissionRate ?? activeLocMeta.feePct ?? 0) || 0;
   const activeMonthlyRent = Number(activeLocMeta.monthlyRent ?? 0) || 0;
-  let activeModalTab = 'inventory'; // 'inventory' | 'sales' | 'drops'
+  let activeModalTab = 'inventory'; // 'inventory' | 'drops' | 'outbox' | 'sales'
 
   // ===== 📦 Outbound Drops tab (2-way manifest sync) =====
   // Self-injecting: adds a 3rd tab + view when the modal's tab bar mounts, so the existing
@@ -543,41 +543,487 @@
     renderDropsView();
   }
 
-  function setDropsTabActive(active) {
-    const btn = document.getElementById('rc-tab-btn-drops');
-    const view = document.getElementById('rc-tab-view-drops');
-    if (active) {
-      activeModalTab = 'drops';
-      document.querySelectorAll('[id^="rc-tab-view-"]').forEach((el) => { el.style.display = el.id === 'rc-tab-view-drops' ? 'flex' : 'none'; });
-      document.querySelectorAll('[id^="rc-tab-btn-"]').forEach((el) => {
-        const on = el.id === 'rc-tab-btn-drops';
-        el.style.border = on ? '1px solid #38bdf8' : '1px solid #334155';
-        el.style.background = on ? 'rgba(56, 189, 248, 0.18)' : '#1e293b';
-        el.style.color = on ? '#f8fafc' : '#cbd5e1';
+  // ===== 🧹 Universal Channel Sync Outbox tab (Queue & Safety-Gated Executor) =====
+  const RC_OUTBOX_ENDPOINTS = RC_ORIGINS.map((o) => o + '/api/sync/channel-outbox');
+  let outboxIntents = [];
+  let outboxSelectedIds = new Set();
+  let outboxStatus = { loading: false, running: false, done: 0, total: 0, error: '', banner: '' };
+
+  async function rcOutboxApi(method, query, body) {
+    let netErr = null;
+    for (const base of RC_OUTBOX_ENDPOINTS) {
+      let res;
+      try {
+        res = await fetch(base + (query || ''), {
+          method,
+          headers: body ? { 'Content-Type': 'application/json' } : undefined,
+          body: body ? JSON.stringify(body) : undefined,
+        });
+      } catch (e) {
+        netErr = e;
+        continue;
+      }
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || data.message || 'Resale Command HTTP ' + res.status);
+      return data;
+    }
+    throw netErr || new Error('Resale Command unreachable');
+  }
+
+  function findRicochetProductInCatalogForIntent(intent) {
+    const sku = cleanStr(intent?.externalSku || '').toUpperCase();
+    const upc = cleanStr(intent?.rcUpc || '').toUpperCase();
+    if (!Array.isArray(catalogProducts)) return null;
+    if (sku) {
+      const bySku = catalogProducts.find((p) => extractRicochetSku(p) === sku);
+      if (bySku) return bySku;
+    }
+    if (upc && isRealUpc(upc)) {
+      const byUpc = catalogProducts.find((p) => extractRicochetUpc(p) === upc);
+      if (byUpc) return byUpc;
+    }
+    return null;
+  }
+
+  async function resolveRicochetProductForIntent(intent) {
+    const localHit = findRicochetProductInCatalogForIntent(intent);
+    if (localHit && localHit.id) return localHit;
+    if (!window.axios) return null;
+    const sku = cleanStr(intent?.externalSku || '').toUpperCase();
+    const upc = cleanStr(intent?.rcUpc || '').toUpperCase();
+    const searchTerm = sku || upc || cleanStr(intent?.title || '');
+    if (!searchTerm) return null;
+    try {
+      const res = await window.axios.get(
+        `/api/product?store=1&limit=15&offset=0&search=${encodeURIComponent(searchTerm)}`
+      );
+      const list = res.data?.products || (Array.isArray(res.data) ? res.data : []);
+      if (sku) {
+        const hitSku = list.find((p) => extractRicochetSku(p) === sku);
+        if (hitSku) return hitSku;
+      }
+      if (upc && isRealUpc(upc)) {
+        const hitUpc = list.find((p) => extractRicochetUpc(p) === upc);
+        if (hitUpc) return hitUpc;
+      }
+      return list.length === 1 ? list[0] : null;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  function updateOutboxBadge() {
+    const badge = document.getElementById('rc-tab-outbox-badge');
+    if (!badge) return;
+    const count = outboxIntents.filter((i) => i.status === 'pending' || i.status === 'failed').length;
+    badge.textContent = String(count);
+    badge.style.background = count > 0 ? 'rgba(245, 158, 11, 0.28)' : 'rgba(148, 163, 184, 0.2)';
+    badge.style.color = count > 0 ? '#fde68a' : '#cbd5e1';
+  }
+
+  function outboxActionLabel(action) {
+    if (action === 'deactivate_or_remove') return '🗑️ Zero Stock';
+    if (action === 'update_price') return '💲 Update Price';
+    if (action === 'update_title') return '✏️ Update Title';
+    if (action === 'fill_blank_upc') return '🏷️ Fill Blank UPC';
+    return '🔄 Sync Item';
+  }
+
+  function renderOutboxView() {
+    updateOutboxBadge();
+    const view = document.getElementById('rc-tab-view-outbox');
+    if (!view) return;
+    view.style.overflowX = 'hidden';
+
+    const pending = outboxIntents.filter((i) => i.status === 'pending' || i.status === 'failed');
+    const finishedCount = outboxIntents.filter((i) => i.status === 'applied' || i.status === 'skipped').length;
+    const selectedPending = pending.filter((i) => outboxSelectedIds.has(i.id));
+    const syncPortalUrl =
+      (RC_ORIGINS[0] || '') + '/warehouse/sync/' + encodeURIComponent(activeLocationCode || 'MD');
+
+    let html =
+      '<div style="display:flex;justify-content:space-between;align-items:center;gap:6px;flex-wrap:wrap;">' +
+        '<div style="font-size:11.5px;font-weight:900;color:#f8fafc;">🧹 Channel Sync Queue (' + pending.length + ' pending)</div>' +
+        '<div style="display:flex;gap:5px;align-items:center;">' +
+          '<button id="rc-outbox-refresh-btn" type="button" style="background:#1e293b;color:#38bdf8;border:1px solid #334155;border-radius:8px;padding:5px 9px;font-size:11px;font-weight:800;cursor:pointer;">🔄 Refresh</button>' +
+          '<a href="' + rcDropEsc(syncPortalUrl) + '" target="_blank" rel="noopener noreferrer" style="background:#1e293b;color:#cbd5e1;border:1px solid #334155;border-radius:8px;padding:5px 9px;font-size:11px;font-weight:700;text-decoration:none;">↗ Queue Page</a>' +
+        '</div>' +
+      '</div>';
+
+    if (outboxStatus.loading) {
+      html += '<div style="padding:12px;border-radius:10px;background:#1e293b;border:1px solid #334155;color:#94a3b8;font-size:11.5px;">⏳ Loading pending sync tasks for ' + rcDropEsc(activeLocationName) + '...</div>';
+    }
+    if (outboxStatus.error) {
+      html += '<div style="padding:10px 12px;border-radius:10px;background:rgba(239,68,68,0.14);border:1px solid rgba(239,68,68,0.45);color:#fecaca;font-size:11.5px;font-weight:700;line-height:1.45;">' + rcDropEsc(outboxStatus.error) + '</div>';
+    }
+    if (outboxStatus.banner) {
+      html += '<div style="padding:9px 12px;border-radius:10px;background:rgba(16,185,129,0.16);border:1px solid rgba(16,185,129,0.45);color:#a7f3d0;font-size:11.5px;font-weight:800;line-height:1.4;">' + rcDropEsc(outboxStatus.banner) + '</div>';
+    }
+
+    if (!outboxStatus.loading && pending.length === 0) {
+      html += '<div style="padding:14px;border-radius:10px;background:#1e293b;border:1px solid #334155;color:#94a3b8;font-size:11.5px;text-align:center;">✅ No pending outbound sync tasks for ' + rcDropEsc(activeLocationName) + '. Archive duplicates or edit items in Works@TheHC to queue updates here.</div>';
+    } else if (pending.length > 0) {
+      // Mandatory Law #2 Pre-Flight Queue Preview
+      html +=
+        '<div style="background:#1e293b;border:1px solid #334155;border-radius:12px;padding:10px;display:flex;flex-direction:column;gap:8px;min-width:0;">' +
+          '<div style="display:flex;justify-content:space-between;align-items:center;gap:6px;flex-wrap:wrap;">' +
+            '<span style="font-size:11px;font-weight:800;color:#fde68a;">📋 Pre-Flight Queue Preview (' + selectedPending.length + ' selected)</span>' +
+            '<button id="rc-outbox-toggle-all-btn" type="button" style="background:transparent;border:1px solid #475569;color:#cbd5e1;border-radius:6px;padding:2px 7px;font-size:10px;font-weight:700;cursor:pointer;">' +
+              (selectedPending.length === pending.length ? 'Unselect All' : 'Select All') +
+            '</button>' +
+          '</div>' +
+          '<div style="max-height:220px;overflow-y:auto;display:flex;flex-direction:column;gap:6px;padding-right:2px;">';
+
+      for (const it of pending) {
+        const checked = outboxSelectedIds.has(it.id);
+        const catProd = findRicochetProductInCatalogForIntent(it);
+        const ricoHref =
+          catProd && catProd.id
+            ? '/products/edit/' + encodeURIComponent(catProd.id)
+            : '/products?search=' + encodeURIComponent(it.externalSku || it.rcUpc || it.title || '');
+        const keeperRef = it.keeperExternalSku || it.keeperUpc || '';
+        const errHtml =
+          it.status === 'failed' && it.error
+            ? '<div style="font-size:10px;color:#fca5a5;font-weight:700;margin-top:2px;">⚠️ ' + rcDropEsc(it.error) + '</div>'
+            : '';
+
+        html +=
+          '<div style="padding:8px 9px;border-radius:9px;background:#0f172a;border:1px solid ' +
+            (it.status === 'failed' ? 'rgba(239,68,68,0.5)' : checked ? 'rgba(245,158,11,0.45)' : '#334155') +
+            ';display:flex;flex-direction:column;gap:4px;min-width:0;">' +
+            '<div style="display:flex;align-items:flex-start;gap:7px;min-width:0;">' +
+              '<input type="checkbox" class="rc-outbox-row-chk" data-intent-id="' + rcDropEsc(it.id) + '" ' + (checked ? 'checked' : '') + ' style="margin-top:2px;cursor:pointer;" />' +
+              '<div style="flex:1;min-width:0;">' +
+                '<div style="display:flex;align-items:center;justify-content:space-between;gap:5px;flex-wrap:wrap;">' +
+                  '<span style="font-size:10px;font-weight:800;padding:1px 6px;border-radius:5px;background:rgba(245,158,11,0.18);color:#fcd34d;">' + outboxActionLabel(it.action) + '</span>' +
+                  '<span style="font-size:10px;font-family:monospace;color:#38bdf8;font-weight:800;">' + rcDropEsc(it.externalSku || 'NO SKU') + ' • ' + rcDropEsc(it.rcUpc || 'NO UPC') + '</span>' +
+                '</div>' +
+                '<div style="font-size:11.5px;font-weight:800;color:#f8fafc;margin-top:3px;word-break:break-word;">' + rcDropEsc(it.title || 'Untitled') + '</div>' +
+                '<div style="font-size:10px;color:#94a3b8;margin-top:2px;">' +
+                  rcDropEsc(it.reason || '') +
+                  (keeperRef ? ' <span style="color:#6ee7b7;font-family:monospace;font-weight:700;">• Keep ' + rcDropEsc(keeperRef) + '</span>' : '') +
+                '</div>' +
+                errHtml +
+              '</div>' +
+            '</div>' +
+            '<div style="display:flex;justify-content:space-between;align-items:center;gap:6px;padding-left:20px;margin-top:2px;">' +
+              '<a href="' + rcDropEsc(ricoHref) + '" target="_blank" rel="noopener noreferrer" style="font-size:10px;color:#38bdf8;font-weight:700;text-decoration:none;">↗ Open in Ricochet</a>' +
+              '<button type="button" class="rc-outbox-skip-btn" data-intent-id="' + rcDropEsc(it.id) + '" style="background:#1e293b;color:#cbd5e1;border:1px solid #334155;border-radius:6px;padding:2px 8px;font-size:10px;font-weight:700;cursor:pointer;">Skip</button>' +
+            '</div>' +
+          '</div>';
+      }
+
+      html += '</div></div>';
+
+      const busy = outboxStatus.running || selectedPending.length === 0;
+      html +=
+        '<div style="font-size:10.5px;color:#cbd5e1;line-height:1.35;background:rgba(56,189,248,0.08);border:1px solid rgba(56,189,248,0.25);border-radius:8px;padding:7px 9px;">' +
+          '🛡️ <b>Safe Sync Policy:</b> Zero Stock sets <code style="color:#7dd3fc;">in_stock: 0</code> &amp; <code style="color:#7dd3fc;">quantity: 0</code> (no hard deletes). Fill Blank UPC never overwrites existing barcodes.' +
+        '</div>' +
+        '<div style="display:grid;grid-template-columns:1fr 1.35fr;gap:7px;">' +
+          '<button id="rc-outbox-canary-btn" type="button"' + (busy ? ' disabled' : '') + ' style="background:' + (busy ? '#334155' : 'rgba(56,189,248,0.18)') + ';color:' + (busy ? '#94a3b8' : '#7dd3fc') + ';border:1px solid ' + (busy ? '#475569' : '#38bdf8') + ';border-radius:10px;padding:10px 8px;font-weight:900;font-size:11.5px;cursor:' + (busy ? 'not-allowed' : 'pointer') + ';">' +
+            (outboxStatus.running ? '⏳ Running...' : '🧪 Test 1 First') +
+          '</button>' +
+          '<button id="rc-outbox-apply-btn" type="button"' + (busy ? ' disabled' : '') + ' style="background:' + (busy ? '#334155' : 'linear-gradient(135deg,#f59e0b,#d97706)') + ';color:' + (busy ? '#94a3b8' : '#1e1b18') + ';border:none;border-radius:10px;padding:10px 8px;font-weight:900;font-size:11.5px;cursor:' + (busy ? 'not-allowed' : 'pointer') + ';">' +
+            (outboxStatus.running ? '⏳ Syncing (' + outboxStatus.done + '/' + outboxStatus.total + ')...' : '🚀 Apply Selected (' + selectedPending.length + ')') +
+          '</button>' +
+        '</div>';
+    }
+
+    if (finishedCount > 0) {
+      html +=
+        '<div style="display:flex;justify-content:space-between;align-items:center;font-size:10.5px;color:#94a3b8;padding-top:2px;">' +
+          '<span>' + finishedCount + ' finished item(s) in queue history</span>' +
+          '<button id="rc-outbox-clear-done-btn" type="button" style="background:transparent;border:none;color:#38bdf8;font-size:10.5px;font-weight:700;cursor:pointer;text-decoration:underline;">Clear Finished</button>' +
+        '</div>';
+    }
+
+    view.innerHTML = html;
+
+    const refreshBtn = document.getElementById('rc-outbox-refresh-btn');
+    if (refreshBtn) refreshBtn.onclick = () => loadOutbox(true);
+    const toggleAllBtn = document.getElementById('rc-outbox-toggle-all-btn');
+    if (toggleAllBtn) {
+      toggleAllBtn.onclick = () => {
+        if (selectedPending.length === pending.length) {
+          outboxSelectedIds.clear();
+        } else {
+          pending.forEach((it) => outboxSelectedIds.add(it.id));
+        }
+        renderOutboxView();
+      };
+    }
+    view.querySelectorAll('.rc-outbox-row-chk').forEach((chk) => {
+      chk.addEventListener('change', () => {
+        const id = chk.getAttribute('data-intent-id');
+        if (!id) return;
+        if (chk.checked) outboxSelectedIds.add(id);
+        else outboxSelectedIds.delete(id);
+        renderOutboxView();
       });
-      loadDrops();
-    } else if (view) {
-      view.style.display = 'none';
-      if (btn) { btn.style.border = '1px solid #334155'; btn.style.background = '#1e293b'; btn.style.color = '#cbd5e1'; }
+    });
+    view.querySelectorAll('.rc-outbox-skip-btn').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        const id = btn.getAttribute('data-intent-id');
+        if (!id || outboxStatus.running) return;
+        try {
+          const res = await rcOutboxApi('POST', '', {
+            mode: 'ack',
+            location: activeLocationCode,
+            results: [{ id, status: 'skipped' }],
+          });
+          outboxIntents = Array.isArray(res.intents) ? res.intents : [];
+          outboxStatus.banner = '⏭️ Skipped 1 queue item.';
+          renderOutboxView();
+        } catch (err) {
+          outboxStatus.error = '❌ ' + (err?.message || err);
+          renderOutboxView();
+        }
+      });
+    });
+    const canaryBtn = document.getElementById('rc-outbox-canary-btn');
+    if (canaryBtn) canaryBtn.onclick = () => executeOutboxBatch(true);
+    const applyBtn = document.getElementById('rc-outbox-apply-btn');
+    if (applyBtn) applyBtn.onclick = () => executeOutboxBatch(false);
+    const clearDoneBtn = document.getElementById('rc-outbox-clear-done-btn');
+    if (clearDoneBtn) {
+      clearDoneBtn.onclick = async () => {
+        try {
+          const res = await rcOutboxApi('POST', '', {
+            mode: 'clear_applied',
+            location: activeLocationCode,
+          });
+          outboxIntents = Array.isArray(res.intents) ? res.intents : [];
+          renderOutboxView();
+        } catch (err) {
+          outboxStatus.error = '❌ ' + (err?.message || err);
+          renderOutboxView();
+        }
+      };
+    }
+  }
+
+  async function loadOutbox(showSpinner = true) {
+    if (showSpinner) {
+      outboxStatus.loading = true;
+      outboxStatus.error = '';
+      renderOutboxView();
+    }
+    try {
+      const data = await rcOutboxApi(
+        'GET',
+        '?location=' + encodeURIComponent(activeLocationCode || 'MD')
+      );
+      const list = Array.isArray(data.intents) ? data.intents : [];
+      outboxIntents = list;
+      const pendingSet = new Set(
+        list.filter((i) => i.status === 'pending' || i.status === 'failed').map((i) => i.id)
+      );
+      if (outboxSelectedIds.size === 0) {
+        outboxSelectedIds = new Set(pendingSet);
+      } else {
+        outboxSelectedIds = new Set(Array.from(pendingSet));
+      }
+      outboxStatus.error = '';
+    } catch (e) {
+      if (showSpinner) {
+        outboxStatus.error = '❌ Could not load sync queue: ' + (e && e.message ? e.message : e);
+      }
+    }
+    outboxStatus.loading = false;
+    renderOutboxView();
+  }
+
+  async function executeOutboxBatch(singleCanary) {
+    if (outboxStatus.running) return;
+    if (!window.axios) {
+      outboxStatus.error = '❌ Open Ricochet POS logged in before applying Sync Queue updates.';
+      renderOutboxView();
+      return;
+    }
+    const pending = outboxIntents.filter(
+      (i) => (i.status === 'pending' || i.status === 'failed') && outboxSelectedIds.has(i.id)
+    );
+    if (pending.length === 0) {
+      outboxStatus.banner = 'Select at least one pending item first.';
+      renderOutboxView();
+      return;
+    }
+
+    const batch = singleCanary ? pending.slice(0, 1) : pending;
+    outboxStatus = {
+      loading: false,
+      running: true,
+      done: 0,
+      total: batch.length,
+      error: '',
+      banner: singleCanary ? '🧪 Running canary test on 1 item...' : '',
+    };
+    renderOutboxView();
+
+    let appliedOk = 0;
+    let failedCount = 0;
+
+    for (let i = 0; i < batch.length; i++) {
+      const intent = batch[i];
+      const sku = cleanStr(intent.externalSku || '').toUpperCase();
+      let ackResult = { id: intent.id, status: 'applied' };
+
+      try {
+        const product = await resolveRicochetProductForIntent(intent);
+        if (!product || !product.id) {
+          throw new Error('Could not find Ricochet product for ' + (sku || intent.rcUpc || intent.title));
+        }
+
+        const detailRes = await window.axios.get('/api/product/show/' + product.id);
+        const payload = detailRes.data?.product || detailRes.data?.data || detailRes.data;
+        const targetItem = extractFirstRicochetItemVariant(payload);
+        if (!targetItem) {
+          throw new Error('No editable item variant returned by Ricochet for #' + product.id);
+        }
+
+        if (intent.action === 'fill_blank_upc') {
+          const targetUpc = cleanStr(intent.payload?.upc || intent.rcUpc || '').toUpperCase();
+          if (!targetUpc || !isRealUpc(targetUpc)) {
+            throw new Error('Invalid target barcode: ' + (targetUpc || 'blank'));
+          }
+          const existingUpc = cleanStr(targetItem.upc_code).toUpperCase();
+          if (existingUpc && isRealUpc(existingUpc) && existingUpc !== targetUpc) {
+            if (sku) recordVerifiedMdUpc(sku, existingUpc);
+            throw new Error(
+              'Protected existing Ricochet physical tag ' + existingUpc + ' (Law #1: never auto-overwritten)'
+            );
+          }
+          if (existingUpc !== targetUpc) {
+            targetItem.store = targetItem.store || 1;
+            targetItem.upc_code = targetUpc;
+            const saveRes = await window.axios.put('/api/product/items', targetItem);
+            if (saveRes.status !== 200 && saveRes.status !== 201) {
+              throw new Error('Ricochet returned HTTP ' + saveRes.status);
+            }
+          }
+          if (sku) recordVerifiedMdUpc(sku, targetUpc);
+          addLog(`✅ [Outbox ${sku || targetUpc}] Filled blank barcode ➔ ${targetUpc}`, '#10b981');
+        } else if (intent.action === 'deactivate_or_remove') {
+          targetItem.store = targetItem.store || 1;
+          targetItem.quantity = 0;
+          if ('qty' in targetItem) targetItem.qty = 0;
+          if ('in_stock' in targetItem) {
+            targetItem.in_stock = typeof targetItem.in_stock === 'boolean' ? false : 0;
+          }
+          const saveRes = await window.axios.put('/api/product/items', targetItem);
+          if (saveRes.status !== 200 && saveRes.status !== 201) {
+            throw new Error('Ricochet returned HTTP ' + saveRes.status);
+          }
+          product.quantity = 0;
+          if ('in_stock' in product) product.in_stock = targetItem.in_stock;
+          if (Array.isArray(product.items) && product.items[0]) {
+            product.items[0].quantity = 0;
+            if ('in_stock' in product.items[0]) product.items[0].in_stock = targetItem.in_stock;
+          }
+          addLog(`✅ [Outbox ${sku || intent.rcUpc}] Set stock to 0 (in_stock: 0)`, '#10b981');
+        } else if (intent.action === 'update_price') {
+          const nextPrice = Number(intent.payload?.price ?? 0);
+          if (!Number.isFinite(nextPrice) || nextPrice <= 0) {
+            throw new Error('Invalid price update amount.');
+          }
+          targetItem.store = targetItem.store || 1;
+          targetItem.price = nextPrice;
+          const saveRes = await window.axios.put('/api/product/items', targetItem);
+          if (saveRes.status !== 200 && saveRes.status !== 201) {
+            throw new Error('Ricochet returned HTTP ' + saveRes.status);
+          }
+          addLog(`✅ [Outbox ${sku || intent.rcUpc}] Updated price ➔ $${nextPrice.toFixed(2)}`, '#10b981');
+        } else if (intent.action === 'update_title') {
+          const nextTitle = cleanStr(intent.payload?.title || intent.title || '');
+          if (!nextTitle) throw new Error('Blank title update skipped.');
+          targetItem.store = targetItem.store || 1;
+          targetItem.name = nextTitle;
+          const saveRes = await window.axios.put('/api/product/items', targetItem);
+          if (saveRes.status !== 200 && saveRes.status !== 201) {
+            throw new Error('Ricochet returned HTTP ' + saveRes.status);
+          }
+          addLog(`✅ [Outbox ${sku || intent.rcUpc}] Updated title`, '#10b981');
+        } else {
+          throw new Error('Unsupported sync action: ' + intent.action);
+        }
+
+        appliedOk++;
+      } catch (err) {
+        failedCount++;
+        const errMsg = formatAxiosError(err);
+        ackResult = { id: intent.id, status: 'failed', error: errMsg };
+        addLog(`⚠️ [Outbox ${sku || intent.rcUpc}] ${errMsg}`, '#fbbf24');
+      }
+
+      try {
+        await rcOutboxApi('POST', '', {
+          mode: 'ack',
+          location: activeLocationCode,
+          results: [ackResult],
+        });
+      } catch (ackErr) {
+        outboxStatus.error = '⚠️ Ricochet updated, but could not ack Works@TheHC: ' + (ackErr?.message || ackErr);
+      }
+
+      outboxStatus.done = i + 1;
+      await new Promise((r) => setTimeout(r, 220));
+    }
+
+    outboxStatus.running = false;
+    await loadOutbox(false);
+    outboxStatus.banner = singleCanary
+      ? `🧪 Canary complete: ${appliedOk} applied, ${failedCount} failed.`
+      : `🎉 Batch complete: ${appliedOk} applied, ${failedCount} failed.`;
+    renderOutboxView();
+    if (appliedOk > 0) {
+      updateUI();
     }
   }
 
   function ensureDropsTab() {
     const salesBtn = document.getElementById('rc-tab-btn-sales');
-    if (!salesBtn || document.getElementById('rc-tab-btn-drops')) return;
-    const btn = salesBtn.cloneNode(false);
-    btn.id = 'rc-tab-btn-drops';
-    btn.innerHTML = '<span>🚚 New Drops</span><span id="rc-tab-drops-badge" style="background: rgba(56, 189, 248, 0.25); color: #7dd3fc; padding: 1px 6px; border-radius: 999px; font-size: 10px; font-family: monospace;">0</span>';
-    salesBtn.parentNode.insertBefore(btn, salesBtn);
-    salesBtn.parentNode.style.gridTemplateColumns = '1fr 1fr 1fr';
+    if (!salesBtn) return;
     const invView = document.getElementById('rc-tab-view-inventory');
+
+    if (!document.getElementById('rc-tab-btn-drops')) {
+      const btn = salesBtn.cloneNode(false);
+      btn.id = 'rc-tab-btn-drops';
+      btn.innerHTML = '<span>🚚 Drops</span><span id="rc-tab-drops-badge" style="background: rgba(56, 189, 248, 0.25); color: #7dd3fc; padding: 1px 6px; border-radius: 999px; font-size: 10px; font-family: monospace;">0</span>';
+      salesBtn.parentNode.insertBefore(btn, salesBtn);
+    }
+
+    if (!document.getElementById('rc-tab-btn-outbox')) {
+      const obBtn = salesBtn.cloneNode(false);
+      obBtn.id = 'rc-tab-btn-outbox';
+      obBtn.innerHTML = '<span>🧹 Queue</span><span id="rc-tab-outbox-badge" style="background: rgba(148, 163, 184, 0.2); color: #cbd5e1; padding: 1px 6px; border-radius: 999px; font-size: 10px; font-family: monospace;">0</span>';
+      salesBtn.parentNode.insertBefore(obBtn, salesBtn);
+    }
+
+    if (salesBtn.parentNode) {
+      salesBtn.parentNode.style.gridTemplateColumns = 'repeat(2, minmax(0, 1fr))';
+    }
+
     if (invView && !document.getElementById('rc-tab-view-drops')) {
       const view = document.createElement('div');
       view.id = 'rc-tab-view-drops';
       view.style.cssText = 'display: none; flex-direction: column; gap: 10px;';
       invView.parentNode.insertBefore(view, invView);
     }
-    if (location.hash.indexOf('tab=drops') !== -1) setDropsTabActive(true);
+
+    if (invView && !document.getElementById('rc-tab-view-outbox')) {
+      const obView = document.createElement('div');
+      obView.id = 'rc-tab-view-outbox';
+      obView.style.cssText = 'display: none; flex-direction: column; gap: 10px;';
+      invView.parentNode.insertBefore(obView, invView);
+      updateOutboxBadge();
+    }
+
+    if (location.hash.indexOf('tab=drops') !== -1 && activeModalTab !== 'drops') {
+      switchModalTab('drops');
+    } else if (location.hash.indexOf('tab=queue') !== -1 && activeModalTab !== 'outbox') {
+      switchModalTab('outbox');
+    }
   }
 
   if (window.__RC_DROPS_TAB_CLICK_HANDLER__) {
@@ -586,7 +1032,8 @@
   window.__RC_DROPS_TAB_CLICK_HANDLER__ = (e) => {
     const tabBtn = e.target && e.target.closest ? e.target.closest('[id^="rc-tab-btn-"]') : null;
     if (!tabBtn) return;
-    setDropsTabActive(tabBtn.id === 'rc-tab-btn-drops');
+    if (tabBtn.id === 'rc-tab-btn-drops') switchModalTab('drops');
+    else if (tabBtn.id === 'rc-tab-btn-outbox') switchModalTab('outbox');
   };
   document.addEventListener('click', window.__RC_DROPS_TAB_CLICK_HANDLER__);
   if (window.__RC_DROPS_MUTATION_OBSERVER__) {
@@ -1901,11 +2348,13 @@
   function togglePanel() {
     setDrawerOpenState(!isOpen);
     if (isOpen) {
+      ensureDropsTab();
       if (isUserOnRicochetPayoutTab()) {
         switchModalTab('sales');
       }
       showModalLoader(`⏳ Auditing ${activeLocationName} Catalog...`);
       fetchLivePayloadFromCloud(false, true);
+      loadOutbox(false);
       if (catalogProducts.length === 0 && !isLoadingCatalog) {
         loadConsignorCatalog();
       } else {
@@ -2457,29 +2906,35 @@
     updateSalesSyncTabUI();
   }
 
-  // Switch between Tab 1 (📦 Inventory & UPC Audit) and Tab 2 (💰 Sales & Payout Sync)
+  // Switch between Tab 1 (🏷️ Booth Tags), Tab 2 (🚚 Drops), Tab 3 (🧹 Sync Queue), and Tab 4 (💰 Sales)
   function switchModalTab(tabName) {
-    activeModalTab = tabName === 'sales' ? 'sales' : 'inventory';
-    const invView = document.getElementById('rc-tab-view-inventory');
-    const salesView = document.getElementById('rc-tab-view-sales');
-    const invBtn = document.getElementById('rc-tab-btn-inventory');
-    const salesBtn = document.getElementById('rc-tab-btn-sales');
+    const allowed = new Set(['inventory', 'drops', 'outbox', 'sales']);
+    activeModalTab = allowed.has(tabName) ? tabName : 'inventory';
 
-    if (invView) invView.style.display = activeModalTab === 'inventory' ? 'flex' : 'none';
-    if (salesView) salesView.style.display = activeModalTab === 'sales' ? 'flex' : 'none';
+    document.querySelectorAll('[id^="rc-tab-view-"]').forEach((el) => {
+      el.style.display = el.id === 'rc-tab-view-' + activeModalTab ? 'flex' : 'none';
+    });
+    document.querySelectorAll('[id^="rc-tab-btn-"]').forEach((btn) => {
+      const id = btn.id.replace('rc-tab-btn-', '');
+      const on = id === activeModalTab;
+      if (id === 'sales') {
+        btn.style.border = on ? '1px solid #10b981' : '1px solid #334155';
+        btn.style.background = on ? 'rgba(16, 185, 129, 0.18)' : '#1e293b';
+      } else if (id === 'outbox') {
+        btn.style.border = on ? '1px solid #f59e0b' : '1px solid #334155';
+        btn.style.background = on ? 'rgba(245, 158, 11, 0.18)' : '#1e293b';
+      } else {
+        btn.style.border = on ? '1px solid #38bdf8' : '1px solid #334155';
+        btn.style.background = on ? 'rgba(56, 189, 248, 0.18)' : '#1e293b';
+      }
+      btn.style.color = on ? '#f8fafc' : '#cbd5e1';
+    });
 
-    if (invBtn) {
-      invBtn.style.border = activeModalTab === 'inventory' ? '1px solid #38bdf8' : '1px solid #334155';
-      invBtn.style.background = activeModalTab === 'inventory' ? 'rgba(56, 189, 248, 0.18)' : '#1e293b';
-      invBtn.style.color = activeModalTab === 'inventory' ? '#f8fafc' : '#cbd5e1';
-    }
-    if (salesBtn) {
-      salesBtn.style.border = activeModalTab === 'sales' ? '1px solid #10b981' : '1px solid #334155';
-      salesBtn.style.background = activeModalTab === 'sales' ? 'rgba(16, 185, 129, 0.18)' : '#1e293b';
-      salesBtn.style.color = activeModalTab === 'sales' ? '#f8fafc' : '#cbd5e1';
-    }
-
-    if (activeModalTab === 'sales') {
+    if (activeModalTab === 'drops') {
+      loadDrops();
+    } else if (activeModalTab === 'outbox') {
+      loadOutbox(true);
+    } else if (activeModalTab === 'sales') {
       if (!hasHarvestedPayoutPages && !isHarvestingPayoutPages) {
         harvestLiveSpaPayoutTables(false);
       }

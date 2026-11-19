@@ -186,6 +186,30 @@ export function tokenizeDistinctiveWords(raw: unknown): string[] {
   return out;
 }
 
+export function areTitlesDuplicateCompatible(titleA: unknown, titleB: unknown): boolean {
+  const a = normalizeComparableTitle(titleA);
+  const b = normalizeComparableTitle(titleB);
+  if (!a || !b) return false;
+  if (a === b) return true;
+
+  const tokensA = a.split(' ').filter((w) => w.length >= 3);
+  const tokensB = b.split(' ').filter((w) => w.length >= 3);
+  if (tokensA.length === 0 || tokensB.length === 0) return false;
+
+  const setA = new Set(tokensA);
+  const setB = new Set(tokensB);
+  let shared = 0;
+  for (const tok of setA) {
+    if (setB.has(tok)) shared++;
+  }
+  const union = setA.size + setB.size - shared;
+  const jaccard = union > 0 ? shared / union : 0;
+
+  if (jaccard >= 0.65) return true;
+  if ((a.includes(b) || b.includes(a)) && shared >= 3 && jaccard >= 0.5) return true;
+  return false;
+}
+
 export function extractExternalSourcingId(doc: any): string | null {
   if (!doc || typeof doc !== 'object') return null;
   for (const field of [doc.identity, doc.upc, doc.sourcingLocation, doc.conditionNotes]) {
@@ -526,24 +550,30 @@ export function auditInventoryAndPurchaseHealth(
     let matchReason: SoldTwinGhostFinding['matchReason'] | null = null;
     let reasonLabel = '';
 
-    // 2A. Exact Sourcing ID match
+    // 2A. Exact Sourcing ID match (title-gated so distinct pieces split from the same multi-item lot stay separate)
     if (sgw && terminalBySgw.has(sgw)) {
-      matchedItem = pickCanonicalKeeper(terminalBySgw.get(sgw)!, boothCodes, liveWarehouses);
-      confidence = 'exact';
-      matchReason = 'sgw_id';
-      reasonLabel = `Exact sourcing lot match (${sgw.replace('sgw:', 'Lot #')})`;
+      const compatSgw = terminalBySgw
+        .get(sgw)!
+        .filter((cand) => areTitlesDuplicateCompatible(it.title, cand?.title));
+      if (compatSgw.length > 0) {
+        matchedItem = pickCanonicalKeeper(compatSgw, boothCodes, liveWarehouses);
+        confidence = 'exact';
+        matchReason = 'sgw_id';
+        reasonLabel = `Exact sourcing lot match (${sgw.replace('sgw:', 'Lot #')})`;
+      }
     }
 
-    // 2B. Exact non-generic Identity match
+    // 2B. Exact non-generic Identity match (title-gated so shared lot identities stay separate across distinct pieces)
     if (!matchedItem && ident && terminalByIdentity.has(ident)) {
-      matchedItem = pickCanonicalKeeper(
-        terminalByIdentity.get(ident)!,
-        boothCodes,
-        liveWarehouses
-      );
-      confidence = 'exact';
-      matchReason = 'identity';
-      reasonLabel = 'Exact item identity match to sold/split record';
+      const compatIdent = terminalByIdentity
+        .get(ident)!
+        .filter((cand) => areTitlesDuplicateCompatible(it.title, cand?.title));
+      if (compatIdent.length > 0) {
+        matchedItem = pickCanonicalKeeper(compatIdent, boothCodes, liveWarehouses);
+        confidence = 'exact';
+        matchReason = 'identity';
+        reasonLabel = 'Exact item identity match to sold/split record';
+      }
     }
 
     // 2C. Direct saleId or UPC match in `sales` (verifying title compatibility if sale has a product title!)
@@ -602,6 +632,18 @@ export function auditInventoryAndPurchaseHealth(
 
       for (const cand of terminalTokenized) {
         if (cand.tokens.length < 3) continue;
+        // Never re-flag sibling pieces split from the same sourcing lot or parent lot if their titles are incompatible
+        if (sgw && extractExternalSourcingId(cand.item) === sgw && !areTitlesDuplicateCompatible(it.title, cand.item?.title)) {
+          continue;
+        }
+        if (
+          it.parentLotId &&
+          cand.item?.parentLotId &&
+          String(it.parentLotId) === String(cand.item.parentLotId) &&
+          !areTitlesDuplicateCompatible(it.title, cand.item?.title)
+        ) {
+          continue;
+        }
         const shared = cand.tokens.filter((w) => tokSet.has(w)).length;
         const ratio = shared / Math.min(toks.length, cand.tokens.length);
         if (shared >= 3 && ratio >= 0.65 && ratio > bestRatio) {
@@ -730,28 +772,49 @@ export function auditInventoryAndPurchaseHealth(
     }
   };
 
-  const firstSeenByKey = new Map<string, { id: string; label: string }>();
+  const seenByKey = new Map<string, Array<{ id: string; title: unknown; label: string }>>();
   for (const it of activePool) {
     const idStr = String(it.$id);
-    const candidateKeys: Array<{ key: string; label: string }> = [];
+    const candidateKeys: Array<{ key: string; label: string; requireTitleCompat: boolean }> = [];
 
     if (!it.parentLotId) {
       const sgw = extractExternalSourcingId(it);
-      if (sgw) candidateKeys.push({ key: sgw, label: `Same sourcing lot (${sgw.replace('sgw:', '#')})` });
+      if (sgw) {
+        candidateKeys.push({
+          key: sgw,
+          label: `Same sourcing lot (${sgw.replace('sgw:', '#')})`,
+          requireTitleCompat: true,
+        });
+      }
       const ident = isNonGenericIdentity(it.identity);
-      if (ident) candidateKeys.push({ key: `id:${ident}`, label: 'Same item identity' });
+      if (ident) {
+        candidateKeys.push({
+          key: `id:${ident}`,
+          label: 'Same item identity',
+          requireTitleCompat: true,
+        });
+      }
     }
     const normT = normalizeComparableTitle(it.title);
     if (normT.length >= 16 && !GENERIC_IDENTITIES.has(normT)) {
-      candidateKeys.push({ key: `title:${normT}`, label: 'Identical item title' });
+      candidateKeys.push({
+        key: `title:${normT}`,
+        label: 'Identical item title',
+        requireTitleCompat: false,
+      });
     }
 
     for (const ck of candidateKeys) {
-      const prev = firstSeenByKey.get(ck.key);
-      if (prev) {
-        ufUnion(prev.id, idStr, ck.label);
+      const prevList = seenByKey.get(ck.key);
+      if (prevList && prevList.length > 0) {
+        for (const prev of prevList) {
+          if (!ck.requireTitleCompat || areTitlesDuplicateCompatible(prev.title, it.title)) {
+            ufUnion(prev.id, idStr, ck.label);
+          }
+        }
+        prevList.push({ id: idStr, title: it.title, label: ck.label });
       } else {
-        firstSeenByKey.set(ck.key, { id: idStr, label: ck.label });
+        seenByKey.set(ck.key, [{ id: idStr, title: it.title, label: ck.label }]);
       }
     }
   }

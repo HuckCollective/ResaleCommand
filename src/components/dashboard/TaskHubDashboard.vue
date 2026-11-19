@@ -218,7 +218,7 @@
         <!-- Live Duplicate & Sold-Ghost Health Check Callout -->
         <a
           v-if="healthTotalFlaggedCount > 0"
-          href="/inventory?health=audit"
+          href="/inventory#health"
           class="rounded-2xl border-2 border-warning/45 bg-warning/10 p-3.5 sm:p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:border-warning transition-all"
         >
           <div class="space-y-0.5 min-w-0">

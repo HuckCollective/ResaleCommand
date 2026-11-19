@@ -95,6 +95,17 @@
       @open-advanced-guide="showBrowserSyncModal = true"
     />
 
+    <!-- Outbound Channel Sync Queue (Ricochet Live Queue Guidance / Paper-Sheet Booth Pull Checklist) -->
+    <LocationChannelOutboxPanel
+      v-if="
+        isLocationLocked &&
+        activeCanonicalLocationMeta &&
+        (activeCanonicalLocationMeta.usesRicochet ||
+          activeCanonicalLocationMeta.supportsPaperSalesSheet)
+      "
+      :location-meta="activeCanonicalLocationMeta"
+    />
+
     <!-- 4-Location Card Picker (Shown When Visiting Without a Location in URL or Clicking ← Switch Location) -->
     <div
       v-if="!isLocationLocked"
@@ -2059,6 +2070,7 @@ import { useBodyScrollLock } from '../../composables/useBodyScrollLock';
 import { useDockClearance } from '../../composables/useDockClearance';
 import { useInventory } from '../../composables/useInventory';
 import BookmarkletHeroBar from '../bml/BookmarkletHeroBar.vue';
+import LocationChannelOutboxPanel from './LocationChannelOutboxPanel.vue';
 
 const { dockEl, dockHeightRem } = useDockClearance(6.5);
 import { useLoader } from '../../composables/useLoader';

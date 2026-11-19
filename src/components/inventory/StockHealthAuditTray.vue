@@ -486,6 +486,17 @@
                   </div>
                 </div>
 
+                <!-- Guided How-To Callout for Multiple Booth Shelf Tags -->
+                <div
+                  v-if="cluster.requiresManualCheck"
+                  class="rounded-xl bg-warning/15 border border-warning/40 px-3 py-2 text-xs text-base-content leading-relaxed"
+                >
+                  <span class="font-black">How to fix{{ getClusterBoothSkusText(cluster) }}:</span>
+                  Both copies have booth shelf tags. Check which sticker is physically on your shelf, click
+                  <b>Make Keeper</b> on that record, then click <b>📥 Archive Copy</b> on the extra copy — it will automatically queue the extra tag for removal on your next
+                  <b>{{ getClusterSyncLabel(cluster) }}</b>.
+                </div>
+
                 <!-- Keeper + Clones List -->
                 <div class="space-y-1.5">
                   <div
@@ -534,18 +545,26 @@
                       </div>
                     </div>
 
-                    <div class="flex items-center gap-1.5 shrink-0">
+                    <div class="flex items-center gap-1.5 shrink-0 flex-wrap justify-end">
                       <button
-                        v-if="
-                          it.$id !== getEffectiveKeeper(cluster).$id &&
-                          !getEffectiveKeeper(cluster).locationSku
-                        "
+                        v-if="it.$id !== getEffectiveKeeper(cluster).$id"
                         type="button"
                         class="btn btn-2xs h-7 px-2 btn-ghost border border-base-300 rounded-lg font-bold"
                         title="Make this copy the Keeper instead"
+                        :disabled="isSubmitting"
                         @click="keeperOverrides[cluster.id] = it.$id"
                       >
                         Make Keeper
+                      </button>
+                      <button
+                        v-if="it.$id !== getEffectiveKeeper(cluster).$id && canEditSingleItem(it)"
+                        type="button"
+                        class="btn btn-2xs h-7 px-2 btn-primary text-primary-content rounded-lg font-bold"
+                        title="Keep the Keeper above and safely archive this copy"
+                        :disabled="isSubmitting"
+                        @click="archiveSingleClone(cluster, it)"
+                      >
+                        📥 Archive Copy
                       </button>
                       <button
                         type="button"
@@ -776,36 +795,38 @@ import { useMemberCapabilities } from '../../lib/memberAccess';
 import { getCollectionId, DB_ID } from '../../lib/inventory';
 import { getCoopJwtHeaders } from '../../lib/coopLedgerClient';
 import { generateNextUpc } from '../../lib/upcAuthority';
-import { extractItemOwnerPrefix, resolveMintingPrefixForMember } from '../../lib/curatorOwnership';
+import {
+  evaluateItemAccess,
+  extractItemOwnerPrefix,
+  resolveMintingPrefixForMember,
+} from '../../lib/curatorOwnership';
+import { getLocationSettingMeta } from '../../lib/warehouses';
 import { purchasesAPI } from '../../lib/purchases';
 import { toUserMessage } from '../../lib/userFacingErrors';
 import { addToast } from '../../stores/toast';
 import { confirmDialog } from '../../stores/confirm';
 import { useAuth } from '../../composables/useAuth';
+import type { HealthBucketTabId } from '../../composables/useInventoryHealthAudit';
 import type {
   ActiveDuplicateCluster,
   HealthAuditScope,
   InventoryHealthReport,
+  ProvenanceCarryForward,
   SoldTwinGhostFinding,
 } from '../../lib/inventoryHealthAudit';
-
-type HealthBucketTabId =
-  | 'split_lots'
-  | 'sold_ghosts'
-  | 'active_clones'
-  | 'barcodes'
-  | 'stale_pos';
 
 const props = defineProps<{
   modelValue: boolean;
   report: InventoryHealthReport;
   scope: HealthAuditScope;
   dismissedCount: number;
+  requestedTab?: HealthBucketTabId | null;
 }>();
 
 const emit = defineEmits<{
   (e: 'update:modelValue', val: boolean): void;
   (e: 'update:scope', val: HealthAuditScope): void;
+  (e: 'tab-change', tab: HealthBucketTabId): void;
   (e: 'inspect-item', item: any): void;
   (e: 'dismiss-pair', key: string): void;
   (e: 'reset-dismissed'): void;
@@ -840,11 +861,18 @@ const switchTab = (tab: HealthBucketTabId) => {
   autoFocusedForCurrentOpen.value = true;
   activeTab.value = tab;
   clearSelection();
+  emit('tab-change', tab);
 };
 
 const autoFocusedForCurrentOpen = ref(false);
 
 const focusFirstNonEmptyTab = () => {
+  if (props.requestedTab) {
+    activeTab.value = props.requestedTab;
+    autoFocusedForCurrentOpen.value = true;
+    clearSelection();
+    return;
+  }
   const r = props.report;
   if (!r) return;
   const counts: Record<HealthBucketTabId, number> = {
@@ -906,6 +934,17 @@ watch(
   () => {
     if (props.modelValue && !autoFocusedForCurrentOpen.value) {
       focusFirstNonEmptyTab();
+    }
+  }
+);
+
+watch(
+  () => props.requestedTab,
+  (tab) => {
+    if (props.modelValue && tab && tab !== activeTab.value) {
+      activeTab.value = tab;
+      autoFocusedForCurrentOpen.value = true;
+      clearSelection();
     }
   }
 );
@@ -975,6 +1014,23 @@ const canArchiveCluster = (cluster: ActiveDuplicateCluster) => {
   const keeper = getEffectiveKeeper(cluster);
   const clones = cluster.allItems.filter((i) => i.$id !== keeper.$id);
   return clones.length > 0 && !clones.some((c) => Boolean(c.locationSku));
+};
+
+const canEditSingleItem = (item: any) =>
+  evaluateItemAccess(item, capabilities.value, { userId: user.value?.$id }).canEditFull;
+
+const getClusterBoothSkusText = (cluster: ActiveDuplicateCluster) => {
+  const skus = cluster.allItems
+    .map((i) => String(i?.locationSku || '').trim().toUpperCase())
+    .filter(Boolean);
+  return skus.length > 0 ? ` (${Array.from(new Set(skus)).join(' vs ')})` : '';
+};
+
+const getClusterSyncLabel = (cluster: ActiveDuplicateCluster) => {
+  const boothItem =
+    cluster.allItems.find((i) => i?.locationSku || i?.storageLocation) || cluster.keeper;
+  const meta = getLocationSettingMeta(boothItem?.storageLocation || '');
+  return meta.usesRicochet ? '⚡ Memory Den Sync' : `📍 ${meta.shortName} Sync Queue`;
 };
 
 const selectableIdsInActiveTab = computed<string[]>(() => {
@@ -1225,6 +1281,123 @@ const archiveClusters = async (clusters: ActiveDuplicateCluster[]) => {
     addToast({
       type: 'error',
       message: toUserMessage(err, "Couldn't archive extra copies — please try again."),
+    });
+  } finally {
+    isSubmitting.value = false;
+  }
+};
+
+const archiveSingleClone = async (cluster: ActiveDuplicateCluster, cloneItem: any) => {
+  if (!cloneItem?.$id) return;
+  const keeper = getEffectiveKeeper(cluster);
+  const cloneSku = String(cloneItem.locationSku || '').trim().toUpperCase();
+  const keeperSku = String(keeper?.locationSku || '').trim().toUpperCase();
+  const cloneLabel = cloneSku ? `${cloneItem.upc || 'Item'} (${cloneSku})` : cloneItem.upc || 'Extra copy';
+  const keeperLabel = keeperSku ? `${keeper.upc || 'Keeper'} (${keeperSku})` : keeper.upc || 'Primary record';
+
+  const locMeta = getLocationSettingMeta(cloneItem.storageLocation || keeper?.storageLocation || '');
+  const needsOutboundSync =
+    Boolean(cloneSku) || Boolean(locMeta.usesRicochet) || Boolean(locMeta.supportsPaperSalesSheet);
+
+  const ok = await confirmDialog({
+    title: cloneSku ? 'Archive Booth Copy & Queue Tag Removal?' : 'Archive Extra Copy?',
+    message: needsOutboundSync
+      ? `Keep ${keeperLabel} and archive ${cloneLabel}?\n\nThis will also add ${cloneSku || cloneItem.upc || 'this copy'} to your ${locMeta.shortName} Sync Queue so the extra tag can be cleared safely.`
+      : `Keep ${keeperLabel} and safely archive ${cloneLabel}?`,
+    confirmText: '📥 Archive Copy',
+    cancelText: 'Cancel',
+  });
+  if (!ok) return;
+
+  isSubmitting.value = true;
+  try {
+    if (keeper?.$id && canEditSingleItem(keeper)) {
+      const carry: ProvenanceCarryForward = {};
+      if (Number(keeper.cost || 0) <= 0 && Number(cloneItem.cost || 0) > 0) {
+        carry.cost = Number(cloneItem.cost);
+      }
+      if (!keeper.orderId && cloneItem.orderId) {
+        carry.orderId = String(cloneItem.orderId);
+      }
+      if (!keeper.purchaseId && cloneItem.purchaseId) {
+        carry.purchaseId = String(cloneItem.purchaseId);
+      }
+      if (!keeper.sourcingLocation && cloneItem.sourcingLocation) {
+        carry.sourcingLocation = String(cloneItem.sourcingLocation);
+      }
+      if (Object.keys(carry).length > 0) {
+        await postBulkItemUpdate([keeper.$id], { backfillIfMissing: carry }).catch((e) =>
+          console.warn('[HealthAudit] Single clone keeper backfill skipped:', e)
+        );
+      }
+    }
+
+    await postBulkItemUpdate([cloneItem.$id], {
+      status: 'archived',
+      allowSingleBoothArchive: Boolean(cloneSku),
+      appendAuditNote: `[Archived Extra Copy vs Keeper ${keeperLabel} via Health Check • ${todayStamp()}]`,
+    });
+
+    let queuedOutbox = false;
+    let outboxWarning = '';
+    if (needsOutboundSync) {
+      try {
+        const qRes = await fetch('/api/sync/channel-outbox', {
+          method: 'POST',
+          headers: await getCoopJwtHeaders(),
+          body: JSON.stringify({
+            mode: 'enqueue',
+            location: locMeta.code,
+            intent: {
+              action: 'deactivate_or_remove',
+              rcItemId: cloneItem.$id,
+              rcUpc: cloneItem.upc || '',
+              externalSku: cloneSku,
+              title: cloneItem.title || 'Duplicate copy',
+              keeperUpc: keeper?.upc || '',
+              keeperExternalSku: keeperSku,
+              reason: `Archived duplicate copy in Stock & PO Health Check (Keeper: ${keeperLabel})`,
+            },
+          }),
+        });
+        const qData = await qRes.json().catch(() => ({}));
+        if (qRes.ok && qData?.ok) {
+          queuedOutbox = true;
+        } else {
+          outboxWarning = qData?.error || 'Could not add this item to the Sync Queue.';
+        }
+      } catch (qErr) {
+        outboxWarning = toUserMessage(qErr, 'Could not add this item to the Sync Queue.');
+      }
+    }
+
+    if (queuedOutbox) {
+      const syncHint = locMeta.usesRicochet
+        ? `open Ricochet ➔ ⚡ ${locMeta.shortName} Sync ➔ 🧹 Sync Queue`
+        : `open 📍 Location Sync (${locMeta.code}) Checklist`;
+      addToast({
+        type: 'success',
+        message: `✅ Archived ${cloneLabel} and queued removal for ${locMeta.code} (${syncHint}).`,
+      });
+    } else if (outboxWarning) {
+      addToast({
+        type: 'warning',
+        message: `✅ Archived ${cloneLabel}, but ${outboxWarning}`,
+      });
+    } else {
+      addToast({
+        type: 'success',
+        message: `✅ Archived ${cloneLabel} (Keeper: ${keeperLabel}).`,
+      });
+    }
+
+    clearSelection();
+    emit('refresh-all');
+  } catch (err) {
+    console.error('[HealthAudit] archiveSingleClone error:', err);
+    addToast({
+      type: 'error',
+      message: toUserMessage(err, "Couldn't archive that copy — please try again."),
     });
   } finally {
     isSubmitting.value = false;
