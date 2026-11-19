@@ -271,7 +271,7 @@ export function buildResellerNavConfig(
       badge: 'Booth',
       badgeClass: 'badge-ghost',
     });
-    if (booth.usesRicochet) {
+    if (booth.usesRicochet && caps.canUseBookmarklets) {
       boothLinks.push({
         id: `booth_sync_${booth.code.toLowerCase()}`,
         label: `${booth.shortName} POS & Barcode Sync`,
@@ -419,7 +419,7 @@ export function buildResellerNavConfig(
     },
     {
       id: 'sales_coop',
-      label: 'Sales & Co-op',
+      label: caps.isConsignor ? 'Co-op Charter' : 'Sales & Co-op',
       icon: 'solar:tag-price-bold-duotone',
       activePrefixes: ['/sales', '/expenses', '/coop/settlements', '/coop/governance', '/coop/labor'],
       children: salesAndCoopLinks.slice(0, MAX_DROPDOWN_ITEMS),

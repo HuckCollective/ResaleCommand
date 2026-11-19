@@ -1,18 +1,20 @@
 ---
 import Layout from '../layouts/Layout.astro';
 import ProfileView from '../components/profile/ProfileView.vue';
+import { siteConfig } from '../site-config';
 ---
 
-<Layout title="Profile Settings - Resale Command">
+<Layout title={`Account & Member Hats | ${siteConfig.title}`}>
   <div class="rc-page-shell-narrow">
-    
-    <div class="flex flex-col gap-2">
-      <h1 class="text-3xl font-bold">Profile Settings</h1>
-      <p class="text-gray-500">Manage your personal account settings and security.</p>
+    <div class="flex flex-col gap-1.5">
+      <h1 class="text-2xl sm:text-3xl font-extrabold tracking-tight text-base-content">
+        Account &amp; Member Hats
+      </h1>
+      <p class="text-sm text-base-content/70">
+        Your verified Collective hat, barcode prefix, and personal sign-in credentials.
+      </p>
     </div>
 
-    <!-- Client-side Profile Settings -->
     <ProfileView client:load />
-
   </div>
 </Layout>

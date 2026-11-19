@@ -65,7 +65,7 @@ export function capabilitiesForRole(
   };
 }
 
-const SESSION_CACHE_KEY_PREFIX = 'rc_member_caps_v2:';
+const SESSION_CACHE_KEY_PREFIX = 'rc_member_caps_v3:';
 const resolvedCapsByUserId = ref<Record<string, MemberCapabilities>>({});
 const checkedByUserId = ref<Record<string, boolean>>({});
 const inflightByUserId = new Map<string, Promise<MemberCapabilities | null>>();
@@ -77,12 +77,12 @@ function inferLocalRoleAndPrefix(authState: any): {
 } {
   const u = authState?.user;
   const team = authState?.currentTeam || authState?.ownedTeam;
-  const rawPrefix = team?.prefs?.upcPrefix || u?.prefs?.upcPrefix || 'HUCK-';
+  const rawPrefix = u?.prefs?.upcPrefix || team?.prefs?.upcPrefix || 'HUCK-';
   const cleanPrefix = String(rawPrefix).trim().toUpperCase();
   const prefix = cleanPrefix.endsWith('-') ? cleanPrefix : `${cleanPrefix}-`;
 
   if (!u) {
-    return { role: 'founder', prefix, isConsignor: false };
+    return { role: 'curator', prefix, isConsignor: false };
   }
 
   const labels = Array.isArray(u.labels)
@@ -110,17 +110,12 @@ function inferLocalRoleAndPrefix(authState: any): {
   if (
     labels.includes('admin') ||
     labels.includes('founder') ||
-    prefRole === 'founder' ||
     authState?.ownedTeam
   ) {
     return { role: 'founder', prefix, isConsignor: false };
   }
 
-  if (prefix.startsWith('PDXGL') || labels.includes('curator') || prefRole === 'curator') {
-    return { role: 'curator', prefix, isConsignor: false };
-  }
-
-  return { role: 'founder', prefix, isConsignor: false };
+  return { role: 'curator', prefix, isConsignor: false };
 }
 
 function normalizeServerCapabilities(raw: any): MemberCapabilities | null {

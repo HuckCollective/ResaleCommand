@@ -147,7 +147,11 @@ async function resolveCoopRosterMemberRole(
   userEmail: string,
   prefix: string,
   isTeamOwnerOrAdmin: boolean
-): Promise<{ role: BookmarkletAllowedRole | 'restricted'; isConsignor: boolean }> {
+): Promise<{
+  role: BookmarkletAllowedRole | 'restricted';
+  isConsignor: boolean;
+  rosterPrefix?: string;
+}> {
   if (prefix.toUpperCase().startsWith('BB')) {
     return { role: 'restricted', isConsignor: true };
   }
@@ -186,16 +190,30 @@ async function resolveCoopRosterMemberRole(
       const exactFullNameMatch = Boolean(uName && mName && uName === mName);
 
       if (exactIdMatch || exactEmailMatch || exactFullNameMatch) {
+        const rawRosterPrefix = String(m?.inventoryPrefix || '').trim().toUpperCase();
+        const rosterPrefix = rawRosterPrefix
+          ? rawRosterPrefix.endsWith('-')
+            ? rawRosterPrefix
+            : `${rawRosterPrefix}-`
+          : undefined;
         const hats: string[] = Array.isArray(m.hats) ? m.hats : [];
         const isRosterConsignor =
+          Boolean(rosterPrefix?.startsWith('BB')) ||
           m.partner === 'BB' ||
           m.role === 'Consignor' ||
           (hats.length === 1 && hats[0] === 'consignor');
+        if (isRosterConsignor) {
+          return {
+            role: 'restricted',
+            isConsignor: true,
+            rosterPrefix: rosterPrefix || 'BB-',
+          };
+        }
         if (hats.includes('founder') || m.role === 'Co-op Member') {
-          return { role: 'founder', isConsignor: false };
+          return { role: 'founder', isConsignor: false, rosterPrefix };
         }
         if (hats.includes('curator') || m.role === 'Partner Curator') {
-          return { role: 'curator', isConsignor: false };
+          return { role: 'curator', isConsignor: false, rosterPrefix };
         }
         if (
           m.partner === 'SWEAT' ||
@@ -206,6 +224,7 @@ async function resolveCoopRosterMemberRole(
           return {
             role: isTeamOwnerOrAdmin ? 'founder' : 'restricted',
             isConsignor: isTeamOwnerOrAdmin ? false : isRosterConsignor,
+            rosterPrefix,
           };
         }
       }
@@ -257,53 +276,87 @@ export async function verifyAppwriteJwtToMember(
     const teamList = await teamsApi.list().catch(() => ({ teams: [] as any[] }));
     const primaryTeam = teamList.teams?.[0];
     const teamId = primaryTeam?.$id || me.$id;
-    const rawPrefix = primaryTeam?.prefs?.upcPrefix || userPrefs.upcPrefix || 'HUCK-';
-    const cleanPrefix = String(rawPrefix).trim().toUpperCase();
-    const prefix = cleanPrefix.endsWith('-') ? cleanPrefix : `${cleanPrefix}-`;
+    const rawTeamPrefix = String(primaryTeam?.prefs?.upcPrefix || '').trim().toUpperCase();
+    const teamPrefix = rawTeamPrefix
+      ? rawTeamPrefix.endsWith('-')
+        ? rawTeamPrefix
+        : `${rawTeamPrefix}-`
+      : '';
 
-    const isExplicitConsignor =
-      prefix.startsWith('BB') || labels.includes('consignor') || userPrefs.role === 'consignor';
-    const isExplicitSweatOnly = labels.includes('sweat_only') || userPrefs.role === 'sweat_only';
+    let myRoles: string[] = [];
+    if (primaryTeam?.$id) {
+      try {
+        const memberships = await teamsApi.listMemberships(primaryTeam.$id);
+        const myMembership = memberships.memberships?.find(
+          (m: any) => m.userId === me.$id && m.confirm !== false
+        );
+        myRoles = Array.isArray(myMembership?.roles)
+          ? myMembership.roles.map((r: string) => String(r || '').trim().toLowerCase())
+          : [];
+      } catch {}
+    }
 
-    // Explicit restriction check on user labels/prefs
-    if (isExplicitConsignor || isExplicitSweatOnly) {
+    const isTrustedConsignor =
+      labels.includes('consignor') ||
+      teamPrefix.startsWith('BB') ||
+      (myRoles.includes('consignor') &&
+        !myRoles.some((r) => ['owner', 'founder', 'admin', 'curator'].includes(r)));
+    const isSelfConsignor =
+      userPrefs.role === 'consignor' ||
+      String(userPrefs.upcPrefix || '').trim().toUpperCase().startsWith('BB');
+    const isExplicitSweatOnly =
+      labels.includes('sweat_only') || userPrefs.role === 'sweat_only';
+
+    // Trusted & self-restricted consignor/sweat checks run FIRST; userPrefs can never lift a BB- account
+    if (isTrustedConsignor || isSelfConsignor || isExplicitSweatOnly) {
+      const consignorFlag = Boolean(isTrustedConsignor || isSelfConsignor);
       return {
         ok: false,
         status: 403,
         error: 'role_restricted',
-        prefix: isExplicitConsignor ? (prefix.startsWith('BB') ? prefix : 'BB-') : 'SWEAT-',
-        isConsignor: isExplicitConsignor,
+        prefix: consignorFlag ? 'BB-' : 'SWEAT-',
+        isConsignor: consignorFlag,
         message:
           '🔒 Founder or Curator Hat Required: Bookmarklet tools are currently restricted to Collective Founders (👑) and Curators (💎).',
       };
     }
 
-    let isTeamOwnerOrAdmin = labels.includes('admin') || labels.includes('founder') || userPrefs.role === 'founder';
-    if (!isTeamOwnerOrAdmin && primaryTeam?.$id) {
-      try {
-        const memberships = await teamsApi.listMemberships(primaryTeam.$id);
-        const myMembership = memberships.memberships?.find((m: any) => m.userId === me.$id);
-        if (myMembership?.roles?.some((r: string) => ['owner', 'founder', 'admin'].includes(r.toLowerCase()))) {
-          isTeamOwnerOrAdmin = true;
-        }
-      } catch {}
-    }
+    const isTeamOwnerOrAdmin =
+      labels.includes('admin') ||
+      labels.includes('founder') ||
+      myRoles.some((r) => ['owner', 'founder', 'admin'].includes(r));
 
     const resolved = await resolveCoopRosterMemberRole(
       me.$id,
       me.name || '',
       me.email || '',
-      prefix,
+      teamPrefix || 'HUCK-',
       isTeamOwnerOrAdmin
     );
 
-    if (resolved.role === 'restricted') {
+    let finalRole: BookmarkletAllowedRole | 'restricted' = resolved.role;
+    if (finalRole === 'restricted' && !resolved.isConsignor && myRoles.includes('curator')) {
+      finalRole = 'curator';
+    }
+
+    const rawUserPrefix = String(userPrefs.upcPrefix || '').trim().toUpperCase();
+    const userPrefix = rawUserPrefix
+      ? rawUserPrefix.endsWith('-')
+        ? rawUserPrefix
+        : `${rawUserPrefix}-`
+      : '';
+    const rawChosenPrefix = resolved.rosterPrefix || teamPrefix || userPrefix || 'HUCK-';
+    const cleanChosen = rawChosenPrefix.trim().toUpperCase();
+    const prefix = cleanChosen.endsWith('-') ? cleanChosen : `${cleanChosen}-`;
+
+    if (finalRole === 'restricted' || resolved.isConsignor || prefix.startsWith('BB')) {
+      const consignorFlag = Boolean(resolved.isConsignor || prefix.startsWith('BB'));
       return {
         ok: false,
         status: 403,
         error: 'role_restricted',
-        prefix: resolved.isConsignor ? (prefix.startsWith('BB') ? prefix : 'BB-') : 'SWEAT-',
-        isConsignor: resolved.isConsignor,
+        prefix: consignorFlag ? 'BB-' : 'SWEAT-',
+        isConsignor: consignorFlag,
         message:
           '🔒 Founder or Curator Hat Required: Bookmarklet tools are currently restricted to Collective Founders (👑) and Curators (💎).',
       };
@@ -318,8 +371,8 @@ export async function verifyAppwriteJwtToMember(
         name: me.name || me.email || 'Member',
         email: me.email || '',
         prefix,
-        role: resolved.role,
-        roleBadge: formatRoleBadge(resolved.role),
+        role: finalRole,
+        roleBadge: formatRoleBadge(finalRole),
         iat: nowSec,
         exp: nowSec + DEFAULT_TTL_SECONDS,
       },

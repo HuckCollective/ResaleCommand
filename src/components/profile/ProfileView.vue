@@ -24,16 +24,41 @@
         
         <!-- Info Column -->
         <div class="flex-1 text-center md:text-left space-y-2">
-          <div class="flex flex-col md:flex-row md:items-center gap-2">
+          <div class="flex flex-col md:flex-row md:items-center gap-2 flex-wrap">
             <h2 class="text-2xl font-bold">{{ user?.name || 'Unnamed User' }}</h2>
-            <div class="flex gap-2 justify-center md:justify-start">
-              <span v-if="isPartner" class="badge badge-secondary font-semibold whitespace-nowrap shrink-0">Partner</span>
-              <span v-if="user?.labels?.includes('alpha')" class="badge badge-warning font-semibold whitespace-nowrap shrink-0">Alpha</span>
+            <div class="flex flex-wrap gap-2 justify-center md:justify-start">
+              <span
+                v-if="capabilitiesResolved"
+                class="badge badge-primary text-primary-content font-black whitespace-nowrap shrink-0"
+              >
+                {{ capabilities.roleBadge }}
+              </span>
+              <span
+                v-if="capabilitiesResolved"
+                class="badge badge-outline font-mono font-bold whitespace-nowrap shrink-0"
+                title="Physical barcode sticker prefix assigned to your account"
+              >
+                🔒 {{ capabilities.prefix }}
+              </span>
+              <span
+                v-if="currentTeam?.name"
+                class="badge badge-ghost border border-base-300 font-semibold whitespace-nowrap shrink-0"
+              >
+                {{ currentTeam.name }}
+              </span>
+              <span v-if="user?.labels?.includes('alpha')" class="badge badge-warning text-warning-content font-semibold whitespace-nowrap shrink-0">Alpha</span>
             </div>
           </div>
           <p class="text-base-content/70 font-mono text-sm">{{ user?.email }}</p>
-          <div class="flex flex-wrap gap-2 justify-center md:justify-start text-xs text-base-content/60">
+          <div class="flex flex-wrap items-center gap-3 justify-center md:justify-start text-xs text-base-content/65">
             <span>Joined: {{ new Date(user?.$createdAt || '').toLocaleDateString() }}</span>
+            <a
+              v-if="capabilitiesResolved && capabilities.canViewCollectiveTools"
+              href="/coop/governance?tab=roster"
+              class="link link-primary font-bold"
+            >
+              View Collective Roster &amp; Member Hats ➔
+            </a>
           </div>
         </div>
       </div>
@@ -58,7 +83,7 @@
                 type="text" 
                 v-model="editName" 
                 placeholder="Your Name" 
-                class="input input-bordered w-full"
+                class="input input-bordered h-11 md:h-10 w-full"
                 :disabled="savingName"
               />
             </div>
@@ -97,7 +122,7 @@
                   autocapitalize="none"
                   v-model="editEmail" 
                   placeholder="name@example.com" 
-                  class="input input-bordered w-full"
+                  class="input input-bordered h-11 md:h-10 w-full"
                   :disabled="savingEmail"
                 />
               </div>
@@ -111,7 +136,7 @@
                   autocomplete="current-password"
                   v-model="emailConfirmPassword" 
                   placeholder="Enter current password to verify" 
-                  class="input input-bordered w-full"
+                  class="input input-bordered h-11 md:h-10 w-full"
                   :disabled="savingEmail"
                 />
               </div>
@@ -154,7 +179,7 @@
                     autocomplete="current-password"
                     v-model="oldPassword" 
                     placeholder="Enter current password" 
-                    class="input input-bordered w-full"
+                    class="input input-bordered h-11 md:h-10 w-full"
                     :disabled="savingPassword"
                   />
                 </div>
@@ -168,7 +193,7 @@
                     autocomplete="new-password"
                     v-model="newPassword" 
                     placeholder="Enter new password" 
-                    class="input input-bordered w-full"
+                    class="input input-bordered h-11 md:h-10 w-full"
                     :disabled="savingPassword"
                   />
                 </div>
@@ -182,7 +207,7 @@
                     autocomplete="new-password"
                     v-model="confirmPassword" 
                     placeholder="Re-enter new password" 
-                    class="input input-bordered w-full"
+                    class="input input-bordered h-11 md:h-10 w-full"
                     :disabled="savingPassword"
                   />
                 </div>
@@ -210,11 +235,13 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted } from 'vue';
 import { useAuth } from '../../composables/useAuth';
+import { useMemberCapabilities } from '../../lib/memberAccess';
 import { addToast } from '../../stores/toast';
 import { toUserMessage } from '../../lib/userFacingErrors';
 import { Icon } from '@iconify/vue';
 
-const { user, isAuthenticated, loading, isPartner, updateName, updateEmail, updatePassword } = useAuth();
+const { user, currentTeam, isAuthenticated, loading, updateName, updateEmail, updatePassword } = useAuth();
+const { capabilities, capabilitiesResolved } = useMemberCapabilities();
 
 // Profile Edit States
 const editName = ref('');
