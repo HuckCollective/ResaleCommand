@@ -769,7 +769,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue';
+import { computed, onMounted, reactive, ref, watch } from 'vue';
 import ItemThumbnail from '../common/ItemThumbnail.vue';
 import { useBodyScrollLock } from '../../composables/useBodyScrollLock';
 import { useMemberCapabilities } from '../../lib/memberAccess';
@@ -837,9 +837,78 @@ const clearSelection = () => {
 };
 
 const switchTab = (tab: HealthBucketTabId) => {
+  autoFocusedForCurrentOpen.value = true;
   activeTab.value = tab;
   clearSelection();
 };
+
+const autoFocusedForCurrentOpen = ref(false);
+
+const focusFirstNonEmptyTab = () => {
+  const r = props.report;
+  if (!r) return;
+  const counts: Record<HealthBucketTabId, number> = {
+    split_lots: r.unclosedSplitLots.length,
+    sold_ghosts: r.soldTwinGhosts.length,
+    active_clones: r.activeDuplicateClusters.length,
+    barcodes: r.barcodeCollisions.length,
+    stale_pos: r.staleOpenPurchases.length,
+  };
+  if (counts[activeTab.value] === 0) {
+    const order: HealthBucketTabId[] = [
+      'split_lots',
+      'sold_ghosts',
+      'active_clones',
+      'barcodes',
+      'stale_pos',
+    ];
+    const firstNonEmpty = order.find((id) => counts[id] > 0);
+    if (firstNonEmpty) {
+      activeTab.value = firstNonEmpty;
+      clearSelection();
+      autoFocusedForCurrentOpen.value = true;
+    }
+  } else {
+    autoFocusedForCurrentOpen.value = true;
+  }
+
+  if (
+    activeTab.value === 'sold_ghosts' &&
+    r.exactSoldGhostsCount === 0 &&
+    r.fuzzySoldGhostsCount > 0
+  ) {
+    ghostConfidenceFilter.value = 'fuzzy';
+  } else if (
+    activeTab.value === 'sold_ghosts' &&
+    r.exactSoldGhostsCount > 0 &&
+    ghostConfidenceFilter.value === 'fuzzy' &&
+    r.fuzzySoldGhostsCount === 0
+  ) {
+    ghostConfidenceFilter.value = 'exact';
+  }
+};
+
+watch(
+  () => props.modelValue,
+  (open) => {
+    if (open) {
+      autoFocusedForCurrentOpen.value = false;
+      focusFirstNonEmptyTab();
+    } else {
+      autoFocusedForCurrentOpen.value = false;
+    }
+  },
+  { immediate: true }
+);
+
+watch(
+  () => props.report,
+  () => {
+    if (props.modelValue && !autoFocusedForCurrentOpen.value) {
+      focusFirstNonEmptyTab();
+    }
+  }
+);
 
 const bucketTabs = computed(() => [
   {

@@ -64,6 +64,28 @@
         </select>
 
         <button
+          v-if="healthBadgeCount > 0 || isHealthTrayOpen"
+          type="button"
+          class="btn btn-xs sm:btn-sm h-11 md:h-8 px-2.5 rounded-xl font-bold gap-1 shrink-0 transition-all"
+          :class="
+            isHealthTrayOpen
+              ? 'btn-warning text-warning-content shadow-xs'
+              : 'btn-outline border-warning/55 bg-warning/10 text-base-content hover:bg-warning/20'
+          "
+          title="Review already-sold backstock twins, already-split parent lots, extra duplicate copies & stale POs"
+          @click="$emit('open-health-audit')"
+        >
+          <span>🧹</span>
+          <span class="hidden sm:inline text-xs whitespace-nowrap">Cleanup</span>
+          <span
+            v-if="healthBadgeCount > 0"
+            class="badge badge-2xs badge-warning text-warning-content font-mono font-black whitespace-nowrap shrink-0"
+          >
+            {{ healthBadgeCount }}
+          </span>
+        </button>
+
+        <button
           type="button"
           class="btn btn-xs sm:btn-sm h-11 md:h-8 px-2.5 rounded-xl font-bold gap-1 shrink-0 transition-all"
           :class="
@@ -76,6 +98,28 @@
         >
           <span>⚡</span>
           <span class="text-xs whitespace-nowrap">{{ activeQueueMeta ? activeQueueMeta.shortLabel : 'Queues & Lists' }}</span>
+        </button>
+
+        <button
+          v-if="healthBadgeCount > 0 || isHealthTrayOpen"
+          type="button"
+          class="btn btn-xs sm:btn-sm h-11 md:h-8 px-2.5 rounded-xl font-bold gap-1 shrink-0 transition-all"
+          :class="
+            isHealthTrayOpen
+              ? 'btn-warning text-warning-content shadow-xs'
+              : 'btn-outline border-warning/55 bg-warning/10 text-base-content hover:bg-warning/20'
+          "
+          title="Review already-sold backstock twins, already-split parent lots, extra duplicate copies & stale POs"
+          @click="$emit('open-health-audit')"
+        >
+          <span>🧹</span>
+          <span class="hidden sm:inline text-xs whitespace-nowrap">Cleanup</span>
+          <span
+            v-if="healthBadgeCount > 0"
+            class="badge badge-2xs badge-warning text-warning-content font-mono font-black whitespace-nowrap shrink-0"
+          >
+            {{ healthBadgeCount }}
+          </span>
         </button>
 
         <button
@@ -383,6 +427,8 @@ const props = withDefaults(
     switchViewIcon?: string;
     switchViewTitle?: string;
     viewMode?: string;
+    healthBadgeCount?: number;
+    isHealthTrayOpen?: boolean;
   }>(),
   {
     title: 'Inventory',
@@ -412,6 +458,8 @@ const props = withDefaults(
     switchViewIcon: 'solar:gallery-wide-linear',
     switchViewTitle: 'Switch to Visual Card Grid',
     viewMode: '',
+    healthBadgeCount: 0,
+    isHealthTrayOpen: false,
   }
 );
 
@@ -430,6 +478,7 @@ const emit = defineEmits([
   'update:filterLotType',
   'update:viewMode',
   'open-queues',
+  'open-health-audit',
   'add',
   'import',
   'clear-filters',

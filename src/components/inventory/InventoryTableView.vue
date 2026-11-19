@@ -36,8 +36,11 @@
             switchViewIcon="solar:gallery-wide-linear"
             switchViewTitle="Switch to Visual Card Grid"
             :viewMode="viewMode"
+            :healthBadgeCount="healthTotalBadgeCount"
+            :isHealthTrayOpen="isHealthAuditTrayOpen"
             @update:viewMode="$emit('update:viewMode', $event)"
             @open-queues="openQueuesTray"
+            @open-health-audit="openHealthAuditTray"
             @add="openAdd"
             @import="showImport = true"
             @clear-filters="clearFilters"
@@ -444,11 +447,13 @@
             v-if="isDrawerOpen" 
             :item="activeItem" 
             :inventoryItems="inventoryItems"
+            :health-warning="activeItem ? healthReport.byItemId.get(activeItem.$id) || null : null"
             @close="closeDrawer" 
             @save="onDrawerSaved" 
             @refresh="fetchInventory"
             @selectItem="openItem"
             @open-splitter="handleDrawerOpenSplit"
+            @open-health-audit="openHealthAuditFromDrawer"
         />
 
         <!-- 6. BULK IMPORT MODAL (Async Lazy-Loaded Island) -->
@@ -469,6 +474,18 @@
             :active-queue-filter="filterSmartQueue"
             @apply-queue="val => (filterSmartQueue = val)"
             @inspect-item="openItem"
+        />
+
+        <!-- 7.6. INTERACTIVE BOTTOM-SHEET STOCK & PO HEALTH CHECK TRAY -->
+        <StockHealthAuditTray
+            v-model="isHealthAuditTrayOpen"
+            v-model:scope="healthAuditScope"
+            :report="healthReport"
+            :dismissed-count="dismissedHealthKeys.size"
+            @inspect-item="openItem"
+            @dismiss-pair="dismissHealthPair"
+            @reset-dismissed="resetDismissedHealthPairs"
+            @refresh-all="refreshInventoryAndPurchases"
         />
 
         <!-- 8. ACTIVE DROPCAST STAGING TRAY (Legacy Studio opt-in only) -->
@@ -501,6 +518,8 @@ import InventoryHeader from './InventoryHeader.vue';
 import InventorySpatialBar from './InventorySpatialBar.vue';
 import InventoryValuationStrip from './InventoryValuationStrip.vue';
 import InventoryQueuesTray from './InventoryQueuesTray.vue';
+import StockHealthAuditTray from './StockHealthAuditTray.vue';
+import { useInventoryHealthAudit } from '../../composables/useInventoryHealthAudit';
 import { computeInventoryKpiStats } from '../../lib/inventoryKpiStats';
 import InventoryPaginationDock from './InventoryPaginationDock.vue';
 import LocationManifestTray from './LocationManifestTray.vue';
@@ -1113,5 +1132,32 @@ const formatSoldTime = (dateStr) => {
     } catch {
         return '';
     }
+};
+
+// -- 9. STOCK & PO HEALTH CHECK WORKBENCH (Shared Composable; placed at bottom for strict TDZ order) --
+const {
+    isHealthAuditTrayOpen,
+    healthAuditScope,
+    dismissedHealthKeys,
+    healthReport,
+    healthTotalBadgeCount,
+    openHealthAuditTray,
+    dismissHealthPair,
+    resetDismissedHealthPairs,
+    refreshInventoryAndPurchases,
+} = useInventoryHealthAudit({
+    inventoryItems,
+    capabilities,
+    user,
+    currentTeam,
+    isQueuesTrayOpen,
+    isManifestTrayOpen,
+    closeAllTrays,
+    fetchInventory,
+});
+
+const openHealthAuditFromDrawer = () => {
+    closeDrawer();
+    openHealthAuditTray();
 };
 </script>
