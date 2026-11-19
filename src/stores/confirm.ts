@@ -22,30 +22,48 @@ export const confirmState = atom<ConfirmState>({
     onCancel: () => {}
 });
 
+export interface ConfirmDialogOptions {
+    title?: string;
+    message: string;
+    confirmText?: string;
+    cancelText?: string;
+    confirmClass?: string;
+    danger?: boolean;
+}
+
 /**
- * Global confirm dialog replacement
- * @param message The main message to display
- * @param title Optional title
- * @param confirmText Text for the confirm button ("Yes", "Confirm", "Delete")
- * @param cancelText Text for the cancel button
- * @param confirmClass DaisyUI button color class (e.g. "btn-error" for destructive actions)
+ * Global confirm dialog replacement.
+ * Supports both positional arguments (`confirmDialog(message, title, ...)`)
+ * and an options object (`confirmDialog({ title, message, confirmText, cancelText, danger })`).
  * @returns Promise<boolean> that resolves to true if confirmed, false if cancelled.
  */
 export const confirmDialog = (
-    message: string, 
-    title = 'Please Confirm', 
-    confirmText = 'Yes', 
+    messageOrOptions: string | ConfirmDialogOptions,
+    title = 'Please Confirm',
+    confirmText = 'Yes',
     cancelText = 'Cancel',
     confirmClass = 'btn-primary'
 ): Promise<boolean> => {
+    const opts: ConfirmDialogOptions =
+        typeof messageOrOptions === 'string'
+            ? { message: messageOrOptions, title, confirmText, cancelText, confirmClass }
+            : messageOrOptions || { message: '' };
+
+    const resolvedTitle = opts.title || title;
+    const resolvedMessage = String(opts.message || '');
+    const resolvedConfirmText = opts.confirmText || confirmText;
+    const resolvedCancelText = opts.cancelText || cancelText;
+    const resolvedConfirmClass =
+        opts.confirmClass || (opts.danger ? 'btn-error' : confirmClass);
+
     return new Promise((resolve) => {
         confirmState.set({
             isOpen: true,
-            title,
-            message,
-            confirmText,
-            cancelText,
-            confirmClass,
+            title: resolvedTitle,
+            message: resolvedMessage,
+            confirmText: resolvedConfirmText,
+            cancelText: resolvedCancelText,
+            confirmClass: resolvedConfirmClass,
             onConfirm: () => {
                 confirmState.set({ ...confirmState.get(), isOpen: false });
                 resolve(true);
