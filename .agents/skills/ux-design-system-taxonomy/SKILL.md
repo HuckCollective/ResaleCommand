@@ -187,9 +187,10 @@ A standardized two-tier mobile-first interaction pattern synthesizing the Scout 
 1. **Tier 1 (Top): Status / Telemetry Strip**:
    - In Catalog views: Pager navigation bar (Scroll-to-top `↑`, First/Previous, `Page 1 / 38`, Next/Last, Page Size selector).
    - In Terminal / Scout views: Active or Paused Buy Tracker telemetry strip (`[ 🚚 Goodwill 3 items $37.00 ] [ MANIFEST ⌃ ]`).
-2. **Tier 2 (Bottom): Action Buttons Strip (Thumb Zone)**:
-   - Built on the semantic **DaisyUI `.dock.dock-sm`** component inside a fixed glassmorphic container (`fixed bottom-0 inset-x-0 z-40 bg-base-100/95 dark:bg-base-200/95 backdrop-blur-2xl border-t border-base-300 pb-[env(safe-area-inset-bottom,0px)]`).
-   - Center action is the **Contextual Primary Action (CPA)**, styled as a **solid elevated tactile pill**:
+2. **Tier 2 (Bottom): Horizontal Tactile Pill Command Strip (Thumb Zone)**:
+   - Mounted inside a fixed glassmorphic dock (`fixed bottom-0 inset-x-0 z-40 bg-base-100/95 dark:bg-base-200/95 backdrop-blur-2xl border-t border-base-300 pb-[env(safe-area-inset-bottom,0px)]`), using a horizontal pill flex row (`max-w-xl w-full mx-auto px-2 py-1.5 flex items-center justify-between sm:justify-center gap-1.5 sm:gap-2 overflow-x-auto no-scrollbar`). **Never wrap multi-element pill buttons in DaisyUI `.dock.dock-sm`**, which forces `flex-direction: column` and clips horizontal icons/badges.
+   - Standard button pill anatomy: `btn h-11 px-3 sm:px-4 rounded-2xl inline-flex items-center justify-center gap-1.5 text-xs whitespace-nowrap shrink-0` with inline `badge-xs` counts inside the pill (never overflowing `.indicator-item` badges).
+   - Center or final primary action is the **Contextual Primary Action (CPA)**, styled as a **solid elevated tactile pill**:
      - *Identify / Create*: `bg-primary text-primary-content font-black shadow-md border border-primary-content/25 active:scale-95 hover:brightness-110`.
      - *Re-Identify / Attention*: `bg-warning text-warning-content font-black shadow-md border border-warning-content/25 active:scale-95 hover:brightness-110`.
      - *Add / Commit*: `bg-success text-success-content font-black shadow-md border border-success-content/25 active:scale-95 hover:brightness-110`.

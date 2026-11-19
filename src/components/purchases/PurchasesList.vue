@@ -556,7 +556,7 @@
         <button
           type="button"
           @click="openActionTray('trackers')"
-          class="btn h-11 my-auto px-2.5 sm:px-3.5 rounded-2xl inline-flex items-center justify-center gap-1.5 transition-all duration-200 bg-base-200/80 hover:bg-secondary/15 text-base-content font-bold border border-base-content/15 shadow-xs active:scale-95 cursor-pointer"
+          class="btn h-11 flex-1 sm:flex-initial px-2.5 sm:px-3.5 rounded-2xl inline-flex items-center justify-center gap-1.5 transition-all duration-200 bg-base-200/80 hover:bg-secondary/15 text-base-content font-bold border border-base-content/15 shadow-xs active:scale-95 cursor-pointer shrink-0"
           title="View open Buy Trackers before checkout"
         >
           <Icon icon="solar:bookmark-square-minimalistic-bold" class="w-4 h-4 text-secondary shrink-0" />
@@ -573,7 +573,7 @@
         <button
           type="button"
           @click="openActionTray('scout')"
-          class="btn h-11 my-auto px-2.5 sm:px-3.5 rounded-2xl inline-flex items-center justify-center gap-1.5 transition-all duration-200 bg-base-200/80 hover:bg-base-300 text-base-content font-bold border border-base-content/15 shadow-xs active:scale-95 cursor-pointer"
+          class="btn h-11 flex-1 sm:flex-initial px-2.5 sm:px-3.5 rounded-2xl inline-flex items-center justify-center gap-1.5 transition-all duration-200 bg-base-200/80 hover:bg-base-300 text-base-content font-bold border border-base-content/15 shadow-xs active:scale-95 cursor-pointer shrink-0"
           title="Open Auction Scout bookmarklet &amp; Quick Scout"
         >
           <Icon icon="solar:rocket-2-bold" class="w-4 h-4 text-primary shrink-0" />
@@ -584,7 +584,7 @@
         <button
           type="button"
           @click="openActionTray('add')"
-          class="btn h-11 my-auto px-3.5 sm:px-5 rounded-2xl inline-flex items-center justify-center gap-1.5 transition-all duration-200 bg-primary text-primary-content font-black shadow-md border border-primary-content/25 active:scale-95 hover:brightness-110 cursor-pointer"
+          class="btn h-11 flex-1 sm:flex-initial px-3.5 sm:px-5 rounded-2xl inline-flex items-center justify-center gap-1.5 transition-all duration-200 bg-primary text-primary-content font-black shadow-md border border-primary-content/25 active:scale-95 hover:brightness-110 cursor-pointer shrink-0"
           title="Add Purchase: Speed Entry, New PO, or CSV Import"
         >
           <Icon icon="solar:add-circle-bold" class="w-4 h-4 drop-shadow-xs shrink-0" />

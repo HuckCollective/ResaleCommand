@@ -248,20 +248,26 @@
 
                 <!-- ------------------------------------------------------------- -->
                 <!-- ------------------------------------------------------------- -->
-                <!-- STACK ROW 2: COMMAND DOCK (BOTTOM STRIP - THUMB ZONE)         -->
+                <!-- STACK ROW 2: HORIZONTAL TACTILE PILL COMMAND DOCK (THUMB ZONE)-->
                 <!-- ------------------------------------------------------------- -->
-                <div class="max-w-xl w-full mx-auto px-2 py-1.5 flex items-center justify-between sm:justify-center gap-1.5 sm:gap-2">
+                <div class="max-w-xl w-full mx-auto px-2 py-1.5 flex items-center justify-between sm:justify-center gap-1.5 sm:gap-2 overflow-x-auto no-scrollbar">
                     <!-- Dock Item 1: Actions & Bulk Operations -->
                     <button 
                         id="btn-bottom-dock-actions"
                         type="button"
-                        class="btn flex-1 sm:flex-initial h-11 px-2 sm:px-3 rounded-btn flex flex-col items-center justify-center gap-0.5 transition-all duration-200 cursor-pointer"
-                        :class="selectedCount > 0 ? 'btn-warning font-black shadow-md border border-warning-content/25' : 'bg-base-200/80 hover:bg-base-300 text-base-content font-bold border border-base-content/15 shadow-xs'"
+                        class="btn h-11 px-2.5 sm:px-3.5 rounded-2xl inline-flex items-center justify-center gap-1.5 transition-all duration-200 cursor-pointer active:scale-95 shrink-0"
+                        :class="selectedCount > 0 ? 'bg-warning text-warning-content font-black shadow-md border border-warning-content/25' : 'bg-base-200/80 hover:bg-base-300 text-base-content font-bold border border-base-content/15 shadow-xs'"
                         @click="openTray('actions')"
                         :title="selectedCount > 0 ? `${selectedCount} records selected for bulk actions` : 'Open bulk actions tray'"
                     >
-                        <Icon icon="solar:bolt-bold" class="w-4.5 h-4.5" />
-                        <span class="font-extrabold uppercase text-[10px] tracking-tight leading-none whitespace-nowrap">Actions ({{ selectedCount }})</span>
+                        <Icon icon="solar:bolt-bold" class="w-4 h-4 shrink-0" />
+                        <span class="font-extrabold text-xs whitespace-nowrap">Actions</span>
+                        <span
+                            v-if="selectedCount > 0"
+                            class="badge badge-xs badge-neutral font-mono font-black whitespace-nowrap shrink-0"
+                        >
+                            {{ selectedCount }}
+                        </span>
                     </button>
 
                     <!-- Dock Item 1.5: Outbound Manifest Pill (Only when no active drop bar in Row 0) -->
@@ -269,15 +275,18 @@
                         v-if="!currentManifest || (currentManifest.status !== 'draft' && currentManifest.status !== 'in-transit')"
                         id="btn-bottom-dock-drop-tray"
                         type="button"
-                        class="btn flex-1 sm:flex-initial h-11 px-2.5 sm:px-3.5 rounded-btn flex flex-col items-center justify-center gap-0.5 transition-all duration-200 bg-base-100 hover:bg-base-200 text-base-content font-black border border-base-content/25 shadow-xs cursor-pointer active:scale-95"
+                        class="btn h-11 px-2.5 sm:px-3.5 rounded-2xl inline-flex items-center justify-center gap-1.5 transition-all duration-200 bg-base-200/80 hover:bg-base-300 text-base-content font-bold border border-base-content/15 shadow-xs cursor-pointer active:scale-95 shrink-0"
                         @click="handleOpenManifest"
                         :title="`Open ${manifestName || 'Memory Den'} drop manifest (${manifestItemCount} items)`"
                     >
-                        <div class="indicator">
-                            <span v-if="manifestItemCount > 0" class="indicator-item badge badge-xs badge-primary text-primary-content font-mono font-bold">{{ manifestItemCount }}</span>
-                            <Icon icon="solar:box-minimalistic-bold" class="w-4.5 h-4.5 text-primary" />
-                        </div>
-                        <span class="font-extrabold uppercase text-[10px] text-base-content tracking-tight leading-none whitespace-nowrap">Drop {{ manifestItemCount > 0 ? `(${manifestItemCount})` : '' }}</span>
+                        <Icon icon="solar:box-minimalistic-bold" class="w-4 h-4 text-primary shrink-0" />
+                        <span class="font-extrabold text-xs whitespace-nowrap">Drop</span>
+                        <span
+                            v-if="manifestItemCount > 0"
+                            class="badge badge-xs badge-primary text-primary-content font-mono font-black whitespace-nowrap shrink-0"
+                        >
+                            {{ manifestItemCount }}
+                        </span>
                     </button>
 
                     <!-- Dock Item 1.6: Dropcast Staging Pill (Only when no active Cast bar in Row 0) -->
@@ -285,46 +294,52 @@
                         v-if="!activeCast || activeCast.status !== 'draft'"
                         id="btn-bottom-dock-cast-tray"
                         type="button"
-                        class="btn flex-1 sm:flex-initial h-11 px-2.5 sm:px-3.5 rounded-btn flex flex-col items-center justify-center gap-0.5 transition-all duration-200 bg-base-100 hover:bg-base-200 text-base-content font-black border border-base-content/25 shadow-xs cursor-pointer active:scale-95"
+                        class="btn h-11 px-2.5 sm:px-3.5 rounded-2xl inline-flex items-center justify-center gap-1.5 transition-all duration-200 bg-base-200/80 hover:bg-base-300 text-base-content font-bold border border-base-content/15 shadow-xs cursor-pointer active:scale-95 shrink-0"
                         @click="handleOpenCastTray"
                         :title="activeCast?.status === 'paused' ? `Dropcast Paused (${stagedCastCount} items) — tap to open or resume` : `Open Dropcast staging tray (${stagedCastCount} items)`"
                     >
-                        <div class="indicator">
-                            <span v-if="stagedCastCount > 0" class="indicator-item badge badge-xs badge-secondary text-secondary-content font-mono font-bold">{{ stagedCastCount }}</span>
-                            <Icon 
-                                :icon="activeCast?.status === 'paused' ? 'solar:pause-circle-bold' : 'solar:broadcast-bold'" 
-                                class="w-4.5 h-4.5" 
-                                :class="activeCast?.status === 'paused' ? 'text-warning' : 'text-secondary'" 
-                            />
-                        </div>
-                        <span class="font-extrabold uppercase text-[10px] text-base-content tracking-tight leading-none whitespace-nowrap">
-                            {{ activeCast?.status === 'paused' ? 'Cast ⏸' : `Cast ${stagedCastCount > 0 ? `(${stagedCastCount})` : ''}` }}
+                        <Icon 
+                            :icon="activeCast?.status === 'paused' ? 'solar:pause-circle-bold' : 'solar:broadcast-bold'" 
+                            class="w-4 h-4 shrink-0" 
+                            :class="activeCast?.status === 'paused' ? 'text-warning' : 'text-secondary'" 
+                        />
+                        <span class="font-extrabold text-xs whitespace-nowrap">
+                            {{ activeCast?.status === 'paused' ? 'Cast ⏸' : 'Cast' }}
+                        </span>
+                        <span
+                            v-if="stagedCastCount > 0"
+                            class="badge badge-xs badge-secondary text-secondary-content font-mono font-black whitespace-nowrap shrink-0"
+                        >
+                            {{ stagedCastCount }}
                         </span>
                     </button>
 
                     <!-- Dock Item 2: Add & Ingest (Solid Elevated Hero Action) -->
                     <button 
                         type="button"
-                        class="btn btn-primary text-primary-content flex-1 sm:flex-initial h-11 px-3.5 sm:px-4 rounded-btn flex flex-col items-center justify-center gap-0.5 transition-all duration-200 font-black shadow-md border border-primary-content/25 active:scale-95 hover:brightness-110 cursor-pointer"
+                        class="btn h-11 px-3.5 sm:px-4 rounded-2xl inline-flex items-center justify-center gap-1.5 transition-all duration-200 bg-primary text-primary-content font-black shadow-md border border-primary-content/25 active:scale-95 hover:brightness-110 cursor-pointer shrink-0"
                         @click="openTray('add-prep')"
                         title="Add items, scout quick add & CSV import"
                     >
-                        <Icon icon="solar:add-circle-bold" class="w-4.5 h-4.5 drop-shadow-xs" />
-                        <span class="font-black uppercase text-[10px] sm:text-[11px] tracking-wide leading-none whitespace-nowrap">Add & Ingest</span>
+                        <Icon icon="solar:add-circle-bold" class="w-4 h-4 drop-shadow-xs shrink-0" />
+                        <span class="font-black text-xs tracking-wide whitespace-nowrap">Add<span class="hidden sm:inline"> &amp; Ingest</span></span>
                     </button>
 
                     <!-- Dock Item 3: Filters & View Options -->
                     <button 
                         type="button"
-                        class="btn flex-1 sm:flex-initial h-11 px-2 sm:px-3 rounded-btn flex flex-col items-center justify-center gap-0.5 transition-all duration-200 bg-base-200/80 hover:bg-base-300 text-base-content font-bold border border-base-content/15 shadow-xs cursor-pointer"
+                        class="btn h-11 px-2.5 sm:px-3.5 rounded-2xl inline-flex items-center justify-center gap-1.5 transition-all duration-200 bg-base-200/80 hover:bg-base-300 text-base-content font-bold border border-base-content/15 shadow-xs cursor-pointer active:scale-95 shrink-0"
                         @click="openTray('filters')"
                         title="Open Filters & View Options"
                     >
-                        <div class="indicator">
-                            <span v-if="activeFilterCount > 0" class="indicator-item badge badge-xs badge-primary text-primary-content font-mono font-bold">{{ activeFilterCount }}</span>
-                            <Icon icon="solar:tuning-square-2-bold-duotone" class="w-4.5 h-4.5 text-primary" />
-                        </div>
-                        <span class="font-extrabold uppercase text-[10px] tracking-tight leading-none whitespace-nowrap">Filters</span>
+                        <Icon icon="solar:tuning-square-2-bold-duotone" class="w-4 h-4 text-primary shrink-0" />
+                        <span class="font-extrabold text-xs whitespace-nowrap">Filters</span>
+                        <span
+                            v-if="activeFilterCount > 0"
+                            class="badge badge-xs badge-primary text-primary-content font-mono font-black whitespace-nowrap shrink-0"
+                        >
+                            {{ activeFilterCount }}
+                        </span>
                     </button>
                 </div>
             </div>

@@ -563,50 +563,54 @@
       @scroll-top="scrollToTop"
     >
       <template #dock>
-        <!-- Dock Item 1: Actions (N) — Opens Multi-Line Bulk Edit Tray/Modal (Matches InventoryPaginationDock) -->
+        <!-- Dock Item 1: Actions (N) — Opens Multi-Line Bulk Edit Drawer -->
         <button
           type="button"
           @click="isBulkActionsOpen = true"
-          class="h-11 my-auto px-2.5 sm:px-3.5 rounded-2xl flex flex-col items-center justify-center gap-0.5 transition-all duration-200 cursor-pointer shrink-0"
+          class="btn h-11 px-2.5 sm:px-3.5 rounded-2xl inline-flex items-center justify-center gap-1.5 transition-all duration-200 cursor-pointer shrink-0 active:scale-95"
           :class="selectedIds.length > 0 ? 'bg-warning text-warning-content font-black shadow-md border border-warning-content/25' : 'bg-base-200/80 hover:bg-base-300 text-base-content font-bold border border-base-content/15 shadow-xs'"
           :title="selectedIds.length > 0 ? `${selectedIds.length} expenses selected for multi-line bulk edit` : 'Select rows in the table to run multi-line bulk edits'"
         >
-          <Icon icon="solar:bolt-bold" class="w-4.5 h-4.5" />
-          <span class="font-extrabold uppercase text-[10px] tracking-tight leading-none whitespace-nowrap">
-            Actions ({{ selectedIds.length }})
+          <Icon icon="solar:bolt-bold" class="w-4 h-4 shrink-0" />
+          <span class="font-extrabold text-xs whitespace-nowrap">Actions</span>
+          <span
+            v-if="selectedIds.length > 0"
+            class="badge badge-xs badge-neutral font-mono font-black whitespace-nowrap shrink-0"
+          >
+            {{ selectedIds.length }}
           </span>
         </button>
 
         <!-- Dock Item 2: Scan Receipt -->
         <a
           href="/purchases/speed-entry?mode=all_expense"
-          class="h-11 my-auto px-2.5 sm:px-3.5 rounded-2xl flex flex-col items-center justify-center gap-0.5 transition-all duration-200 bg-base-200/80 hover:bg-secondary/15 text-secondary font-bold border border-secondary/25 shadow-xs active:scale-95 cursor-pointer shrink-0"
+          class="btn h-11 px-2.5 sm:px-3.5 rounded-2xl inline-flex items-center justify-center gap-1.5 transition-all duration-200 bg-base-200/80 hover:bg-secondary/15 text-base-content font-bold border border-base-content/15 shadow-xs active:scale-95 cursor-pointer shrink-0"
           title="Scan multi-line paper receipt via OCR"
         >
-          <Icon icon="solar:scanner-bold" class="w-4.5 h-4.5 text-secondary" />
-          <span class="font-extrabold uppercase text-[10px] tracking-tight leading-none whitespace-nowrap">Scan OCR</span>
+          <Icon icon="solar:scanner-bold" class="w-4 h-4 text-secondary shrink-0" />
+          <span class="font-extrabold text-xs whitespace-nowrap">Scan <span class="hidden sm:inline">OCR</span></span>
         </a>
 
         <!-- Dock Item 3: Upload Multi-PDF Invoices -->
         <button
           type="button"
           @click="openImportModal"
-          class="h-11 my-auto px-2.5 sm:px-3.5 rounded-2xl flex flex-col items-center justify-center gap-0.5 transition-all duration-200 bg-base-200/80 hover:bg-base-300 text-base-content font-bold border border-base-content/15 shadow-xs active:scale-95 cursor-pointer shrink-0"
+          class="btn h-11 px-2.5 sm:px-3.5 rounded-2xl inline-flex items-center justify-center gap-1.5 transition-all duration-200 bg-base-200/80 hover:bg-base-300 text-base-content font-bold border border-base-content/15 shadow-xs active:scale-95 cursor-pointer shrink-0"
           title="Upload multiple PDF invoices at once"
         >
-          <Icon icon="solar:upload-track-bold" class="w-4.5 h-4.5 text-primary" />
-          <span class="font-extrabold uppercase text-[10px] tracking-tight leading-none whitespace-nowrap">Upload PDFs</span>
+          <Icon icon="solar:upload-track-bold" class="w-4 h-4 text-primary shrink-0" />
+          <span class="font-extrabold text-xs whitespace-nowrap"><span class="hidden sm:inline">Upload </span>PDFs</span>
         </button>
 
         <!-- Dock Item 4: Log Expense (Elevated Contextual Primary Action) -->
         <button
           type="button"
           @click="openSubmitModal"
-          class="h-11 my-auto px-3.5 sm:px-4 rounded-2xl flex flex-col items-center justify-center gap-0.5 transition-all duration-200 bg-primary text-primary-content font-black shadow-md border border-primary-content/25 active:scale-95 hover:brightness-110 cursor-pointer shrink-0"
+          class="btn h-11 px-3.5 sm:px-5 rounded-2xl inline-flex items-center justify-center gap-1.5 transition-all duration-200 bg-primary text-primary-content font-black shadow-md border border-primary-content/25 active:scale-95 hover:brightness-110 cursor-pointer shrink-0"
           title="Log a single expense or receipt"
         >
-          <Icon icon="solar:add-circle-bold" class="w-4.5 h-4.5 drop-shadow-xs" />
-          <span class="font-black uppercase text-[10px] sm:text-[11px] tracking-wide leading-none whitespace-nowrap">Log Expense</span>
+          <Icon icon="solar:add-circle-bold" class="w-4 h-4 drop-shadow-xs shrink-0" />
+          <span class="font-black text-xs tracking-wide whitespace-nowrap">Log <span class="hidden sm:inline">Expense</span></span>
         </button>
       </template>
     </PaginationDock>

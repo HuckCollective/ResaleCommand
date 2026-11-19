@@ -1495,43 +1495,43 @@
       <template #dock>
         <button
           type="button"
-          class="h-11 my-auto px-2.5 sm:px-3 rounded-2xl flex flex-col items-center justify-center gap-0.5 transition-all duration-200 bg-base-200/80 hover:bg-base-300 text-base-content font-bold border border-base-content/15 shadow-xs active:scale-95 cursor-pointer"
+          class="btn h-11 flex-1 sm:flex-initial px-2.5 sm:px-3.5 rounded-2xl inline-flex items-center justify-center gap-1.5 transition-all duration-200 bg-base-200/80 hover:bg-base-300 text-base-content font-bold border border-base-content/15 shadow-xs active:scale-95 cursor-pointer shrink-0"
           :disabled="loadingLab"
           @click="loadAllLabData(true)"
           title="Refresh Estimate-vs-Sold audit"
         >
-          <Icon icon="solar:refresh-bold" class="w-4 h-4" />
-          <span class="font-extrabold uppercase text-[10px] tracking-tight leading-none whitespace-nowrap">Refresh</span>
+          <Icon icon="solar:refresh-bold" class="w-4 h-4 text-primary shrink-0" />
+          <span class="font-extrabold text-xs whitespace-nowrap">Refresh</span>
         </button>
 
         <button
           type="button"
-          class="h-11 my-auto px-2.5 sm:px-3 rounded-2xl flex flex-col items-center justify-center gap-0.5 transition-all duration-200 bg-base-200/80 hover:bg-base-300 text-base-content font-bold border border-base-content/15 shadow-xs active:scale-95 cursor-pointer"
+          class="btn h-11 flex-1 sm:flex-initial px-2.5 sm:px-3.5 rounded-2xl inline-flex items-center justify-center gap-1.5 transition-all duration-200 bg-base-200/80 hover:bg-base-300 text-base-content font-bold border border-base-content/15 shadow-xs active:scale-95 cursor-pointer shrink-0"
           @click="activeTab = 'rules'"
           title="Open Calibration Rules & Venue Bias"
         >
-          <Icon icon="solar:settings-bold" class="w-4 h-4" />
-          <span class="font-extrabold uppercase text-[10px] tracking-tight leading-none whitespace-nowrap">Rules</span>
+          <Icon icon="solar:settings-bold" class="w-4 h-4 shrink-0" />
+          <span class="font-extrabold text-xs whitespace-nowrap">Rules</span>
         </button>
 
         <button
           type="button"
-          class="h-11 my-auto px-2.5 sm:px-3 rounded-2xl flex flex-col items-center justify-center gap-0.5 transition-all duration-200 bg-base-200/80 hover:bg-base-300 text-base-content font-bold border border-base-content/15 shadow-xs active:scale-95 cursor-pointer"
+          class="btn h-11 flex-1 sm:flex-initial px-2.5 sm:px-3.5 rounded-2xl inline-flex items-center justify-center gap-1.5 transition-all duration-200 bg-base-200/80 hover:bg-base-300 text-base-content font-bold border border-base-content/15 shadow-xs active:scale-95 cursor-pointer shrink-0"
           @click="activeTab = 'bookmarklets'"
           title="Open Universal Bookmarklets Hub"
         >
-          <Icon icon="solar:bookmark-bold" class="w-4 h-4" />
-          <span class="font-extrabold uppercase text-[10px] tracking-tight leading-none whitespace-nowrap">BMLs</span>
+          <Icon icon="solar:bookmark-bold" class="w-4 h-4 shrink-0" />
+          <span class="font-extrabold text-xs whitespace-nowrap">BMLs</span>
         </button>
 
         <button
           type="button"
-          class="h-11 my-auto px-3.5 sm:px-4 rounded-2xl flex flex-col items-center justify-center gap-0.5 transition-all duration-200 bg-primary text-primary-content font-black shadow-md border border-primary-content/25 active:scale-95 hover:brightness-110 cursor-pointer"
+          class="btn h-11 flex-1 sm:flex-initial px-3.5 sm:px-5 rounded-2xl inline-flex items-center justify-center gap-1.5 transition-all duration-200 bg-primary text-primary-content font-black shadow-md border border-primary-content/25 active:scale-95 hover:brightness-110 cursor-pointer shrink-0"
           @click="isTestbenchOpen = true"
           title="Open Price & Venue Testbench"
         >
-          <Icon icon="solar:test-tube-bold" class="w-4 h-4 drop-shadow-xs" />
-          <span class="font-black uppercase text-[10px] sm:text-[11px] tracking-wide leading-none whitespace-nowrap">Try It</span>
+          <Icon icon="solar:test-tube-bold" class="w-4 h-4 drop-shadow-xs shrink-0" />
+          <span class="font-black text-xs tracking-wide whitespace-nowrap">Try It</span>
         </button>
       </template>
     </PaginationDock>

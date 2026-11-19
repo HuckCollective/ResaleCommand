@@ -119,12 +119,10 @@
       </div>
 
       <!-- ========================================================================= -->
-      <!-- TIER 2: DAISYUI SEMANTIC DOCK (BOTTOM STRIP - THUMB ZONE)                  -->
+      <!-- TIER 2: HORIZONTAL TACTILE PILL COMMAND DOCK (THUMB ZONE)                 -->
       <!-- ========================================================================= -->
-      <div class="max-w-xl w-full mx-auto">
-        <div class="dock dock-sm !static !bg-transparent !border-t-0 !shadow-none !h-14 px-2 py-1 gap-1.5 sm:gap-2">
-          <slot name="dock" />
-        </div>
+      <div class="max-w-xl w-full mx-auto px-2 py-1.5 flex items-center justify-between sm:justify-center gap-1.5 sm:gap-2 overflow-x-auto no-scrollbar">
+        <slot name="dock" />
       </div>
     </div>
   </Teleport>

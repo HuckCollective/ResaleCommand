@@ -1296,8 +1296,9 @@ const archiveSingleClone = async (cluster: ActiveDuplicateCluster, cloneItem: an
   const keeperLabel = keeperSku ? `${keeper.upc || 'Keeper'} (${keeperSku})` : keeper.upc || 'Primary record';
 
   const locMeta = getLocationSettingMeta(cloneItem.storageLocation || keeper?.storageLocation || '');
-  const needsOutboundSync =
-    Boolean(cloneSku) || Boolean(locMeta.usesRicochet) || Boolean(locMeta.supportsPaperSalesSheet);
+  const needsOutboundSync = locMeta.usesRicochet
+    ? Boolean(cloneSku)
+    : Boolean(cloneSku) || Boolean(locMeta.supportsPaperSalesSheet);
 
   const ok = await confirmDialog({
     title: cloneSku ? 'Archive Booth Copy & Queue Tag Removal?' : 'Archive Extra Copy?',

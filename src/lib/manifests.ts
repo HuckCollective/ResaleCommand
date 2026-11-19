@@ -168,6 +168,44 @@ function serializeForSave(data: Partial<ManifestData>): Record<string, any> {
     return payload;
 }
 
+const SYSTEM_MANIFEST_ID_RE =
+    /(?:^|_)(?:verify_report|verify_payload|live_payload|sales_sync|raw_csv|channel_outbox)(?:_|$)|^(?:coop_|bml_|ai_|founder_vault|online_cocur_)/i;
+const SYSTEM_MANIFEST_NAME_RE =
+    /\b(?:channel sync outbox|live ricochet sales|live sku-to-upc payload|live verify report|co-curation)\b/i;
+const OUTBOUND_DROP_STATUSES = new Set([
+    '',
+    'draft',
+    'active',
+    'paused',
+    'exported',
+    'in-transit',
+    'intransit',
+    'locked',
+    'placed',
+    'closed',
+    'completed',
+    'archived',
+    'cancelled',
+    'canceled',
+]);
+
+/**
+ * Excludes internal telemetry, POS sync, outbox, co-curation, and governance documents
+ * stored in `manifests` so Outbound Drops & Manifests only surfaces real booth drops.
+ */
+export function isOutboundDropManifestDoc(doc: any): boolean {
+    if (!doc || typeof doc !== 'object') return false;
+    const id = String(doc.$id || '').trim();
+    if (id && SYSTEM_MANIFEST_ID_RE.test(id)) return false;
+    const locId = String(doc.locationId || '').trim().toUpperCase();
+    if (locId.startsWith('COOP_') || locId.startsWith('SYSTEM_')) return false;
+    const name = String(doc.name || '').trim();
+    if (name && SYSTEM_MANIFEST_NAME_RE.test(name)) return false;
+    const rawStatus = String(doc.status || '').trim().toLowerCase();
+    if (!OUTBOUND_DROP_STATUSES.has(rawStatus)) return false;
+    return true;
+}
+
 export const manifestsApi = {
     /**
      * List all manifests for a tenant, optionally filtered by location or status
@@ -180,7 +218,7 @@ export const manifestsApi = {
             if (status) queries.push(Query.equal('status', status));
 
             const resp = await databases.listDocuments(DB_ID, MANIFESTS_COL, queries);
-            return resp.documents.map(parseDoc);
+            return resp.documents.filter(isOutboundDropManifestDoc).map(parseDoc);
         } catch (err: any) {
             console.warn('[manifestsApi.listManifests] Error reading manifests:', err);
             return [];
@@ -201,7 +239,7 @@ export const manifestsApi = {
             if (locationId) queries.push(Query.equal('locationId', locationId));
 
             const resp = await databases.listDocuments(DB_ID, MANIFESTS_COL, queries);
-            return resp.documents.map(parseDoc);
+            return resp.documents.filter(isOutboundDropManifestDoc).map(parseDoc);
         } catch (err: any) {
             console.warn('[manifestsApi.listDrafts] Error:', err);
             return [];
@@ -222,7 +260,7 @@ export const manifestsApi = {
             if (locationId) queries.push(Query.equal('locationId', locationId));
 
             const resp = await databases.listDocuments(DB_ID, MANIFESTS_COL, queries);
-            return resp.documents.map(parseDoc);
+            return resp.documents.filter(isOutboundDropManifestDoc).map(parseDoc);
         } catch (err: any) {
             console.warn('[manifestsApi.listRecentManifests] Error:', err);
             return [];
@@ -237,16 +275,14 @@ export const manifestsApi = {
             const queries = [
                 Query.equal('status', 'draft'),
                 Query.orderDesc('$updatedAt'),
-                Query.limit(1)
+                Query.limit(10)
             ];
             if (tenantId) queries.push(Query.equal('tenantId', tenantId));
             if (locationId) queries.push(Query.equal('locationId', locationId));
 
             const resp = await databases.listDocuments(DB_ID, MANIFESTS_COL, queries);
-            if (resp.documents.length > 0) {
-                return parseDoc(resp.documents[0]);
-            }
-            return null;
+            const firstDrop = resp.documents.find(isOutboundDropManifestDoc);
+            return firstDrop ? parseDoc(firstDrop) : null;
         } catch (err: any) {
             console.warn('[manifestsApi.getActiveDraft] Error:', err);
             return null;

@@ -448,19 +448,9 @@ const quickLinks = computed(() => {
     const pos = props.locationMeta?.posName || 'POS';
     return [
       {
-        label: '📦 Products ↗',
-        href: `${base}/products`,
-        title: `Open ${name} Products / Inventory on ${pos}`,
-      },
-      {
-        label: '💵 Payouts ↗',
-        href: `${base}/payouts`,
-        title: `Open ${name} Current Unpaid Payouts on ${pos}`,
-      },
-      {
-        label: '📜 History ↗',
-        href: `${base}/payout_history`,
-        title: `Open ${name} Settled Payout History on ${pos}`,
+        label: '⚡ Open Ricochet POS ↗',
+        href: `${base}/dashboard#`,
+        title: `Open ${name} on ${pos} (Inventory, Payout & Payout History tabs)`,
       },
     ];
   }
