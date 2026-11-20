@@ -1,8 +1,10 @@
-import { model, generateContentWithBackoff, parseAiJson } from './gemini';
+import { model, generateContentWithBackoff, parseAiJson, type AiSurface } from './gemini';
 import { lotInspectionResponseSchema } from './ai/schemas/lot-inspection.schema';
 import { LOT_PLAYBOOK_SYSTEM_INSTRUCTION } from './ai/instructions/system-instructions';
 import { buildLotInspectionUserPrompt } from './ai/instructions/prompt-builders';
 import { verifyAndSanitizeLotResult } from './ai/verification/verify-inspection';
+
+export const MAX_LOT_VISION_PHOTOS = 12;
 
 export interface InspectionImage {
     url?: string;
@@ -12,6 +14,8 @@ export interface InspectionImage {
 }
 
 export interface InspectionContext {
+    itemId?: string;
+    surface?: AiSurface;
     title?: string;
     notes?: string;
     cost?: number;
@@ -436,12 +440,15 @@ export async function inspectLotWithGemini(
         throw new Error("No images provided for inspection");
     }
 
-    if (onProgress) onProgress(`Step 1 of 2: Loading ${images.length} gallery photos for deep vision analysis...`, 20);
+    const cappedImages = images.slice(0, MAX_LOT_VISION_PHOTOS);
+    if (onProgress) onProgress(`Step 1 of 2: Loading ${cappedImages.length} gallery photos for deep vision analysis...`, 20);
 
-    // 1. Fetch and prepare all image parts concurrently
-    const imagePartPromises = images.map(img => fetchImagePart(img));
+    // 1. Fetch and prepare up to MAX_LOT_VISION_PHOTOS (12) image parts concurrently
+    const imagePartPromises = cappedImages.map(img => fetchImagePart(img));
     const rawImageParts = await Promise.all(imagePartPromises);
-    const validImageParts = rawImageParts.filter((p): p is { inlineData: { data: string; mimeType: string }; index: number } => p !== null);
+    const validImageParts = rawImageParts
+        .filter((p): p is { inlineData: { data: string; mimeType: string }; index: number } => p !== null)
+        .slice(0, MAX_LOT_VISION_PHOTOS);
 
     if (validImageParts.length === 0) {
         throw new Error("Could not process any gallery photos. Check image URLs or upload formats.");
@@ -452,37 +459,17 @@ export async function inspectLotWithGemini(
     // Determine target quantity from context or title regex
     let targetQuantity: number | undefined = context?.quantity;
     if (!targetQuantity || targetQuantity <= 1) {
-        const titleMatch = (context?.title || '').match(/\b(?:lot|set|pack|box)\s+of\s+(\d+)\b/i) ||
-                           (context?.title || '').match(/\((\d+)\s*(?:books?|items?|pcs?|pieces?|vols?|volumes?)\)/i);
+        const titleStr = context?.title || '';
+        const titleMatch =
+            titleStr.match(/\b(?:lot|set|pack|box|bundle|collection)\s+of\s+(\d+)\b/i) ||
+            titleStr.match(/\((\d+)\s*(?:books?|novels?|paperbacks?|items?|pcs?|pieces?|vols?|volumes?)\)/i) ||
+            titleStr.match(/\b(\d+)\s+(?:vintage\s+)?(?:books?|novels?|paperbacks?|comics?|magazines?|items?|pcs?|pieces?|figures?|cards?|games?|cds?|dvds?|records?)\b.*\b(?:lot|bundle|set|collection)\b/i);
         if (titleMatch) {
             targetQuantity = parseInt(titleMatch[1], 10);
         } else if (context?.existingItems && context.existingItems.length > 0) {
             targetQuantity = context.existingItems.length;
         }
     }
-
-    const countInstruction = targetQuantity && targetQuantity > 1
-        ? `Physical Lot Stated Count: EXACTLY ${targetQuantity} physical items. Locate and catalogue all ${targetQuantity} distinct physical items shown across the photos.`
-        : `Physical Lot Stated Count: Auto-detect distinct items based on unique visible pieces across photos. Do NOT duplicate items shown across multiple angles.`;
-
-    // 2. Format User Notes & Overrides as Authoritative Ground Truth
-    const userNotesSection = context?.notes
-        ? `\n========================================================
-USER-SPECIFIED NOTES & CORRECTIONS (ABSOLUTE GROUND TRUTH):
-"${context.notes}"
-CRITICAL OVERRIDE INSTRUCTION:
-The reseller/seller has provided specific physical notes above.
-These notes represent 100% authoritative ground truth and OVERRIDE automated visual guesses.
-If the notes specify an edition, year, flaw, or exact title (e.g. "DMG is 3.0", "Ashen Crown is 4e"),
-you MUST honor that specification precisely in the catalog and condition notes.
-========================================================\n`
-        : '';
-
-    const verifiedExistingContext = context?.existingItems && context.existingItems.length > 0
-        ? `\nVERIFIED CONSTITUENT ITEMS IN THIS LOT (${context.existingItems.length} verified items):\n` +
-          JSON.stringify(context.existingItems, null, 2) +
-          `\nCRITICAL CONSTITUENT INSTRUCTION:\nThe seller has ALREADY split, cataloged, and verified these items! Use these verified items as the definitive catalog for this lot. Do NOT invent new items or hallucinate different categories.\n`
-        : '';
 
     const locationsSummary = context?.locations?.length
         ? context.locations.map(loc => `- ${loc.name}: ${loc.niche || loc.categories || 'All Categories'}`).join('\n')
@@ -500,7 +487,7 @@ you MUST honor that specification precisely in the catalog and condition notes.
     });
 
     try {
-        // Build multimodal payload: text prompt followed by all gallery image parts
+        // Build multimodal payload: text prompt followed by capped gallery image parts
         const contentParts: any[] = [
             { text: promptText },
             ...validImageParts.map(p => ({ inlineData: p.inlineData }))
@@ -509,26 +496,47 @@ you MUST honor that specification precisely in the catalog and condition notes.
         const synthResult = await generateContentWithBackoff({
             systemInstruction: LOT_PLAYBOOK_SYSTEM_INSTRUCTION,
             contents: [{ role: 'user', parts: contentParts }],
-            generationConfig: { 
+            thinkingBudget: 1024,
+            generationConfig: {
                 responseMimeType: "application/json",
-                responseSchema: lotInspectionResponseSchema
+                responseSchema: lotInspectionResponseSchema,
+                maxOutputTokens: 8192
+            },
+            telemetryContext: {
+                surface: context?.surface || "lot_inspector",
+                itemId: context?.itemId || null
             }
-        }, 3, 2000);
+        }, 2, 2000);
 
         const synthText = synthResult.response.text();
         const parsedSynth: LotInspectionResult = cleanAndParseJSON(synthText);
 
-        // Ensure image_url is assigned if available
+        // Map prompt-relative 0-based photo indices back to original gallery positions
+        const resolveGalleryIndex = (rawIdx: any): number => {
+            if (typeof rawIdx !== 'number' || !Number.isInteger(rawIdx) || rawIdx < 0) return 0;
+            if (rawIdx < validImageParts.length && typeof validImageParts[rawIdx]?.index === 'number') {
+                const mapped = validImageParts[rawIdx].index;
+                if (mapped >= 0 && mapped < images.length) return mapped;
+            }
+            return rawIdx < images.length ? rawIdx : 0;
+        };
+
+        // Ensure image_url and multi-angle indices are aligned to images[]
         if (Array.isArray(parsedSynth.lot_items)) {
             parsedSynth.lot_items.forEach((item: any) => {
-                const imgIdx = (typeof item.image_index === 'number' && item.image_index >= 0 && item.image_index < images.length)
-                    ? item.image_index
-                    : (typeof item.img === 'number' && item.img >= 0 && item.img < images.length ? item.img : 0);
+                const rawPrimary = typeof item.image_index === 'number' ? item.image_index : item.img;
+                const imgIdx = resolveGalleryIndex(rawPrimary);
                 if (!item.image_url) {
                     item.image_url = images[imgIdx]?.url || images[imgIdx]?.base64 || undefined;
                 }
                 // Preserve + sanitize multi-angle data (never strip image_index/bounding_box/views)
                 item.image_index = imgIdx;
+                if (Array.isArray(item.views)) {
+                    item.views = item.views.map((v: any) => ({
+                        ...v,
+                        image_index: resolveGalleryIndex(v?.image_index)
+                    }));
+                }
                 const bb = normalizeBoundingBox(item.bounding_box);
                 if (bb) item.bounding_box = bb; else delete item.bounding_box;
                 const views = normalizeItemViews(item, images.length);

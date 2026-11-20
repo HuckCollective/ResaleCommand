@@ -63,6 +63,18 @@ export const DEFAULT_GEMINI_MODEL =
     (typeof import.meta !== "undefined" && import.meta.env?.GEMINI_MODEL) ||
     "gemini-flash-latest";
 
+/** Per-attempt timeout (ms) before failing over cleanly to the next valid API model. */
+export const PER_ATTEMPT_TIMEOUT_MS = 45_000;
+
+/** Ordered World-1 API fallback roster (strictly valid Google GenAI API model IDs). */
+export const GEMINI_FALLBACK_MODELS = [
+    DEFAULT_GEMINI_MODEL,
+    "gemini-flash-latest",
+    "gemini-2.5-flash",
+    "gemini-flash-lite-latest",
+    "gemini-pro-latest",
+] as const;
+
 /** Optional thinking token budget presets for `@google/genai` `thinkingConfig`. */
 export const THINKING_BUDGET_PRESETS = {
     FAST_EXTRACTION: 0,
@@ -127,6 +139,8 @@ function normalizeGenerateRequest(
 
     if (requestPayload && typeof requestPayload === "object") {
         const genCfg = requestPayload.generationConfig || requestPayload.config || {};
+        const callerAbortSignal: AbortSignal | undefined =
+            requestPayload.abortSignal || genCfg.abortSignal;
         const mergedConfig: GenerateContentConfig = {
             ...baseConfig,
             ...(requestPayload.safetySettings ? { safetySettings: requestPayload.safetySettings } : {}),
@@ -142,6 +156,7 @@ function normalizeGenerateRequest(
             ...(genCfg.candidateCount !== undefined ? { candidateCount: genCfg.candidateCount } : {}),
             ...(genCfg.seed !== undefined ? { seed: genCfg.seed } : {}),
             ...(requestPayload.tools || genCfg.tools ? { tools: requestPayload.tools || genCfg.tools } : {}),
+            ...(callerAbortSignal ? { abortSignal: callerAbortSignal } : {}),
         };
 
         if (!omitThinkingConfig) {
@@ -255,17 +270,7 @@ export const generateContentWithBackoff = async (
         );
     }
 
-    const candidateModels = Array.from(
-        new Set([
-            DEFAULT_GEMINI_MODEL,
-            "gemini-flash-latest",
-            "gemini-4-hydrogen",
-            "gemini-3.8-flash",
-            "gemini-flash-lite-latest",
-            "gemini-pro-latest",
-            "gemini-2.5-flash",
-        ])
-    );
+    const candidateModels = Array.from(new Set(GEMINI_FALLBACK_MODELS));
     let modelIdx = 0;
     let omitThinkingOnCurrent = false;
 
@@ -276,12 +281,24 @@ export const generateContentWithBackoff = async (
 
     while (retries > 0) {
         const currentModelName = candidateModels[modelIdx] || DEFAULT_GEMINI_MODEL;
+        let callerAbortSignal: AbortSignal | undefined;
+        let callerSuppliedAbort = false;
 
         try {
             const { contents, config } = normalizeGenerateRequest(
                 requestPayload,
                 omitThinkingOnCurrent
             );
+            callerAbortSignal = config.abortSignal;
+            callerSuppliedAbort = Boolean(callerAbortSignal);
+            if (
+                !callerSuppliedAbort &&
+                typeof AbortSignal !== "undefined" &&
+                typeof AbortSignal.timeout === "function"
+            ) {
+                config.abortSignal = AbortSignal.timeout(PER_ATTEMPT_TIMEOUT_MS);
+            }
+
             const rawRes = await ai.models.generateContent({
                 model: currentModelName,
                 contents,
@@ -289,17 +306,18 @@ export const generateContentWithBackoff = async (
             });
             const result = wrapGenAiResponse(rawRes);
 
-            // Verify candidate finishReason if blocked
+            // Verify candidate finishReason if blocked or output-truncated
             const candidate = result.response?.candidates?.[0];
             if (
                 candidate?.finishReason === "OTHER" ||
                 candidate?.finishReason === "SAFETY" ||
-                candidate?.finishReason === "RECITATION"
+                candidate?.finishReason === "RECITATION" ||
+                candidate?.finishReason === "MAX_TOKENS"
             ) {
                 console.warn(
-                    `[Gemini] Candidate finishReason is ${candidate.finishReason} on ${currentModelName}. Trying fallback model...`
+                    `[Gemini] Candidate finishReason is ${candidate.finishReason} on ${currentModelName}.`
                 );
-                if (modelIdx < candidateModels.length - 1) {
+                if (retries > 1 && modelIdx < candidateModels.length - 1) {
                     modelIdx++;
                     omitThinkingOnCurrent = false;
                     retries--;
@@ -333,6 +351,11 @@ export const generateContentWithBackoff = async (
 
             return result;
         } catch (err: any) {
+            // Respect explicit caller cancellation before any retry/failover logic
+            if (callerSuppliedAbort && callerAbortSignal?.aborted) {
+                throw err;
+            }
+
             const msg = (err.message || "").toLowerCase();
             const status = err.status || 0;
 
@@ -344,6 +367,32 @@ export const generateContentWithBackoff = async (
                 msg.includes("payment required")
             ) {
                 throw err;
+            }
+
+            // Per-attempt timeout -> advance modelIdx immediately with zero backoff sleep
+            const errName = String(err?.name || "");
+            const isAttemptTimeout =
+                !callerSuppliedAbort &&
+                (errName === "TimeoutError" ||
+                    errName === "AbortError" ||
+                    errName === "RequestTimeoutError" ||
+                    msg.includes("timed out") ||
+                    msg.includes("timeout") ||
+                    msg.includes("aborted"));
+
+            if (isAttemptTimeout) {
+                console.warn(
+                    `[Gemini] ${PER_ATTEMPT_TIMEOUT_MS / 1000}s per-attempt timeout on ${currentModelName} (${errName || "TimeoutError"}). Advancing to next fallback model immediately...`
+                );
+                if (retries > 1 && modelIdx < candidateModels.length - 1) {
+                    modelIdx++;
+                    omitThinkingOnCurrent = false;
+                    retries--;
+                    continue;
+                }
+                throw new Error(
+                    "AI appraisal timed out after 45 seconds per attempt. Please try again or reduce the number of photos."
+                );
             }
 
             // Graceful fallback if a model tier rejects thinkingConfig
@@ -369,7 +418,7 @@ export const generateContentWithBackoff = async (
                 console.warn(
                     `[Gemini] Model issue on ${currentModelName}: ${err.message}. Switching to fallback model...`
                 );
-                if (modelIdx < candidateModels.length - 1) {
+                if (retries > 1 && modelIdx < candidateModels.length - 1) {
                     modelIdx++;
                     omitThinkingOnCurrent = false;
                     retries--;
@@ -399,7 +448,7 @@ export const generateContentWithBackoff = async (
 
                 retries--;
                 delayMs = Math.min(delayMs * 1.5, 30000);
-            } else if (modelIdx < candidateModels.length - 1) {
+            } else if (retries > 1 && modelIdx < candidateModels.length - 1) {
                 console.warn(
                     `[Gemini] Error on ${currentModelName}: ${err.message}. Retrying with next model...`
                 );
