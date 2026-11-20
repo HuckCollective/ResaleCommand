@@ -60,7 +60,7 @@
                                 {{ currentManifest.name }}
                             </span>
                             <span class="text-[11px] font-mono opacity-70 shrink-0">
-                                {{ currentManifest.itemCount || stagedCount }} items
+                                {{ stagedCount || currentManifest.itemCount || 0 }} {{ (stagedCount || currentManifest.itemCount || 0) === 1 ? 'item' : 'items' }}
                             </span>
                             <span class="text-[10px] font-bold text-info ml-auto hidden sm:inline">Verify Stock</span>
                             <Icon icon="solar:alt-arrow-up-linear" class="w-3.5 h-3.5 opacity-60 shrink-0 ml-auto" />

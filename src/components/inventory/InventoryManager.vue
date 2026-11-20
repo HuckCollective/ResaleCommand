@@ -2479,6 +2479,7 @@ onUnmounted(() => {
 
 const saveEdit = async (payload) => {
     processing.value = true;
+    let saveSucceeded = false;
     try {
         const targetItem = activeItem.value;
         const targetId = targetItem?.$id || targetItem?.id;
@@ -2522,6 +2523,7 @@ const saveEdit = async (payload) => {
             }
         }
 
+        saveSucceeded = true;
         closeEditDrawer();
         // Fire async refresh in background just in case
         // In-place optimistic update + Appwrite Realtime handle state without reshuffling list order
@@ -2543,6 +2545,7 @@ const saveEdit = async (payload) => {
     } catch (e) {
         addToast({ type: 'error', message: 'Save failed: ' + e.message });
     } finally {
+        try { payload?.__onSaveComplete?.(saveSucceeded ? '✅ Saved' : ''); } catch {}
         processing.value = false;
     }
 };

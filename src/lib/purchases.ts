@@ -1,7 +1,11 @@
 import { databases, storage, Query, ID } from './appwrite';
 import { Permission, Role, type Models } from 'appwrite';
 import { saveItemToInventory, BUCKET_ID, getItemsByPurchaseId } from './inventory';
+import { getItemPurchaseLinkKeys, getPurchaseIdentityKeys } from './searchEngine';
+import { markCalmSelfMutation, beginCalmLocalWrite } from '../composables/useCalmRealtime';
 import { isAlphaMode } from '../stores/env';
+
+export { getItemPurchaseLinkKeys, getPurchaseIdentityKeys };
 
 import { getDatabaseId, getPurchasesCollectionId as getPurchasesCol, getItemsCollectionId as getItemsCol } from './appwriteEnv';
 
@@ -83,14 +87,21 @@ export const purchasesAPI = {
 
         // Remove undefined keys to satisfy Appwrite strict schema
         Object.keys(data).forEach(key => (data as any)[key] === undefined && delete (data as any)[key]);
-        const created = await databases.createDocument(DB_ID, getPurchasesCollectionId(), ID.unique(), data, perms);
-        if (typeof window !== 'undefined') {
-            window.dispatchEvent(new CustomEvent('purchase-created', { detail: { data: created } }));
+        const endWrite = beginCalmLocalWrite('purchases');
+        try {
+            const created = await databases.createDocument(DB_ID, getPurchasesCollectionId(), ID.unique(), data, perms);
+            markCalmSelfMutation(created.$id, 'purchases');
+            if (typeof window !== 'undefined') {
+                window.dispatchEvent(new CustomEvent('purchase-created', { detail: { data: created } }));
+            }
+            return created;
+        } finally {
+            endWrite();
         }
-        return created;
     },
 
     async updatePurchase(documentId: string, data: Partial<PurchaseData>) {
+        markCalmSelfMutation(documentId, 'purchases');
         if (data.purchaseDate) {
             try {
                 data.purchaseDate = new Date(data.purchaseDate).toISOString();
@@ -100,6 +111,7 @@ export const purchasesAPI = {
         }
         Object.keys(data).forEach(key => (data as any)[key] === undefined && delete (data as any)[key]);
         const updated = await databases.updateDocument(DB_ID, getPurchasesCollectionId(), documentId, data);
+        markCalmSelfMutation(documentId, 'purchases');
         if (typeof window !== 'undefined') {
             window.dispatchEvent(new CustomEvent('purchase-updated', { detail: { purchaseId: documentId, data: updated } }));
         }
@@ -184,6 +196,7 @@ export const purchasesAPI = {
     },
 
     async deletePurchase(documentId: string) {
+        markCalmSelfMutation(documentId, 'purchases');
         // Clean up attached receipt image from storage bucket to prevent orphan files
         try {
             const doc = await purchasesAPI.findPurchase(documentId) || await databases.getDocument(DB_ID, getPurchasesCollectionId(), documentId).catch(() => null);
@@ -193,6 +206,7 @@ export const purchasesAPI = {
                 });
             }
             const actualDocId = doc ? doc.$id : documentId;
+            markCalmSelfMutation(actualDocId, 'purchases');
             const res = await databases.deleteDocument(DB_ID, getPurchasesCollectionId(), actualDocId);
             if (typeof window !== 'undefined') {
                 window.dispatchEvent(new CustomEvent('purchase-deleted', { detail: { purchaseId: actualDocId } }));

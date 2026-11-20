@@ -2,7 +2,13 @@ import { ref } from 'vue';
 import { Permission, Role, type Models } from 'appwrite';
 import { databases, ID, Query } from '../lib/appwrite';
 import { updateInventoryItem, deleteInventoryItem, getCollectionId, DB_ID } from '../lib/inventory';
-import { notifyInventoryPatch, notifyInventoryRemove, notifyInventoryUpsert } from '../lib/searchEngine';
+import {
+    notifyInventoryPatch,
+    notifyInventoryRemove,
+    notifyInventoryUpsert,
+    notifyInventoryPreMutation,
+    beginInventoryWrite,
+} from '../lib/searchEngine';
 import { generateGenericCsv, generateEbayCsv, generatePoshmarkCsv, generateRicochetCsv, downloadCsv } from '../lib/exportUtils';
 import { withRateLimitRetry } from '../lib/retry';
 import { syncPurchaseStatusForItems } from '../lib/purchases';
@@ -27,6 +33,8 @@ export function useInventoryBulkActions(onSuccess?: (affectedIds?: string[], upd
         if (!targetLocation || !itemIds || itemIds.length === 0) return false;
         isApplyingBulk.value = true;
         const total = itemIds.length;
+        notifyInventoryPreMutation(itemIds);
+        const endWrite = beginInventoryWrite();
 
         showLoader("Moving Records...", {
             step: `Relocating ${total} records to "${targetLocation}"...`,
@@ -120,6 +128,7 @@ export function useInventoryBulkActions(onSuccess?: (affectedIds?: string[], upd
             addToast({ type: 'error', message: `Bulk location update failed: ${e.message}` });
             return false;
         } finally {
+            endWrite();
             isApplyingBulk.value = false;
             hideLoader();
         }
@@ -129,6 +138,8 @@ export function useInventoryBulkActions(onSuccess?: (affectedIds?: string[], upd
         if (!targetStatus || !itemIds || itemIds.length === 0) return false;
         isApplyingBulk.value = true;
         const total = itemIds.length;
+        notifyInventoryPreMutation(itemIds);
+        const endWrite = beginInventoryWrite();
 
         showLoader("Updating Status...", {
             step: `Updating status to "${targetStatus}" for ${total} items...`,
@@ -218,6 +229,7 @@ export function useInventoryBulkActions(onSuccess?: (affectedIds?: string[], upd
             addToast({ type: 'error', message: `Bulk status update failed: ${e.message}` });
             return false;
         } finally {
+            endWrite();
             isApplyingBulk.value = false;
             hideLoader();
         }
@@ -227,6 +239,8 @@ export function useInventoryBulkActions(onSuccess?: (affectedIds?: string[], upd
         if (!itemIds || itemIds.length === 0) return false;
         isApplyingBulk.value = true;
         const total = itemIds.length;
+        notifyInventoryPreMutation(itemIds);
+        const endWrite = beginInventoryWrite();
 
         showLoader("Deleting Records...", {
             step: `Deleting ${total} items...`,
@@ -310,6 +324,7 @@ export function useInventoryBulkActions(onSuccess?: (affectedIds?: string[], upd
             addToast({ type: 'error', message: `Bulk delete failed: ${e.message}` });
             return false;
         } finally {
+            endWrite();
             isApplyingBulk.value = false;
             hideLoader();
         }
@@ -359,6 +374,8 @@ export function useInventoryBulkActions(onSuccess?: (affectedIds?: string[], upd
 
         isApplyingBulk.value = true;
         const total = itemIds.length;
+        notifyInventoryPreMutation(itemIds);
+        const endWrite = beginInventoryWrite();
         const summaryChanges: string[] = [];
         if (safeUpdates.storageLocation !== undefined) summaryChanges.push(`Location ➔ ${safeUpdates.storageLocation || 'Unassigned'}`);
         if (safeUpdates.status) summaryChanges.push(`Status ➔ ${safeUpdates.status}`);
@@ -454,6 +471,7 @@ export function useInventoryBulkActions(onSuccess?: (affectedIds?: string[], upd
             addToast({ type: 'error', message: `Bulk update failed: ${e.message}` });
             return false;
         } finally {
+            endWrite();
             isApplyingBulk.value = false;
             hideLoader();
         }
@@ -462,6 +480,8 @@ export function useInventoryBulkActions(onSuccess?: (affectedIds?: string[], upd
     const restockInventoryItem = async (item: any, { unitsToAdd, addedCostBasis }: { unitsToAdd: number; addedCostBasis: number }) => {
         if (!item || !item.$id || unitsToAdd < 1) return false;
         isApplyingBulk.value = true;
+        notifyInventoryPreMutation([item.$id]);
+        const endWrite = beginInventoryWrite();
         showLoader("Restocking Units...", {
             step: `Adding ${unitsToAdd} units to "${item.title || item.upc}"...`,
             progress: null,
@@ -504,6 +524,7 @@ export function useInventoryBulkActions(onSuccess?: (affectedIds?: string[], upd
             addToast({ type: 'error', message: `Restock failed: ${e.message}` });
             return false;
         } finally {
+            endWrite();
             isApplyingBulk.value = false;
             hideLoader();
         }
@@ -524,6 +545,9 @@ export function useInventoryBulkActions(onSuccess?: (affectedIds?: string[], upd
     }) => {
         if (!items || items.length < 2 || !title) return false;
         isApplyingBulk.value = true;
+        const childIds = items.map(i => i?.$id).filter(Boolean);
+        notifyInventoryPreMutation(childIds);
+        const endWrite = beginInventoryWrite();
         showLoader("Creating Bundle...", {
             step: `Bundling ${items.length} items into "${title}"...`,
             progress: null,
@@ -590,6 +614,7 @@ export function useInventoryBulkActions(onSuccess?: (affectedIds?: string[], upd
             addToast({ type: 'error', message: 'Failed to create bundle: ' + err.message });
             return false;
         } finally {
+            endWrite();
             isApplyingBulk.value = false;
             hideLoader();
         }
@@ -598,6 +623,9 @@ export function useInventoryBulkActions(onSuccess?: (affectedIds?: string[], upd
     const rollbackLot = async (lotItem: any, lotChildren: any[] = []) => {
         if (!lotItem || !lotItem.$id) return false;
         isApplyingBulk.value = true;
+        const childIds = (lotChildren || []).map(c => c?.$id).filter(Boolean);
+        notifyInventoryPreMutation([lotItem.$id, ...childIds]);
+        const endWrite = beginInventoryWrite();
         showLoader("Rolling back lot...", {
             step: `Restoring items from lot "${lotItem.title}"...`,
             progress: null,
@@ -638,6 +666,7 @@ export function useInventoryBulkActions(onSuccess?: (affectedIds?: string[], upd
             addToast({ type: 'error', message: 'Rollback failed: ' + e.message });
             return false;
         } finally {
+            endWrite();
             isApplyingBulk.value = false;
             hideLoader();
         }

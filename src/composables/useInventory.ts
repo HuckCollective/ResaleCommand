@@ -4,8 +4,9 @@ import type { Models } from 'appwrite';
 import { useLoader } from './useLoader';
 
 import { isAlphaMode } from '../stores/env';
-import { generateAutoUpc, isValidOrgUpc, getCollectionId, DB_ID } from '../lib/inventory';
+import { generateAutoUpc, isValidOrgUpc, isActiveInventory, getCollectionId, DB_ID } from '../lib/inventory';
 import { registerInventoryStoreBridge } from '../lib/searchEngine';
+import { markCalmSelfMutation, beginCalmLocalWrite, handleCalmRealtimeEvent } from './useCalmRealtime';
 
 // Shared state for the general inventory view (shallowRef avoids deep reactive proxies on 60KB rawAnalysis across 1,900+ items)
 const inventoryItems = shallowRef<Models.Document[]>([]);
@@ -35,7 +36,7 @@ const itemByIdMap = computed<Map<string, Models.Document>>(() => {
  * ShallowRef-safe canonical mutators: always assign a new array reference (and new modified item objects)
  * so every downstream computed (filters, Spatial Bar, Queues, Health Audit, Trays) updates synchronously.
  */
-export function upsertLocalItems(docs: any[]): void {
+export function upsertLocalItems(docs: any[], opts?: { fromRealtime?: boolean }): void {
     if (!Array.isArray(docs) || docs.length === 0) return;
     const now = Date.now();
     const next = [...inventoryItems.value];
@@ -46,10 +47,12 @@ export function upsertLocalItems(docs: any[]): void {
     }
 
     let changed = false;
+    const mutatedIds: string[] = [];
     for (const doc of docs) {
         if (!doc || typeof doc !== 'object' || !doc.$id) continue;
         localMutationTimestamps.set(doc.$id, now);
         localRemovedTimestamps.delete(doc.$id);
+        mutatedIds.push(doc.$id);
         const existingIdx = indexById.get(doc.$id);
         if (existingIdx !== undefined) {
             next[existingIdx] = { ...next[existingIdx], ...doc };
@@ -65,12 +68,16 @@ export function upsertLocalItems(docs: any[]): void {
         }
     }
 
+    if (!opts?.fromRealtime && mutatedIds.length > 0) {
+        markCalmSelfMutation(mutatedIds, 'inventory');
+    }
+
     if (changed) {
         inventoryItems.value = next;
     }
 }
 
-export function patchLocalItems(ids: string[], updates: Record<string, any>): void {
+export function patchLocalItems(ids: string[], updates: Record<string, any>, opts?: { fromRealtime?: boolean }): void {
     if (!Array.isArray(ids) || ids.length === 0 || !updates) return;
     const idSet = new Set(ids.filter((id) => typeof id === 'string' && id.trim().length > 0));
     if (idSet.size === 0) return;
@@ -91,12 +98,16 @@ export function patchLocalItems(ids: string[], updates: Record<string, any>): vo
         };
     });
 
+    if (!opts?.fromRealtime) {
+        markCalmSelfMutation(Array.from(idSet), 'inventory');
+    }
+
     if (changed) {
         inventoryItems.value = next;
     }
 }
 
-export function removeLocalItems(ids: string[]): void {
+export function removeLocalItems(ids: string[], opts?: { fromRealtime?: boolean }): void {
     if (!Array.isArray(ids) || ids.length === 0) return;
     const idSet = new Set(ids.filter((id) => typeof id === 'string' && id.trim().length > 0));
     if (idSet.size === 0) return;
@@ -105,6 +116,10 @@ export function removeLocalItems(ids: string[]): void {
     for (const id of idSet) {
         localRemovedTimestamps.set(id, now);
         localMutationTimestamps.delete(id);
+    }
+
+    if (!opts?.fromRealtime) {
+        markCalmSelfMutation(Array.from(idSet), 'inventory');
     }
 
     const before = inventoryItems.value.length;
@@ -120,6 +135,8 @@ registerInventoryStoreBridge({
     upsert: upsertLocalItems,
     patch: patchLocalItems,
     remove: removeLocalItems,
+    preMark: (ids) => markCalmSelfMutation(ids, 'inventory'),
+    beginWrite: () => beginCalmLocalWrite('inventory'),
 });
 
 export function useInventory() {
@@ -139,12 +156,35 @@ export function useInventory() {
                 // 1. Filter by Tenant (Security/Relevance)
                 if (currentTeamId && (item as any).tenantId !== currentTeamId) return;
 
-                // 2. Handle Events via shallowRef-safe mutators
-                if (events.some((e) => e.includes('.create')) || events.some((e) => e.includes('.update'))) {
-                    upsertLocalItems([item]);
-                } else if (events.some((e) => e.includes('.delete'))) {
-                    removeLocalItems([item.$id]);
-                }
+                // 2. Route through Calm Realtime Coordinator (silent scalar .update, buffered row shifts when busy)
+                const isDelete = events.some((e) => e.includes('.delete'));
+                const isCreate = !isDelete && events.some((e) => e.includes('.create'));
+                const isUpdate = !isDelete && !isCreate && events.some((e) => e.includes('.update'));
+                if (!isDelete && !isCreate && !isUpdate) return;
+
+                const prevItem = itemByIdMap.value.get(item.$id);
+                const existsInList = Boolean(prevItem);
+                const evictsFromActiveView = Boolean(
+                    isUpdate &&
+                    prevItem &&
+                    isActiveInventory((prevItem as any).status) &&
+                    !isActiveInventory((item as any).status)
+                );
+
+                handleCalmRealtimeEvent({
+                    scope: 'inventory',
+                    id: item.$id,
+                    eventType: isDelete ? 'delete' : isCreate ? 'create' : 'update',
+                    existsInList,
+                    evictsFromActiveView,
+                    applyImmediate: () => {
+                        if (isDelete) {
+                            removeLocalItems([item.$id], { fromRealtime: true });
+                        } else {
+                            upsertLocalItems([item], { fromRealtime: true });
+                        }
+                    },
+                });
             }
         );
     };
@@ -171,11 +211,9 @@ export function useInventory() {
         const myGen = ++activeFetchGeneration;
         const fetchStartedAt = Date.now();
         
-        const { showLoader, hideLoader } = useLoader();
+        const { startAmbientSync } = useLoader();
         const isInitialColdLoad = inventoryItems.value.length === 0;
-        if (isInitialColdLoad) {
-            showLoader("Loading Inventory...");
-        }
+        const stopAmbient = isInitialColdLoad ? startAmbientSync('Loading catalog…') : () => {};
         
         fetchPromise = (async () => {
             try {
@@ -213,10 +251,10 @@ export function useInventory() {
                         allDocs.push(...response.documents);
                         cursor = response.documents[response.documents.length - 1].$id;
 
-                        // Paint Batch 1 immediately (<400ms) & release full-screen loader; remaining batches commit once at end
+                        // Paint Batch 1 immediately (<400ms) & release calm sync pill; remaining batches commit once at end
                         if (isFirstBatch && isInitialColdLoad && inventoryItems.value.length === 0) {
                             inventoryItems.value = [...allDocs];
-                            hideLoader();
+                            stopAmbient('');
                         }
                     }
 
@@ -278,8 +316,7 @@ export function useInventory() {
             } finally {
                 loading.value = false;
                 fetchPromise = null;
-                // Hide the global Vue loader
-                hideLoader();
+                stopAmbient('');
 
                 if (pendingFollowUpTeamId !== null) {
                     const nextTeam = pendingFollowUpTeamId || undefined;

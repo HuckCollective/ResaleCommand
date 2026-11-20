@@ -1,4 +1,5 @@
 import { onBeforeUnmount, onMounted, onUnmounted, watch, type Ref } from 'vue';
+import { setCalmOverlayCount } from './useCalmRealtime';
 
 let activeScrollLocks = 0;
 let previousBodyOverflow = '';
@@ -25,12 +26,14 @@ export function useBodyScrollLock(source?: Ref<boolean> | (() => boolean)): {
       document.body.style.overflow = 'hidden';
     }
     activeScrollLocks += 1;
+    setCalmOverlayCount(activeScrollLocks);
   };
 
   const unlock = () => {
     if (!holdsLock || typeof document === 'undefined') return;
     holdsLock = false;
     activeScrollLocks = Math.max(0, activeScrollLocks - 1);
+    setCalmOverlayCount(activeScrollLocks);
     if (activeScrollLocks === 0) {
       document.body.style.overflow = previousBodyOverflow;
       previousBodyOverflow = '';

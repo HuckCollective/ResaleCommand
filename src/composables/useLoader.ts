@@ -20,6 +20,12 @@ let antiStrobeTimer: any = null;
 // Lightweight scoped loading map for individual components/cards (Bucket 2)
 const scopedLoadingMap = reactive(new Map<string, boolean>());
 
+// Non-blocking ambient top-center sync pill (Bucket 1.5 — saves, quick status flips, background syncs)
+const ambientSyncCount = ref(0);
+const ambientSyncLabel = ref('');
+const ambientDoneLabel = ref('');
+let ambientDoneTimer: any = null;
+
 /**
  * Universal 3-Bucket UX Timing Standard (NN/g):
  * 
@@ -154,6 +160,48 @@ export function useLoader() {
             hideLoader();
         }
     };
+
+    const finishAmbientSync = (doneText: string = '✅ Saved') => {
+        if (ambientDoneTimer) {
+            clearTimeout(ambientDoneTimer);
+            ambientDoneTimer = null;
+        }
+        if (ambientSyncCount.value > 0) {
+            ambientSyncCount.value = Math.max(0, ambientSyncCount.value - 1);
+        }
+        if (ambientSyncCount.value === 0) {
+            ambientSyncLabel.value = '';
+            const cleanDone = String(doneText || '').trim();
+            if (cleanDone) {
+                ambientDoneLabel.value = cleanDone;
+                ambientDoneTimer = setTimeout(() => {
+                    ambientDoneLabel.value = '';
+                    ambientDoneTimer = null;
+                }, 1800);
+                if (typeof ambientDoneTimer === 'object' && ambientDoneTimer !== null && typeof ambientDoneTimer.unref === 'function') {
+                    ambientDoneTimer.unref();
+                }
+            }
+        }
+    };
+
+    const startAmbientSync = (label: string = 'Saving…'): ((doneText?: string) => void) => {
+        const cleanLabel = String(label || '').trim();
+        if (!cleanLabel) return () => {};
+        if (ambientDoneTimer) {
+            clearTimeout(ambientDoneTimer);
+            ambientDoneTimer = null;
+        }
+        ambientDoneLabel.value = '';
+        ambientSyncCount.value += 1;
+        ambientSyncLabel.value = cleanLabel;
+        let finished = false;
+        return (doneText: string = '✅ Saved') => {
+            if (finished) return;
+            finished = true;
+            finishAmbientSync(doneText);
+        };
+    };
     
     return { 
         globalLoading, 
@@ -167,6 +215,9 @@ export function useLoader() {
         loaderBerryColor, 
         loaderBackgroundColor, 
         loaderCancelable, 
+        ambientSyncCount,
+        ambientSyncLabel,
+        ambientDoneLabel,
         showLoader, 
         hideLoader, 
         triggerCancel, 
@@ -174,6 +225,8 @@ export function useLoader() {
         setExternalLoaderActive,
         setScopedLoading,
         isScopedLoading,
-        scopedLoadingMap
+        scopedLoadingMap,
+        startAmbientSync,
+        finishAmbientSync
     };
 }

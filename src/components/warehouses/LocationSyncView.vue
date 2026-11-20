@@ -2074,6 +2074,7 @@ import LocationChannelOutboxPanel from './LocationChannelOutboxPanel.vue';
 
 const { dockEl, dockHeightRem } = useDockClearance(6.5);
 import { useLoader } from '../../composables/useLoader';
+const { finishAmbientSync } = useLoader();
 import { addToast } from '../../stores/toast';
 import ItemThumbnail from '../common/ItemThumbnail.vue';
 import {
@@ -2817,13 +2818,16 @@ const fetchMdVerifyReport = async (showManualToast = false) => {
     }
 
     if (loadedReport) {
-      const isNewer = !mdVerifyReport.value || mdVerifyReport.value.timestamp !== loadedReport.timestamp;
+      const hadPriorReport = Boolean(mdVerifyReport.value?.timestamp);
+      const isNewer = hadPriorReport && mdVerifyReport.value.timestamp !== loadedReport.timestamp;
       mdVerifyReport.value = loadedReport;
-      if (showManualToast || isNewer) {
+      if (showManualToast) {
         addToast({
           type: 'success',
           message: `📊 Loaded ${activeCanonicalLocationMeta.value.shortName} Verification Report: ${loadedReport.summary.verifiedMatch} Verified, ${loadedReport.summary.missingInMd} Missing, ${loadedReport.summary.unlinkedInRc} Unlinked!`,
         });
+      } else if (isNewer) {
+        finishAmbientSync(`✅ ${activeCanonicalLocationMeta.value.shortName} report synced`);
       }
     } else if (showManualToast) {
       addToast({
@@ -5350,13 +5354,11 @@ onMounted(() => {
             try {
               const parsed = typeof rawSnap === 'string' ? JSON.parse(rawSnap) : rawSnap;
               if (parsed && parsed.summary && Array.isArray(parsed.rows)) {
-                const isNewer = !mdVerifyReport.value || mdVerifyReport.value.timestamp !== parsed.timestamp;
+                const hadPriorReport = Boolean(mdVerifyReport.value?.timestamp);
+                const isNewer = hadPriorReport && mdVerifyReport.value.timestamp !== parsed.timestamp;
                 mdVerifyReport.value = parsed;
                 if (isNewer) {
-                  addToast({
-                    type: 'success',
-                    message: `✅ Live Update: ${activeCanonicalLocationMeta.value.shortName} Verification Report refreshed (${parsed.summary.verifiedMatch || 0} Verified)!`,
-                  });
+                  finishAmbientSync(`✅ ${activeCanonicalLocationMeta.value.shortName} report synced`);
                 }
               }
             } catch {}

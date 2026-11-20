@@ -2,6 +2,8 @@ import { databases, Query, ID } from './appwrite';
 import type { Models } from 'appwrite';
 import { Permission, Role } from 'appwrite';
 import { warehousesApi } from './warehouses';
+import { markCalmSelfMutation, beginCalmLocalWrite } from '../composables/useCalmRealtime';
+import { notifyInventoryPatch } from './searchEngine';
 
 import { getDatabaseId, getItemsCollectionId, resolveCollectionId } from './appwriteEnv';
 
@@ -83,6 +85,7 @@ export const salesApi = {
     },
 
     async createSale(data: SaleData): Promise<SaleDocument> {
+        const endWrite = beginCalmLocalWrite('sales');
         try {
             let permissions: string[] = [];
             if (data.tenantId) {
@@ -93,27 +96,34 @@ export const salesApi = {
                     Permission.delete(role),
                 ];
             }
-            return await databases.createDocument(
+            const created = await databases.createDocument(
                 DB_ID,
                 getSalesCol(),
                 ID.unique(),
                 data,
                 permissions.length > 0 ? permissions : undefined
             ) as SaleDocument;
+            markCalmSelfMutation(created.$id, 'sales');
+            return created;
         } catch (err: any) {
             if (err?.code === 400 || err?.code === 401 || err?.code === 403) {
-                return await databases.createDocument(
+                const created = await databases.createDocument(
                     DB_ID,
                     getSalesCol(),
                     ID.unique(),
                     data
                 ) as SaleDocument;
+                markCalmSelfMutation(created.$id, 'sales');
+                return created;
             }
             throw err;
+        } finally {
+            endWrite();
         }
     },
 
     async updateSale(id: string, data: Partial<SaleData>): Promise<SaleDocument> {
+        markCalmSelfMutation(id, 'sales');
         return await databases.updateDocument(
             DB_ID,
             getSalesCol(),
@@ -123,6 +133,7 @@ export const salesApi = {
     },
 
     async deleteSale(id: string): Promise<void> {
+        markCalmSelfMutation(id, 'sales');
         // Guardrail ("Duplicate Sale Cleanup"): never leave items with a dangling `saleId` pointing at a deleted sale.
         try {
             const targetSale = await databases.getDocument(DB_ID, getSalesCol(), id).catch(() => null) as SaleDocument | null;
@@ -140,10 +151,15 @@ export const salesApi = {
                     const surviving = sibRes.documents.find((d) => d.$id !== id && d.status !== 'Cancelled');
                     if (surviving) replacementSaleId = surviving.$id;
                 }
+                const updatedIds: string[] = [];
                 for (const item of linkedItemsRes.documents) {
                     await databases.updateDocument(DB_ID, getItemsCol(), item.$id, {
                         saleId: replacementSaleId,
                     });
+                    updatedIds.push(item.$id);
+                }
+                if (updatedIds.length > 0) {
+                    notifyInventoryPatch(updatedIds, { saleId: replacementSaleId });
                 }
             }
         } catch (err) {
@@ -156,6 +172,13 @@ export const salesApi = {
     async linkItemsToSale(saleId: string, itemIds: string[], warehouseId: string, itemsColId: string): Promise<void> {
         for (const itemId of itemIds) {
             await databases.updateDocument(DB_ID, itemsColId, itemId, { 
+                saleId: saleId,
+                status: 'sold',
+                warehouseId: warehouseId
+            });
+        }
+        if (itemIds.length > 0) {
+            notifyInventoryPatch(itemIds, {
                 saleId: saleId,
                 status: 'sold',
                 warehouseId: warehouseId

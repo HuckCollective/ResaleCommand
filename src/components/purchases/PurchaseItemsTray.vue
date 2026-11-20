@@ -119,6 +119,9 @@
                 >
                   {{ items.length - unreceivedItemsCount }} / {{ items.length }}
                 </div>
+                <div v-if="totalUnitsCount > items.length" class="text-[10px] font-mono opacity-65 truncate">
+                  ({{ totalUnitsCount }} units)
+                </div>
               </div>
             </div>
           </div>
@@ -481,9 +484,11 @@ import {
   getCollectionId,
   BUCKET_ID,
 } from '../../lib/inventory';
-import { purchasesAPI } from '../../lib/purchases';
+import { purchasesAPI, getItemPurchaseLinkKeys, getPurchaseIdentityKeys } from '../../lib/purchases';
+import { notifyInventoryPatch } from '../../lib/searchEngine';
 import { parseTrackingNumbers } from '../../lib/shipmentTracking';
 import { useAuth } from '../../composables/useAuth';
+import { useInventory } from '../../composables/useInventory';
 import { useBodyScrollLock } from '../../composables/useBodyScrollLock';
 import { useLoader } from '../../composables/useLoader';
 import { getDefaultStorageLocation } from '../../lib/warehouses';
@@ -553,11 +558,42 @@ onBeforeUnmount(() => {
 });
 
 const { user, currentTeam } = useAuth();
-const { showLoader, hideLoader } = useLoader();
+const { itemByIdMap } = useInventory();
 
 const defaultBackstock = computed(() => getDefaultStorageLocation(currentTeam.value));
 
-const items = ref<any[]>([]);
+const rawItems = ref<any[]>([]);
+const items = computed<any[]>({
+  get() {
+    const map = itemByIdMap.value;
+    const poKeys = props.purchase ? new Set(getPurchaseIdentityKeys(props.purchase)) : null;
+    const projected: any[] = [];
+    for (const raw of rawItems.value || []) {
+      if (!raw?.$id) continue;
+      const live = map.get(raw.$id);
+      if (live) {
+        if (poKeys && poKeys.size > 0 && map.size > 0) {
+          const liveKeys = getItemPurchaseLinkKeys(live);
+          const rawHadKeyMatch = getItemPurchaseLinkKeys(raw).some((k) => poKeys.has(k));
+          if (rawHadKeyMatch && !liveKeys.some((k) => poKeys.has(k))) {
+            continue;
+          }
+        }
+        projected.push({ ...raw, ...live });
+      } else {
+        projected.push(raw);
+      }
+    }
+    return projected;
+  },
+  set(next) {
+    rawItems.value = Array.isArray(next) ? next : [];
+  },
+});
+
+const totalUnitsCount = computed(() =>
+  items.value.reduce((sum, i) => sum + Math.max(1, Number(i?.quantity) || 1), 0)
+);
 const loadingItems = ref(false);
 const localPoStatus = ref('');
 const receivingItemId = ref<string | null>(null);
@@ -603,7 +639,7 @@ const itemsTotalRetail = computed(() =>
 
 const isReceivedStatus = (st?: string) => {
   const s = String(st || '').toLowerCase().trim();
-  return ['received', 'in-stock', 'placed', 'sold', 'combined'].includes(s);
+  return ['received', 'in-stock', 'placed', 'sold', 'combined', 'deconstructed'].includes(s);
 };
 
 const unreceivedItemsCount = computed(() =>
@@ -718,15 +754,19 @@ watch(
 );
 
 const syncPoStatusAfterItemChange = async () => {
-  if (!props.purchase?.$id || items.value.length === 0) return;
-  const current = String(localPoStatus.value || '').toLowerCase();
+  if (!props.purchase?.$id) return;
+  const current = String(localPoStatus.value || '').toLowerCase().trim();
   if (current === 'cancelled' || current === 'returned') return;
 
   const total = items.value.length;
   const receivedCount = items.value.filter((i) => isReceivedStatus(i.status)).length;
 
   let nextStatus = localPoStatus.value || 'Pending';
-  if (receivedCount === total) {
+  if (total === 0) {
+    if (current === 'received' || current === 'partial' || current === 'partially received') {
+      nextStatus = 'Pending';
+    }
+  } else if (receivedCount === total) {
     nextStatus = 'Received';
   } else if (receivedCount > 0) {
     nextStatus = 'Partial';
@@ -763,8 +803,10 @@ const receiveItem = async (item: any) => {
       status: 'received',
       storageLocation: loc,
     });
-    item.status = 'received';
-    item.storageLocation = loc;
+    notifyInventoryPatch([item.$id], { status: 'received', storageLocation: loc });
+    rawItems.value = rawItems.value.map((r) =>
+      r?.$id === item.$id ? { ...r, status: 'received', storageLocation: loc } : r
+    );
     addToast(`Received "${item.tag_title || item.title}" into ${loc}!`, 'success');
     await syncPoStatusAfterItemChange();
     emit('updated');
@@ -793,6 +835,7 @@ const receiveAllItems = async () => {
   const DB_ID = import.meta.env.PUBLIC_APPWRITE_DB_ID || 'resale_db';
   const colId = getCollectionId();
   let count = 0;
+  const receivedPatches = new Map<string, string>();
 
   try {
     for (const item of unreceived) {
@@ -801,9 +844,15 @@ const receiveAllItems = async () => {
         status: 'received',
         storageLocation: targetLoc,
       });
-      item.status = 'received';
-      item.storageLocation = targetLoc;
+      notifyInventoryPatch([item.$id], { status: 'received', storageLocation: targetLoc });
+      receivedPatches.set(item.$id, targetLoc);
       count++;
+    }
+    if (receivedPatches.size > 0) {
+      rawItems.value = rawItems.value.map((r) => {
+        const nextLoc = r?.$id ? receivedPatches.get(r.$id) : undefined;
+        return nextLoc ? { ...r, status: 'received', storageLocation: nextLoc } : r;
+      });
     }
     addToast(`Received ${count} item(s) into ${loc}!`, 'success');
     await syncPoStatusAfterItemChange();
@@ -845,27 +894,23 @@ const openEditItem = (item: any) => {
 };
 
 const handleSavedItem = async (payload: any) => {
-  if (typeof payload?.__markAsync === 'function') payload.__markAsync();
   if (!activeEditItem.value) {
-    hideLoader();
+    try { payload?.__onSaveComplete?.(''); } catch {}
     return;
   }
   const editingId = activeEditItem.value.$id;
-  showLoader('Saving Item...', {
-    step: 'Updating item details...',
-    basket: 'solar:diskette-bold-duotone',
-    cancelable: false,
-  });
+  let saveSucceeded = false;
   try {
     if (payload) {
       await updateInventoryItem(editingId, payload);
       delete failedImages.value[editingId];
+      saveSucceeded = true;
       addToast(`Saved "${payload.title || activeEditItem.value.title}"!`, 'success');
     }
   } catch (e: any) {
     addToast('Failed to save item: ' + e.message, 'error');
   } finally {
-    hideLoader();
+    try { payload?.__onSaveComplete?.(saveSucceeded ? '✅ Saved' : ''); } catch {}
     activeEditItem.value = null;
     await loadTrayItems();
     await syncPoStatusAfterItemChange();

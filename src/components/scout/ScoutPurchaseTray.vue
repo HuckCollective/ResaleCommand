@@ -1117,24 +1117,32 @@ const openEdit = (item: any) => {
 
 const isSavingItem = ref(false);
 const handleItemSaved = async (payload: any) => {
-  if (!editingItem.value || isSavingItem.value) return;
+  if (!editingItem.value || isSavingItem.value) {
+    try { payload?.__onSaveComplete?.(''); } catch {}
+    return;
+  }
   isSavingItem.value = true;
   const targetItem = editingItem.value;
   const targetId = targetItem?.$id;
+  let saveSucceeded = false;
   try {
-    if (targetId) {
-      await updateInventoryItem(targetId, payload);
+    if (targetId && payload) {
+      const updatedDoc = await updateInventoryItem(targetId, payload);
       const idx = purchaseItems.value.findIndex(i => i && i.$id === targetId);
-      if (idx !== -1) {
-        Object.assign(purchaseItems.value[idx], payload);
+      if (idx !== -1 && updatedDoc) {
+        const next = [...purchaseItems.value];
+        next[idx] = { ...next[idx], ...updatedDoc };
+        purchaseItems.value = next;
       }
+      saveSucceeded = true;
       editingItem.value = null;
       addToast({ type: 'success', message: 'Item updated successfully!' });
-      await refreshActivePurchaseItems();
+      await refreshActivePurchaseItems(currentTracker.value?.$id);
     }
   } catch (err: any) {
     addToast({ type: 'error', message: 'Failed to update item: ' + err.message });
   } finally {
+    try { payload?.__onSaveComplete?.(saveSucceeded ? '✅ Saved' : ''); } catch {}
     isSavingItem.value = false;
   }
 };

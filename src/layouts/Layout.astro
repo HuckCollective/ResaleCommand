@@ -7,6 +7,7 @@ import MarkdownModal from "@components/ui/MarkdownModal.astro";
 import CookieConsent from "@components/common/CookieConsent.astro";
 import SessionRouter from "@components/common/SessionRouter.astro";
 import HuckleberryLoader from "@components/common/HuckleberryLoader.vue";
+import AmbientSyncPill from "@components/common/AmbientSyncPill.vue";
 import CoopMessagesTray from "@components/coop/CoopMessagesTray.vue";
 import { siteConfig } from "site-config";
 
@@ -69,6 +70,7 @@ const initialPath = Astro.url.pathname;
     <MarkdownModal />
     <CookieConsent />
     <HuckleberryLoader client:only="vue" />
+    <AmbientSyncPill client:only="vue" />
     <CoopMessagesTray client:only="vue" />
     <ToastContainer client:only="vue" />
     <ConfirmContainer client:only="vue" />

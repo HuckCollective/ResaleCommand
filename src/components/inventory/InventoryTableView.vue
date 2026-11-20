@@ -976,15 +976,13 @@ const isDrawerSaving = ref(false);
 const onDrawerSaved = async (payload) => {
     if (isDrawerSaving.value) return;
     isDrawerSaving.value = true;
+    let saveSucceeded = false;
     try {
         const targetItem = activeItem.value;
         const targetId = targetItem?.$id || targetItem?.id;
         if (targetId && payload) {
-            const updatedDoc = await updateInventoryItem(targetId, payload);
-            const idx = inventoryItems.value.findIndex(i => i && (i.$id === targetId || i.id === targetId));
-            if (idx !== -1 && updatedDoc) {
-                inventoryItems.value[idx] = updatedDoc;
-            }
+            await updateInventoryItem(targetId, payload);
+            saveSucceeded = true;
             addToast({ type: 'success', message: 'Item updated successfully.' });
         } else if (payload) {
             const effectiveTeamId = currentTeam.value?.$id || user.value?.$id;
@@ -992,20 +990,19 @@ const onDrawerSaved = async (payload) => {
                 ...payload,
                 upcPrefix: payload.upcPrefix || resolveMintingPrefixForMember(capabilities.value, user.value?.$id).prefix
             };
-            const newDoc = await saveItemToInventory(
+            await saveItemToInventory(
                 { title: payload.title || 'Untitled Item', identity: payload.title, condition_notes: '' },
                 payload.imageFile,
                 createPayload,
                 effectiveTeamId
             );
-            if (newDoc) {
-                inventoryItems.value.unshift(newDoc);
-            }
+            saveSucceeded = true;
             addToast({ type: 'success', message: 'Item created successfully.' });
         }
     } catch (e) {
         addToast({ type: 'error', message: 'Save failed: ' + e.message });
     } finally {
+        try { payload?.__onSaveComplete?.(saveSucceeded ? '✅ Saved' : ''); } catch {}
         isDrawerSaving.value = false;
         closeDrawer();
         fetchInventory().catch(() => {});

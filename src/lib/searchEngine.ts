@@ -8,6 +8,8 @@ export interface InventoryStoreBridge {
     upsert: (docs: any[]) => void;
     patch: (ids: string[], updates: Record<string, any>) => void;
     remove: (ids: string[]) => void;
+    preMark?: (ids: string[]) => void;
+    beginWrite?: () => () => void;
 }
 
 let storeBridge: InventoryStoreBridge | null = null;
@@ -22,6 +24,19 @@ export function getLiveInventorySnapshot(): any[] {
     } catch {
         return [];
     }
+}
+
+export function notifyInventoryPreMutation(ids: string[]): void {
+    if (!storeBridge?.preMark || !Array.isArray(ids) || ids.length === 0) return;
+    const validIds = ids.filter((id) => typeof id === 'string' && id.trim().length > 0);
+    if (validIds.length > 0) {
+        storeBridge.preMark(validIds);
+    }
+}
+
+export function beginInventoryWrite(): () => void {
+    if (!storeBridge?.beginWrite) return () => {};
+    return storeBridge.beginWrite();
 }
 
 export function notifyInventoryUpsert(docs: any[]): void {
@@ -46,6 +61,29 @@ export function notifyInventoryRemove(ids: string[]): void {
     if (validIds.length > 0) {
         storeBridge.remove(validIds);
     }
+}
+
+/**
+ * Canonical Purchase Order linkage keys for items and POs (excludes non-existent item.poNumber).
+ */
+export function getItemPurchaseLinkKeys(item: any): string[] {
+    if (!item || typeof item !== 'object') return [];
+    const seen = new Set<string>();
+    for (const raw of [item.purchaseId, item.orderId, item.cartId]) {
+        const clean = String(raw || '').trim();
+        if (clean) seen.add(clean);
+    }
+    return Array.from(seen);
+}
+
+export function getPurchaseIdentityKeys(purchase: any): string[] {
+    if (!purchase || typeof purchase !== 'object') return [];
+    const seen = new Set<string>();
+    for (const raw of [purchase.$id, purchase.orderId, purchase.poNumber]) {
+        const clean = String(raw || '').trim();
+        if (clean) seen.add(clean);
+    }
+    return Array.from(seen);
 }
 
 export type SearchPrefixType = 'upc' | 'barcode' | 'sku' | 'loc' | 'notes' | 'desc' | null;

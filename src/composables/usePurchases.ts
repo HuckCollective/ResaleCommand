@@ -2,6 +2,7 @@ import { ref } from 'vue';
 import { databases, Query, client } from '../lib/appwrite';
 import type { Models } from 'appwrite';
 import { purchasesAPI, getPurchasesCollectionId } from '../lib/purchases';
+import { markCalmSelfMutation, handleCalmRealtimeEvent } from './useCalmRealtime';
 
 const DB_ID = import.meta.env.PUBLIC_APPWRITE_DB_ID || 'resale_db';
 
@@ -21,19 +22,23 @@ if (typeof window !== 'undefined' && !(window as any).__purchasesEventsInitializ
         const doc = e?.detail?.data;
         const purchaseId = e?.detail?.purchaseId || doc?.$id;
         if (!purchaseId) return;
+        markCalmSelfMutation(purchaseId, 'purchases');
         const idx = purchases.value.findIndex(p => p.$id === purchaseId);
         if (idx !== -1) {
-            purchases.value[idx] = { ...purchases.value[idx], ...doc };
+            const next = [...purchases.value];
+            next[idx] = { ...next[idx], ...doc };
+            purchases.value = next;
         } else if (doc) {
-            purchases.value.unshift(doc);
+            purchases.value = [doc, ...purchases.value];
         }
     });
 
     window.addEventListener('purchase-created', (e: any) => {
         const doc = e?.detail?.data;
         if (!doc || !doc.$id) return;
+        markCalmSelfMutation(doc.$id, 'purchases');
         if (!purchases.value.find(p => p.$id === doc.$id)) {
-            purchases.value.unshift(doc);
+            purchases.value = [doc, ...purchases.value];
             totalPurchases.value++;
         }
     });
@@ -41,12 +46,19 @@ if (typeof window !== 'undefined' && !(window as any).__purchasesEventsInitializ
     window.addEventListener('purchase-deleted', (e: any) => {
         const purchaseId = e?.detail?.purchaseId;
         if (!purchaseId) return;
+        markCalmSelfMutation(purchaseId, 'purchases');
+        const before = purchases.value.length;
         purchases.value = purchases.value.filter(p => p.$id !== purchaseId);
-        totalPurchases.value = Math.max(0, totalPurchases.value - 1);
+        if (purchases.value.length < before) {
+            totalPurchases.value = Math.max(0, totalPurchases.value - (before - purchases.value.length));
+        }
     });
 }
 
 export function usePurchases() {
+    const currentTeamIdMissing = (doc: any) =>
+        Boolean(currentTenantId && doc?.tenantId && doc.tenantId !== currentTenantId);
+
     const initRealtime = () => {
         if (unsubscribe) return; // Already subscribed
 
@@ -55,33 +67,41 @@ export function usePurchases() {
             unsubscribe = client.subscribe(
                 `databases.${DB_ID}.collections.${colId}.documents`,
                 (response) => {
-                    const isCreate = response.events.some(e => e.includes('.create'));
-                    const isUpdate = response.events.some(e => e.includes('.update'));
                     const isDelete = response.events.some(e => e.includes('.delete'));
+                    const isCreate = !isDelete && response.events.some(e => e.includes('.create'));
+                    const isUpdate = !isDelete && !isCreate && response.events.some(e => e.includes('.update'));
                     const doc = response.payload as Models.Document;
-                    if (!doc || !doc.$id) return;
+                    if (!doc || !doc.$id || (!isCreate && !isUpdate && !isDelete)) return;
 
                     // Filter by tenant if applicable
-                    if (currentTenantId && (doc as any).tenantId && (doc as any).tenantId !== currentTenantId) {
-                        return;
-                    }
+                    if (currentTeamIdMissing(doc)) return;
 
-                    if (isCreate) {
-                        if (!purchases.value.find(p => p.$id === doc.$id)) {
-                            purchases.value.unshift(doc);
-                        }
-                        totalPurchases.value++;
-                    } else if (isUpdate) {
-                        const idx = purchases.value.findIndex(p => p.$id === doc.$id);
-                        if (idx !== -1) {
-                            purchases.value[idx] = { ...purchases.value[idx], ...doc };
-                        } else {
-                            purchases.value.unshift(doc);
-                        }
-                    } else if (isDelete) {
-                        purchases.value = purchases.value.filter(p => p.$id !== doc.$id);
-                        totalPurchases.value = Math.max(0, totalPurchases.value - 1);
-                    }
+                    const exists = purchases.value.some(p => p.$id === doc.$id);
+                    handleCalmRealtimeEvent({
+                        scope: 'purchases',
+                        id: doc.$id,
+                        eventType: isDelete ? 'delete' : isCreate ? 'create' : 'update',
+                        existsInList: exists,
+                        applyImmediate: () => {
+                            if (isDelete) {
+                                const before = purchases.value.length;
+                                purchases.value = purchases.value.filter(p => p.$id !== doc.$id);
+                                if (purchases.value.length < before) {
+                                    totalPurchases.value = Math.max(0, totalPurchases.value - (before - purchases.value.length));
+                                }
+                            } else {
+                                const idx = purchases.value.findIndex(p => p.$id === doc.$id);
+                                if (idx !== -1) {
+                                    const next = [...purchases.value];
+                                    next[idx] = { ...next[idx], ...doc };
+                                    purchases.value = next;
+                                } else {
+                                    purchases.value = [doc, ...purchases.value];
+                                    totalPurchases.value++;
+                                }
+                            }
+                        },
+                    });
                 }
             );
         } catch (err) {

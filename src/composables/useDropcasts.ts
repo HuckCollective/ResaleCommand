@@ -14,6 +14,7 @@ import {
 } from '../lib/dropcastModel';
 import type { SocialStudioItem } from '../lib/socialMediaStudio';
 import { addToast } from '../stores/toast';
+import { useInventory } from './useInventory';
 
 const dropcastsList = ref<Dropcast[]>([]);
 const activeCast = ref<Dropcast | null>(null);
@@ -86,16 +87,35 @@ export function useDropcasts() {
   });
 
   const stagedCastItems = computed<SocialStudioItem[]>(() => {
-    return activeCast.value?.items || [];
+    const rawItems = activeCast.value?.items || [];
+    const { itemByIdMap } = useInventory();
+    const map = itemByIdMap.value;
+    return rawItems.map((raw) => {
+      const id = String(raw?.$id || raw?.id || '').trim();
+      const live = id ? map.get(id) : undefined;
+      if (!live) return raw;
+      const livePrice = live.boutiquePrice ?? live.resalePrice ?? live.price;
+      return {
+        ...raw,
+        title: live.title || raw.title,
+        resalePrice: livePrice !== undefined ? Number(livePrice) : raw.resalePrice,
+        boutiquePrice: livePrice !== undefined ? Number(livePrice) : raw.boutiquePrice,
+        cost: live.cost !== undefined ? Number(live.cost) : raw.cost,
+        upc: live.upc !== undefined ? live.upc : raw.upc,
+        storageLocation: live.storageLocation !== undefined ? live.storageLocation : raw.storageLocation,
+        imageId: live.imageId !== undefined ? live.imageId : raw.imageId,
+        galleryImageIds: live.galleryImageIds !== undefined ? live.galleryImageIds : raw.galleryImageIds,
+      };
+    });
   });
 
   const stagedCastCount = computed<number>(() => {
-    return (activeCast.value?.items || []).length;
+    return stagedCastItems.value.length;
   });
 
   const stagedCastTotalRetail = computed<number>(() => {
-    return (activeCast.value?.items || []).reduce(
-      (acc, i) => acc + Number(i.boutiquePrice || i.resalePrice || i.price || 0), 
+    return stagedCastItems.value.reduce(
+      (acc, i) => acc + Number(i.boutiquePrice || i.resalePrice || i.price || 0),
       0
     );
   });

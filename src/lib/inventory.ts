@@ -8,6 +8,8 @@ import {
     getLiveInventorySnapshot,
     notifyInventoryUpsert,
     notifyInventoryRemove,
+    notifyInventoryPreMutation,
+    beginInventoryWrite,
     parseSearchQuery,
     scoreInventoryItemSearch,
 } from './searchEngine';
@@ -1116,6 +1118,7 @@ export async function saveItemToInventory(itemData: any, imageFile: File | null,
     if (imageFile) console.log(`[Inventory] Has Image File: ${imageFile.name} (${imageFile.size})`);
     else console.log(`[Inventory] NO Image File passed.`);
 
+    const endWrite = beginInventoryWrite();
     try {
         // Deduplication check: Only skip if a truly distinct, non-generic identity already exists
         const rawIdentity = typeof itemData?.identity === 'object' ? JSON.stringify(itemData.identity) : itemData?.identity;
@@ -1477,6 +1480,7 @@ export async function saveItemToInventory(itemData: any, imageFile: File | null,
         console.error("Appwrite Save Error:", error);
         throw error;
     } finally {
+        endWrite();
         if (typeof (extraData as any)?.__onSaveComplete === 'function') {
             try { (extraData as any).__onSaveComplete(); } catch {}
         }
@@ -1524,6 +1528,18 @@ export async function getItemsByPurchaseId(purchaseId: string, orderId?: string,
         if (orderId && orderId.trim()) {
             const clean = orderId.trim();
             try {
+                const resOrd = await databases.listDocuments(
+                    DB_ID,
+                    getCollectionId(),
+                    [
+                        Query.equal('orderId', clean),
+                        Query.limit(200)
+                    ]
+                );
+                resOrd.documents.forEach((d: any) => itemMap.set(d.$id, d));
+            } catch (e) {}
+
+            try {
                 const resCart = await databases.listDocuments(
                     DB_ID,
                     getCollectionId(),
@@ -1551,6 +1567,18 @@ export async function getItemsByPurchaseId(purchaseId: string, orderId?: string,
         // 3. Query by poNumber if provided and distinct from orderId
         if (poNumber && poNumber.trim() && poNumber.trim() !== orderId?.trim()) {
             const cleanPo = poNumber.trim();
+            try {
+                const resPoOrd = await databases.listDocuments(
+                    DB_ID,
+                    getCollectionId(),
+                    [
+                        Query.equal('orderId', cleanPo),
+                        Query.limit(200)
+                    ]
+                );
+                resPoOrd.documents.forEach((d: any) => itemMap.set(d.$id, d));
+            } catch (e) {}
+
             try {
                 const resPoCart = await databases.listDocuments(
                     DB_ID,
@@ -1749,6 +1777,7 @@ export function getAssociatedFileIds(item: any): Map<string, string> {
 }
 
 export async function deleteInventoryItem(documentId: string) {
+    notifyInventoryPreMutation([documentId]);
     try {
         // 1. Fetch the item to find associated images
         const item = await withRateLimitRetry(() => databases.getDocument(DB_ID, getCollectionId(), documentId));
@@ -1784,6 +1813,7 @@ export async function updateInventoryItem(documentId: string, updates: Partial<a
     if (!DB_ID) {
         throw new Error("Missing PUBLIC_APPWRITE_DB_ID in .env");
     }
+    notifyInventoryPreMutation([documentId]);
 
     try {
         // Determine whether we actually need to read the document and parse conditionNotes/files.

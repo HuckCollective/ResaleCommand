@@ -2,6 +2,7 @@ import { databases, Query, ID } from './appwrite';
 import type { Models } from 'appwrite';
 import { Permission, Role } from 'appwrite';
 import { DB_ID, getCollectionId, updateInventoryItem } from './inventory';
+import { notifyInventoryPatch, notifyInventoryPreMutation } from './searchEngine';
 import { withRateLimitRetry } from './retry';
 import { findFacility } from './warehouses';
 import { getCoopJwtHeaders } from './coopLedgerClient';
@@ -352,6 +353,7 @@ export const manifestsApi = {
         // 1. FAST PATH: Server Bulk Update API (elevated server privileges)
         let updatedItem: any = null;
         let authError = '';
+        notifyInventoryPreMutation([itemId]);
         try {
             const resp = await fetch('/api/inventory/bulk-update', {
                 method: 'POST',
@@ -370,6 +372,7 @@ export const manifestsApi = {
                 const res = await resp.json();
                 if (res.success) {
                     updatedItem = { $id: itemId, ...itemUpdates };
+                    notifyInventoryPatch([itemId], itemUpdates);
                 }
             }
         } catch (serverErr) {
@@ -440,6 +443,7 @@ export const manifestsApi = {
         };
 
         if (itemIdsToRevert.length > 0) {
+            notifyInventoryPreMutation(itemIdsToRevert);
             // 1. FAST PATH: Server Bulk Update API (elevated server permissions)
             let serverSuccess = false;
             let authError = '';
@@ -459,7 +463,10 @@ export const manifestsApi = {
                     authError = errData?.error || 'You do not have permission to roll back one or more items.';
                 } else if (resp.ok) {
                     const res = await resp.json();
-                    if (res.success) serverSuccess = true;
+                    if (res.success) {
+                        serverSuccess = true;
+                        notifyInventoryPatch(itemIdsToRevert, itemUpdates);
+                    }
                 }
             } catch (serverErr) {
                 console.warn('[manifestsApi.rollbackManifest] Server bulk update fallback:', serverErr);
@@ -509,6 +516,7 @@ export const manifestsApi = {
         }
 
         if (placedIds.length > 0) {
+            notifyInventoryPreMutation(placedIds);
             const itemUpdates = {
                 status: 'in-stock',
                 sellingLocations: []
@@ -532,7 +540,10 @@ export const manifestsApi = {
                     authError = errData?.error || 'You do not have permission to reset these manifest items.';
                 } else if (resp.ok) {
                     const res = await resp.json();
-                    if (res.success) serverSuccess = true;
+                    if (res.success) {
+                        serverSuccess = true;
+                        notifyInventoryPatch(placedIds, itemUpdates);
+                    }
                 }
             } catch (err) {
                 console.warn('[manifestsApi.unverifyManifestItems] Bulk update fallback:', err);
@@ -633,6 +644,7 @@ export const manifestsApi = {
 
         // 1. FAST PATH: Server Bulk Update API (bypasses browser client rate limits)
         let authError = '';
+        if (confirmedItemIds.length > 0) notifyInventoryPreMutation(confirmedItemIds);
         try {
             const resp = await fetch('/api/inventory/bulk-update', {
                 method: 'POST',
@@ -652,6 +664,9 @@ export const manifestsApi = {
                 const result = await resp.json();
                 if (result.success) {
                     updatedCount = result.updatedCount ?? total;
+                    if (confirmedItemIds.length > 0) {
+                        notifyInventoryPatch(confirmedItemIds, itemUpdates);
+                    }
                     if (onProgress) onProgress(100, total, total);
                 }
             }

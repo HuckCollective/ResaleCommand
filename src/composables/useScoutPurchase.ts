@@ -6,6 +6,12 @@ import { useCart, type Cart, type CartItem } from './useCart';
 import { isAlphaMode } from '../stores/env';
 import { getPurchasesCollectionId, purchasesAPI } from '../lib/purchases';
 import { getItemsByPurchaseId, getSafeRawAnalysis, getSafeComponents, formatScoutReportMarkdown, getCollectionId, DB_ID } from '../lib/inventory';
+import {
+    getLiveInventorySnapshot,
+    notifyInventoryPatch,
+    getItemPurchaseLinkKeys,
+    getPurchaseIdentityKeys,
+} from '../lib/searchEngine';
 import { getDefaultStorageLocation } from '../lib/warehouses';
 import { parsePriceValue } from '../lib/lot-strategy';
 import { parsePacificDateToIso } from '../lib/dateTimeUtils';
@@ -204,39 +210,72 @@ export function useScoutPurchase() {
             // Set immediately so PO cards render instantly with zero lag or empty states
             draftPurchases.value = docs;
 
-            // Hydrate item counts & live subtotal for all draft purchases so trackers always show accurate counts
+            // Hydrate item counts & live subtotal for all draft purchases without a 100-item catalog blind spot
             if (docs.length > 0) {
                 const collId = getItemsCollectionId();
-                const countMap: Record<string, number> = {};
-                const subtotalMap: Record<string, number> = {};
+                const seenItemIds = new Set<string>();
+                const matchedItems: any[] = [];
+                const trackerKeySet = new Set<string>();
 
-                try {
-                    const recentItems = await databases.listDocuments(DB_ID, collId, [
-                        Query.orderDesc('$id'),
-                        Query.limit(100)
-                    ]);
-                    recentItems.documents.forEach((item: any) => {
-                        const pid = item.purchaseId || item.cartId;
-                        if (pid) {
-                            countMap[pid] = (countMap[pid] || 0) + 1;
-                            const itemCost = Number(item.cost || item.currentBid || item.maxBid || item.maxBuyPrice || 0);
-                            subtotalMap[pid] = (subtotalMap[pid] || 0) + itemCost;
-                        }
-                    });
-                } catch (recErr) {
-                    console.warn('[useScoutPurchase] Recent items count query fallback:', recErr);
+                for (const d of docs) {
+                    for (const k of getPurchaseIdentityKeys(d)) {
+                        trackerKeySet.add(k);
+                    }
                 }
 
-                // Map counts to each draft purchase across $id, poNumber, and orderId
-                docs.forEach(d => {
-                    const count = countMap[d.$id] || 
-                                  (d.poNumber ? countMap[d.poNumber] : 0) || 
-                                  (d.orderId ? countMap[d.orderId] : 0) || 
-                                  d.itemCount || 
-                                  0;
-                    d.itemCount = count;
-                    if ((!d.subtotal || d.subtotal === 0) && subtotalMap[d.$id] > 0) {
-                        d.subtotal = Number(subtotalMap[d.$id].toFixed(2));
+                const warmSnapshot = getLiveInventorySnapshot();
+                if (warmSnapshot.length > 0) {
+                    for (const item of warmSnapshot) {
+                        if (!item?.$id || seenItemIds.has(item.$id)) continue;
+                        const itemKeys = getItemPurchaseLinkKeys(item);
+                        if (itemKeys.some((k) => trackerKeySet.has(k))) {
+                            seenItemIds.add(item.$id);
+                            matchedItems.push(item);
+                        }
+                    }
+                } else if (trackerKeySet.size > 0) {
+                    try {
+                        const allTrackerKeys = Array.from(trackerKeySet);
+                        const CHUNK = 90;
+                        for (let i = 0; i < allTrackerKeys.length; i += CHUNK) {
+                            const keyChunk = allTrackerKeys.slice(i, i + CHUNK);
+                            const queryResults = await Promise.allSettled([
+                                databases.listDocuments(DB_ID, collId, [Query.equal('purchaseId', keyChunk), Query.limit(500)]),
+                                databases.listDocuments(DB_ID, collId, [Query.equal('cartId', keyChunk), Query.limit(500)]),
+                                databases.listDocuments(DB_ID, collId, [Query.equal('orderId', keyChunk), Query.limit(500)]),
+                            ]);
+                            for (const res of queryResults) {
+                                if (res.status !== 'fulfilled') continue;
+                                for (const item of res.value.documents || []) {
+                                    if (!item?.$id || seenItemIds.has(item.$id)) continue;
+                                    seenItemIds.add(item.$id);
+                                    matchedItems.push(item);
+                                }
+                            }
+                        }
+                    } catch (recErr) {
+                        console.warn('[useScoutPurchase] Indexed draft tracker lookup fallback:', recErr);
+                    }
+                }
+
+                docs.forEach((d) => {
+                    const dKeys = new Set(getPurchaseIdentityKeys(d));
+                    let count = 0;
+                    let subtotal = 0;
+                    for (const item of matchedItems) {
+                        const itemKeys = getItemPurchaseLinkKeys(item);
+                        if (itemKeys.some((k) => dKeys.has(k))) {
+                            count++;
+                            subtotal += Number(item.cost || item.currentBid || item.maxBid || item.maxBuyPrice || 0);
+                        }
+                    }
+                    if (count > 0 || warmSnapshot.length > 0 || matchedItems.length > 0) {
+                        d.itemCount = count;
+                    } else {
+                        d.itemCount = d.itemCount || 0;
+                    }
+                    if ((!d.subtotal || d.subtotal === 0) && subtotal > 0) {
+                        d.subtotal = Number(subtotal.toFixed(2));
                         if (!d.grandTotal || d.grandTotal === 0) {
                             d.grandTotal = d.subtotal;
                         }
@@ -1253,11 +1292,12 @@ export function useScoutPurchase() {
     };
 
     /**
-     * Refresh purchase items for active purchase
+     * Refresh purchase items for active or paused tracker
      */
-    const refreshActivePurchaseItems = async () => {
-        if (!activePurchase.value?.$id) return;
-        await fetchPurchaseItems(activePurchase.value.$id);
+    const refreshActivePurchaseItems = async (overrideTrackerId?: string) => {
+        const targetId = overrideTrackerId || activePurchase.value?.$id || lastActivePurchaseId.value;
+        if (!targetId) return;
+        await fetchPurchaseItems(targetId);
     };
 
     const toggleTray = (open?: boolean) => {
@@ -1271,6 +1311,24 @@ export function useScoutPurchase() {
             if (found) return found;
         }
         return draftPurchases.value[0] || null;
+    });
+
+    const totalOpenTrackedCount = computed(() => {
+        if (draftPurchases.value.length > 0) {
+            const activeId = activePurchase.value?.$id || null;
+            return draftPurchases.value.reduce((sum, p) => {
+                if (activeId && p.$id === activeId && purchaseItems.value.length > 0) {
+                    return sum + purchaseItems.value.length;
+                }
+                return sum + Math.max(0, Number(p.itemCount) || 0);
+            }, 0);
+        }
+        return (
+            purchaseItems.value.length ||
+            activePurchase.value?.itemCount ||
+            pausedTracker.value?.itemCount ||
+            cartItems.value.length
+        );
     });
 
     const pauseTracker = () => {
@@ -1320,18 +1378,21 @@ export function useScoutPurchase() {
             const rawWinLoc = String(item?.storageLocation || '').trim();
             const safeWinLoc = (!rawWinLoc || rawWinLoc.toLowerCase() === 'backstock') ? 'HG' : rawWinLoc;
 
-            await databases.updateDocument(DB_ID, getItemsCollectionId(), itemId, {
+            const winUpdates = {
                 cost: winningBid,
                 status: 'acquired',
                 storageLocation: safeWinLoc,
                 rawAnalysis: JSON.stringify(rawObj).slice(0, 4900)
-            });
+            };
+            await databases.updateDocument(DB_ID, getItemsCollectionId(), itemId, winUpdates);
+            notifyInventoryPatch([itemId], winUpdates);
 
             if (item) {
                 item.cost = winningBid;
                 item.status = 'acquired';
                 item.storageLocation = safeWinLoc;
                 item.auctionStatus = 'won';
+                purchaseItems.value = [...purchaseItems.value];
             }
             return true;
         } catch (e) {
@@ -1358,11 +1419,14 @@ export function useScoutPurchase() {
                     try { rawObj = JSON.parse(item.rawAnalysis); } catch {}
                 }
                 rawObj.auctionStatus = 'lost';
+                const lossRaw = JSON.stringify(rawObj).slice(0, 4900);
                 await databases.updateDocument(DB_ID, getItemsCollectionId(), itemId, {
-                    rawAnalysis: JSON.stringify(rawObj).slice(0, 4900)
+                    rawAnalysis: lossRaw
                 });
+                notifyInventoryPatch([itemId], { rawAnalysis: lossRaw });
                 if (item) {
                     item.auctionStatus = 'lost';
+                    purchaseItems.value = [...purchaseItems.value];
                 }
             }
             return true;
@@ -1395,6 +1459,7 @@ export function useScoutPurchase() {
         roiMultiple,
         profitMargin,
         tierBreakdown,
+        totalOpenTrackedCount,
 
         // Actions
         toggleTray,

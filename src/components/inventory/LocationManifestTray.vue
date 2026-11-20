@@ -842,9 +842,11 @@ const openItemEditor = (item: any) => {
 
 const handleItemSaved = async (payload: any) => {
   const targetId = editingItem.value?.$id || editingItem.value?.id;
+  let saveSucceeded = false;
   if (targetId && payload) {
     try {
       const updatedDoc = await updateInventoryItem(targetId, payload);
+      saveSucceeded = true;
       // Also update staged item in local snapshot if in active manifest
       if (activeManifest.value?.itemsSnapshot) {
         const snapIdx = activeManifest.value.itemsSnapshot.findIndex(s => s.$id === targetId);
@@ -854,20 +856,30 @@ const handleItemSaved = async (payload: any) => {
             title: updatedDoc.title,
             price: Number(updatedDoc.resalePrice || updatedDoc.boutiquePrice || updatedDoc.price || 0),
             cost: Number(updatedDoc.cost || 0),
+            quantity: Math.max(1, Number(updatedDoc.quantity || 1)),
+            storageLocation: updatedDoc.storageLocation || activeManifest.value.itemsSnapshot[snapIdx].storageLocation || '',
             upc: updatedDoc.upc,
             locationSku: updatedDoc.locationSku,
             imageId: updatedDoc.imageId
           };
-          // Persist snapshot update to manifest
+          // Persist snapshot update & totals to manifest
           await manifestsApi.updateManifest(activeManifest.value.$id, {
-            itemsSnapshot: activeManifest.value.itemsSnapshot
+            itemsSnapshot: activeManifest.value.itemsSnapshot,
+            totalCost: totalCost.value,
+            totalRetail: totalRetail.value,
+            estimatedNet: estimatedNet.value
           });
         }
       }
       addToast({ type: 'success', message: 'Item updated successfully!' });
+      emit('drop-changed');
     } catch (err: any) {
       addToast({ type: 'error', message: `Save failed: ${err.message}` });
+    } finally {
+      try { payload?.__onSaveComplete?.(saveSucceeded ? '✅ Saved' : ''); } catch {}
     }
+  } else {
+    try { payload?.__onSaveComplete?.(''); } catch {}
   }
   editingItem.value = null;
   if (activeManifest.value) {

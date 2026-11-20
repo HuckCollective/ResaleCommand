@@ -335,7 +335,7 @@
             type="button"
             @click="openItemsTray(purchase)" 
             class="btn btn-sm btn-outline btn-secondary font-bold flex-1 rounded-xl gap-1.5 min-h-[38px]"
-            title="Open PO Items Tray (Receive, Update, Unlink)"
+            :title="getUnitCount(purchase) > getItemCount(purchase) ? `Open PO Items Tray (${getItemCount(purchase)} lines · ${getUnitCount(purchase)} total units)` : 'Open PO Items Tray (Receive, Update, Unlink)'"
           >
             <Icon icon="solar:box-minimalistic-linear" class="w-4 h-4" />
             <span>Items</span>
@@ -514,7 +514,7 @@
                     type="button"
                     @click="openItemsTray(purchase)" 
                     class="btn btn-xs btn-outline btn-secondary font-bold gap-1 px-2.5 h-8 rounded-lg"
-                    title="Open PO Items Tray (Receive, Update, Unlink)"
+                    :title="getUnitCount(purchase) > getItemCount(purchase) ? `Open PO Items Tray (${getItemCount(purchase)} lines · ${getUnitCount(purchase)} total units)` : 'Open PO Items Tray (Receive, Update, Unlink)'"
                   >
                     <Icon icon="solar:box-minimalistic-linear" class="w-3.5 h-3.5" />
                     <span>Items</span>
@@ -618,8 +618,8 @@
 
 <script setup>
 import { ref, computed, defineAsyncComponent, watch, onMounted, onUnmounted } from 'vue';
-import { purchasesAPI, getPurchasesCollectionId } from '../../lib/purchases';
-import { getCollectionId, DB_ID, BUCKET_ID } from '../../lib/inventory';
+import { purchasesAPI, getPurchasesCollectionId, getItemPurchaseLinkKeys, getPurchaseIdentityKeys } from '../../lib/purchases';
+import { getCollectionId, normalizeInventoryStatus, DB_ID, BUCKET_ID } from '../../lib/inventory';
 import { isRefundedPurchaseOrder, parseTrackingNumbers } from '../../lib/shipmentTracking';
 import { useMemberCapabilities } from '../../lib/memberAccess';
 import { evaluatePurchaseAccess } from '../../lib/curatorOwnership';
@@ -653,36 +653,54 @@ watch(
     }
 );
 
-const linkedItemsByPurchaseKey = computed(() => {
-    const map = new Map();
-    const appendKey = (rawKey, item) => {
-        const key = String(rawKey || '').trim();
-        if (!key) return;
-        if (!map.has(key)) map.set(key, []);
-        map.get(key).push(item);
-    };
-    for (const item of inventoryItems.value || []) {
-        appendKey(item.purchaseId, item);
-        appendKey(item.orderId, item);
-        appendKey(item.cartId, item);
+const purchaseLinkMetrics = computed(() => {
+    const lineCounts = {};
+    const unitCounts = {};
+    const itemsByPoId = new Map();
+    const identityToPoIds = new Map();
+
+    for (const p of purchases.value || []) {
+        if (!p?.$id) continue;
+        for (const k of getPurchaseIdentityKeys(p)) {
+            const arr = identityToPoIds.get(k) || [];
+            if (!arr.includes(p.$id)) arr.push(p.$id);
+            identityToPoIds.set(k, arr);
+        }
     }
-    return map;
+
+    const seenPerPo = new Map();
+    for (const item of inventoryItems.value || []) {
+        if (!item?.$id) continue;
+        const itemKeys = getItemPurchaseLinkKeys(item);
+        if (itemKeys.length === 0) continue;
+
+        const qty = Math.max(1, Number(item.quantity) || 1);
+        for (const k of itemKeys) {
+            const matchedPoIds = identityToPoIds.get(k);
+            if (!matchedPoIds) continue;
+            for (const poId of matchedPoIds) {
+                let seen = seenPerPo.get(poId);
+                if (!seen) {
+                    seen = new Set();
+                    seenPerPo.set(poId, seen);
+                }
+                if (seen.has(item.$id)) continue;
+                seen.add(item.$id);
+                lineCounts[poId] = (lineCounts[poId] || 0) + 1;
+                unitCounts[poId] = (unitCounts[poId] || 0) + qty;
+                const list = itemsByPoId.get(poId) || [];
+                list.push(item);
+                itemsByPoId.set(poId, list);
+            }
+        }
+    }
+
+    return { lineCounts, unitCounts, itemsByPoId };
 });
 
 const getLinkedItemsForPurchase = (p) => {
-    if (!p) return [];
-    const out = [];
-    const seen = new Set();
-    for (const key of [p.$id, p.orderId, p.poNumber]) {
-        const matches = linkedItemsByPurchaseKey.value.get(String(key || '').trim()) || [];
-        for (const it of matches) {
-            const id = it.$id || it.id || it.upc;
-            if (id && seen.has(id)) continue;
-            if (id) seen.add(id);
-            out.push(it);
-        }
-    }
-    return out;
+    if (!p?.$id) return [];
+    return purchaseLinkMetrics.value.itemsByPoId.get(p.$id) || [];
 };
 
 const getPurchaseAccess = (p) =>
@@ -736,30 +754,18 @@ const copyTrackingNumber = async (num) => {
     }
 };
 
-const purchaseItemCounts = computed(() => {
-    const counts = {};
-    for (const item of (inventoryItems.value || [])) {
-        const qty = Number(item.quantity) || 1;
-        if (item.purchaseId) {
-            counts[item.purchaseId] = (counts[item.purchaseId] || 0) + qty;
-        }
-        if (item.cartId && item.cartId !== item.purchaseId) {
-            counts[item.cartId] = (counts[item.cartId] || 0) + qty;
-        }
-        if (item.poNumber) {
-            counts[item.poNumber] = (counts[item.poNumber] || 0) + qty;
-        }
-    }
-    return counts;
-});
-
 const getItemCount = (purchase) => {
-    if (!purchase) return 0;
-    return purchaseItemCounts.value[purchase.$id] || 
-           (purchase.orderId ? purchaseItemCounts.value[purchase.orderId] : 0) || 
-           (purchase.poNumber ? purchaseItemCounts.value[purchase.poNumber] : 0) ||
-           (Number(purchase.itemCount) > 0 ? Number(purchase.itemCount) : 0) ||
-           0;
+    if (!purchase?.$id) return 0;
+    const liveCount = purchaseLinkMetrics.value.lineCounts[purchase.$id];
+    if ((inventoryItems.value || []).length > 0) {
+        return liveCount || 0;
+    }
+    return liveCount || (Number(purchase.itemCount) > 0 ? Number(purchase.itemCount) : 0);
+};
+
+const getUnitCount = (purchase) => {
+    if (!purchase?.$id) return 0;
+    return purchaseLinkMetrics.value.unitCounts[purchase.$id] ?? getItemCount(purchase);
 };
 
 // Status Filter state
@@ -1001,25 +1007,19 @@ const purchaseKpiStats = computed(() => {
     const visiblePos = filteredPurchases.value || [];
     const totalSpend = visiblePos.reduce((sum, p) => sum + (Number(p.grandTotal) || 0), 0);
 
-    const poKeys = new Set();
-    for (const p of visiblePos) {
-        if (p.$id) poKeys.add(p.$id);
-        if (p.orderId) poKeys.add(String(p.orderId));
-        if (p.poNumber) poKeys.add(String(p.poNumber));
-    }
-
+    const seenItemIds = new Set();
     let linkedRetailValue = 0;
     let linkedUnitCount = 0;
-    for (const item of (inventoryItems.value || [])) {
-        const matchesPo =
-            (item.purchaseId && poKeys.has(item.purchaseId)) ||
-            (item.cartId && poKeys.has(item.cartId)) ||
-            (item.poNumber && poKeys.has(String(item.poNumber)));
-        if (!matchesPo) continue;
-        const qty = Number(item.quantity) || 1;
-        const unitRetail = Number(item.resalePrice || item.listPrice || item.boutiquePrice) || 0;
-        linkedUnitCount += qty;
-        linkedRetailValue += unitRetail * qty;
+    for (const p of visiblePos) {
+        for (const item of getLinkedItemsForPurchase(p)) {
+            if (!item?.$id || seenItemIds.has(item.$id)) continue;
+            seenItemIds.add(item.$id);
+            if (normalizeInventoryStatus(item.status) === 'deconstructed') continue;
+            const qty = Math.max(1, Number(item.quantity) || 1);
+            const unitRetail = Number(item.resalePrice || item.listPrice || item.boutiquePrice) || 0;
+            linkedUnitCount += qty;
+            linkedRetailValue += unitRetail * qty;
+        }
     }
 
     const spread = linkedRetailValue - totalSpend;

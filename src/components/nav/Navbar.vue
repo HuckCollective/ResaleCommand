@@ -700,7 +700,7 @@ const { capabilities, capabilitiesResolved } = useMemberCapabilities();
 const showMemberNav = computed(() => isAuthenticated.value || (loading.value && props.initialAuthenticated));
 
 const { cartItems } = useCart();
-const { purchaseItems, activePurchase, pausedTracker, draftPurchases, loadDraftPurchases, toggleTray } =
+const { activePurchase, pausedTracker, totalOpenTrackedCount, loadDraftPurchases, toggleTray } =
   useScoutPurchase();
 
 const currentPath = ref(props.initialPath || '/');
@@ -750,13 +750,7 @@ watch(openMobile, (isOpen) => {
 });
 
 const displayTrackedCount = computed(() => {
-  return (
-    purchaseItems.value.length ||
-    activePurchase.value?.itemCount ||
-    pausedTracker.value?.itemCount ||
-    draftPurchases.value[0]?.itemCount ||
-    cartItems.value.length
-  );
+  return totalOpenTrackedCount.value || cartItems.value.length;
 });
 
 const mobilePrimaryLinks = computed(() => {

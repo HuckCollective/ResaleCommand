@@ -1,10 +1,14 @@
 import { ref, computed, watch } from 'vue';
 import { manifestsApi, type ManifestDocument, type ManifestItemSummary } from '../lib/manifests';
 import { useAuth } from './useAuth';
+import { useInventory, patchLocalItems } from './useInventory';
+import { resolveMultiQtyCost } from './useItemDrawerForm';
 import { addToast } from '../stores/toast';
 import { generateRicochetCsv, generateGenericCsv, downloadCsv } from '../lib/exportUtils';
 import { databases } from '../lib/appwrite';
 import { DB_ID, getCollectionId } from '../lib/inventory';
+import { normalizeInventoryStatus } from '../lib/inventoryStatus';
+import { getLocationSettingMeta } from '../lib/warehouses';
 import { Query } from 'appwrite';
 import { ensureItemUpc, isValidOrgUpc } from '../lib/upcAuthority';
 import { reconcileManifestWithRicochetCsv, type ReconcileResult } from '../lib/manifestReconciliation';
@@ -13,8 +17,17 @@ import { hasOnlineReadyTag } from '../lib/onlineCoCuration';
 // Shared singleton state across all views — single active bottom surface ('none' | 'queues' | 'filters' | 'manifest')
 export type ActiveInventorySurface = 'none' | 'queues' | 'filters' | 'manifest';
 
+const TERMINAL_DRAFT_STATUSES = new Set(['sold', 'combined', 'deconstructed']);
+
+const resolveDefaultCommissionPct = (locationId?: string, locationName?: string): number => {
+    const meta = getLocationSettingMeta(locationId || locationName || 'MD');
+    const raw = Number(meta?.commissionRate ?? 0);
+    if (isNaN(raw) || raw < 0) return 0;
+    return raw > 0 && raw < 1 ? raw * 100 : raw;
+};
+
 const activeManifest = ref<ManifestDocument | null>(null);
-const stagedItems = ref<any[]>([]);
+const rawStagedItems = ref<any[]>([]);
 const isManifestTrayOpen = ref(false);
 const isActionTrayOpen = ref(false);
 const isQueuesTrayOpen = ref(false);
@@ -95,6 +108,61 @@ export function useManifest() {
         }
     }, { immediate: true });
 
+    // -- Live Store Overlay Projection (powered by useInventory().itemByIdMap) --
+    const stagedItems = computed<any[]>({
+        get() {
+            const { itemByIdMap } = useInventory();
+            const map = itemByIdMap.value;
+            const statusStr = String(activeManifest.value?.status || 'draft').toLowerCase().trim();
+            const isDraftManifest = statusStr === 'draft' || statusStr === 'paused';
+
+            const projected: any[] = [];
+            for (const raw of rawStagedItems.value || []) {
+                if (!raw) continue;
+                const id = String(raw.$id || raw.id || '').trim();
+                const live = id ? map.get(id) : undefined;
+                const merged = live
+                    ? {
+                          ...raw,
+                          ...live,
+                          title: live.title || raw.title || 'Untitled Item',
+                          upc: live.upc !== undefined ? live.upc : raw.upc,
+                          locationSku: live.locationSku !== undefined ? live.locationSku : raw.locationSku,
+                          cost: live.cost !== undefined ? live.cost : raw.cost,
+                          resalePrice: live.resalePrice !== undefined ? live.resalePrice : raw.resalePrice,
+                          boutiquePrice:
+                              live.boutiquePrice !== undefined
+                                  ? live.boutiquePrice
+                                  : (live.resalePrice !== undefined ? live.resalePrice : raw.boutiquePrice),
+                          price:
+                              live.resalePrice !== undefined
+                                  ? live.resalePrice
+                                  : (live.boutiquePrice !== undefined ? live.boutiquePrice : raw.price),
+                          quantity: live.quantity !== undefined ? live.quantity : raw.quantity,
+                          imageId: live.imageId !== undefined ? live.imageId : raw.imageId,
+                          galleryImageIds:
+                              live.galleryImageIds !== undefined ? live.galleryImageIds : raw.galleryImageIds,
+                          storageLocation:
+                              live.storageLocation !== undefined ? live.storageLocation : raw.storageLocation,
+                          status: live.status !== undefined ? live.status : raw.status,
+                          sellingLocations:
+                              live.sellingLocations !== undefined ? live.sellingLocations : raw.sellingLocations,
+                      }
+                    : raw;
+
+                if (isDraftManifest) {
+                    const norm = normalizeInventoryStatus(merged.status);
+                    if (TERMINAL_DRAFT_STATUSES.has(norm)) continue;
+                }
+                projected.push(merged);
+            }
+            return projected;
+        },
+        set(next) {
+            rawStagedItems.value = Array.isArray(next) ? next : [];
+        },
+    });
+
     // -- Reactive Financial Calculations --
     const stagedCount = computed(() => stagedItems.value.length);
     const totalUnits = computed(() => {
@@ -108,9 +176,10 @@ export function useManifest() {
 
     const totalCost = computed(() => {
         return stagedItems.value.reduce((sum, item) => {
-            const cost = Number(item.cost || item.purchasePrice || 0);
             const qty = Math.max(1, Number(item.quantity || 1));
-            return sum + (cost * qty);
+            const rawCost = item.cost ?? item.purchasePrice ?? 0;
+            const unitRetail = Number(item.boutiquePrice || item.resalePrice || item.price || 0);
+            return sum + resolveMultiQtyCost(rawCost, qty, unitRetail).totalCost;
         }, 0);
     });
 
@@ -123,10 +192,10 @@ export function useManifest() {
     });
 
     const commissionRate = computed(() => {
-        if (activeManifest.value?.commissionRate !== undefined) {
-            return activeManifest.value.commissionRate;
+        if (activeManifest.value?.commissionRate !== undefined && activeManifest.value?.commissionRate !== null) {
+            return Number(activeManifest.value.commissionRate);
         }
-        return 15; // default 15% for Memory Den
+        return resolveDefaultCommissionPct(activeManifest.value?.locationId, activeManifest.value?.locationName);
     });
 
     const estimatedNet = computed(() => {
@@ -161,7 +230,7 @@ export function useManifest() {
     // -- Sync Line Items from Appwrite or Local Pool --
     async function loadStagedItems(manifest: ManifestDocument) {
         if (!manifest) {
-            stagedItems.value = [];
+            rawStagedItems.value = [];
             return;
         }
 
@@ -193,13 +262,13 @@ export function useManifest() {
         }
 
         if (itemIds.length === 0) {
-            stagedItems.value = [...snapshot];
+            rawStagedItems.value = [...snapshot];
             return;
         }
 
         // If snapshot exists, use as initial immediate render so UI never flashes blank
         if (snapshot.length > 0) {
-            stagedItems.value = [...snapshot];
+            rawStagedItems.value = [...snapshot];
         }
 
         // Fetch authoritative latest item records from Appwrite
@@ -244,16 +313,21 @@ export function useManifest() {
                             storageLocation: targetLoc,
                             status: 'placed'
                         }).catch(() => {});
+                        patchLocalItems([id], {
+                            locationSku: snap.locationSku,
+                            storageLocation: targetLoc,
+                            status: 'placed'
+                        });
                         return { ...doc, locationSku: snap.locationSku, storageLocation: targetLoc, status: 'placed' };
                     }
                     return doc || snap;
                 }).filter(Boolean);
-                stagedItems.value = resolved as any[];
+                rawStagedItems.value = resolved as any[];
             }
         } catch (e) {
             console.warn('[useManifest] Could not fetch fresh items from Appwrite, using snapshot:', e);
             if (snapshot.length > 0) {
-                stagedItems.value = [...snapshot];
+                rawStagedItems.value = [...snapshot];
             }
         }
     }
@@ -288,6 +362,11 @@ export function useManifest() {
                             storageLocation: targetLoc,
                             status: 'placed'
                         }).catch(() => {});
+                        patchLocalItems([id], {
+                            locationSku: s.locationSku,
+                            storageLocation: targetLoc,
+                            status: 'placed'
+                        });
                     }
                 }
             } catch {
@@ -489,14 +568,14 @@ export function useManifest() {
                 itemIds: [],
                 placedItemIds: [],
                 itemsSnapshot: [],
-                commissionRate: locationId === 'MD' || locationName.toLowerCase().includes('memory den') ? 15 : 10,
+                commissionRate: resolveDefaultCommissionPct(locationId, locationName),
                 itemCount: 0,
                 totalCost: 0,
                 totalRetail: 0,
                 estimatedNet: 0
             });
             activeManifest.value = newDoc;
-            stagedItems.value = [];
+            rawStagedItems.value = [];
             await fetchAllDrafts();
             addToast({ type: 'success', message: `Created new manifest: "${name}"` });
             return newDoc;
@@ -558,14 +637,14 @@ export function useManifest() {
                             itemIds: [],
                             placedItemIds: [],
                             itemsSnapshot: [],
-                            commissionRate: locationId === 'MD' || locationName.toLowerCase().includes('memory den') ? 15 : 10,
+                            commissionRate: resolveDefaultCommissionPct(locationId, locationName),
                             itemCount: 0,
                             totalCost: 0,
                             totalRetail: 0,
                             estimatedNet: 0
                         });
                         activeManifest.value = newManifest;
-                        stagedItems.value = [];
+                        rawStagedItems.value = [];
                     }
                 }
 
@@ -590,10 +669,10 @@ export function useManifest() {
                     return;
                 }
 
-                stagedItems.value = [...stagedItems.value, ...newItemsToAdd];
+                rawStagedItems.value = [...rawStagedItems.value, ...newItemsToAdd];
 
-                // Recompute metrics
-                const updatedIds = Array.from(currentItemIds);
+                // Recompute metrics from live-projected stagedItems
+                const updatedIds = stagedItems.value.map(i => i.$id).filter(Boolean);
                 const updatedSnapshot = stagedItems.value.map(createItemSnapshot);
 
                 const updatedManifest = await manifestsApi.updateManifest(activeManifest.value.$id, {
@@ -633,8 +712,8 @@ export function useManifest() {
         return enqueueManifestUpdate(async () => {
             isSyncing.value = true;
             try {
-                stagedItems.value = stagedItems.value.filter(i => i.$id !== itemId);
-                const updatedIds = stagedItems.value.map(i => i.$id);
+                rawStagedItems.value = rawStagedItems.value.filter(i => i.$id !== itemId);
+                const updatedIds = stagedItems.value.map(i => i.$id).filter(Boolean);
                 const updatedSnapshot = stagedItems.value.map(createItemSnapshot);
 
                 const updated = await manifestsApi.updateManifest(activeManifest.value.$id, {
@@ -724,19 +803,19 @@ export function useManifest() {
         }
 
         try {
-            // 1. Ensure all items have a guaranteed persisted UPC before exporting
-            for (const item of stagedItems.value) {
+            // 1. Ensure all items have a guaranteed persisted UPC before exporting (snapshot before mutating)
+            const exportRows = stagedItems.value.map(i => ({ ...i }));
+            for (const item of exportRows) {
                 if (!isValidOrgUpc(item.upc)) {
                     item.upc = await ensureItemUpc(item);
                 }
             }
 
-            const items = stagedItems.value;
             let csv = '';
             if (format === 'ricochet') {
-                csv = generateRicochetCsv(items);
+                csv = generateRicochetCsv(exportRows);
             } else {
-                csv = generateGenericCsv(items);
+                csv = generateGenericCsv(exportRows);
             }
 
             const cleanName = activeManifest.value.name.toLowerCase().replace(/[^a-z0-9]+/g, '-');
@@ -755,7 +834,7 @@ export function useManifest() {
 
             addToast({
                 type: 'success',
-                message: `Exported ${items.length} items for ${activeManifest.value.locationName}! Upload to Ricochet on your PC.`
+                message: `Exported ${exportRows.length} items for ${activeManifest.value.locationName}! Upload to Ricochet on your PC.`
             });
         } catch (err: any) {
             console.error('[useManifest.exportManifestCsv] Error:', err);

@@ -496,7 +496,7 @@
 </template>
 
 <script setup>
-import { ref, shallowRef, reactive, watch, computed, onMounted, onUnmounted, defineAsyncComponent } from 'vue';
+import { ref, shallowRef, reactive, watch, computed, onMounted, onBeforeUnmount, onUnmounted, defineAsyncComponent } from 'vue';
 import { marked } from 'marked';
 import { Icon } from '@iconify/vue';
 import PhotoGalleryManager from './PhotoGalleryManager.vue';
@@ -542,7 +542,7 @@ import { toUserMessage } from '../../lib/userFacingErrors';
 
 const { user, currentTeam } = useAuth();
 const { capabilities } = useMemberCapabilities();
-const { showLoader, hideLoader, updateLoader } = useLoader();
+const { showLoader, hideLoader, updateLoader, startAmbientSync } = useLoader();
 const DB_ID = import.meta.env.PUBLIC_APPWRITE_DB_ID || 'resale_db';
 const orgPlacedLocations = ref([]);
 const orgWarehouses = ref([]);
@@ -1758,6 +1758,11 @@ onMounted(() => {
     }
 });
 
+let stopActiveAmbientSave = null;
+onBeforeUnmount(() => {
+    hideLoader();
+});
+
 onUnmounted(() => {
     if (typeof window !== 'undefined') {
         window.removeEventListener('keydown', handleKeydown);
@@ -1824,13 +1829,26 @@ const saveEdit = async () => {
         addToast({ type: 'warning', message: itemAccess.value.readOnlyReason || 'Read-Only Collective View — edits are disabled.' });
         return;
     }
+    const hasNewMedia = Boolean(
+        actualMainPhoto.value?.type === 'new' ||
+        (Array.isArray(editGalleryBuffer.value) && editGalleryBuffer.value.length > 0)
+    );
+    if (stopActiveAmbientSave) {
+        try { stopActiveAmbientSave(''); } catch {}
+        stopActiveAmbientSave = null;
+    }
+    const stopAmbient = startAmbientSync(hasNewMedia ? 'Uploading photos & saving…' : 'Saving item…');
+    stopActiveAmbientSave = stopAmbient;
     processing.value = true;
-    showLoader("Saving Item...", {
-        step: "Uploading media & updating listing...",
-        progress: 70,
-        basket: 'solar:diskette-bold-duotone',
-        cancelable: false
-    });
+    if (hasNewMedia) {
+        showLoader("Uploading Photos & Saving...", {
+            step: "Saving media to catalog...",
+            progress: 70,
+            basket: 'solar:diskette-bold-duotone',
+            debounceMs: 1200,
+            cancelable: false
+        });
+    }
     try {
         let finalGallery = Array.isArray(editGalleryBuffer.value) ? [...editGalleryBuffer.value] : [];
         let finalImageFile = null;
@@ -1879,6 +1897,8 @@ const saveEdit = async () => {
         if (isPlacementMutation(finalPayload) && !itemAccess.value.canPlaceOrPrintTag) {
             processing.value = false;
             hideLoader();
+            stopAmbient('');
+            if (stopActiveAmbientSave === stopAmbient) stopActiveAmbientSave = null;
             addToast({
                 type: 'warning',
                 message: itemAccess.value.placementBlockReason || 'Lock your Curator SKU prefix on /profile before placing items in booths or Online Ready.'
@@ -1904,11 +1924,13 @@ const saveEdit = async () => {
         }
 
         let completed = false;
-        const finishSave = () => {
+        const finishSave = (doneText = '✅ Saved') => {
             if (completed) return;
             completed = true;
             processing.value = false;
             hideLoader();
+            stopAmbient(typeof doneText === 'string' ? doneText : '✅ Saved');
+            if (stopActiveAmbientSave === stopAmbient) stopActiveAmbientSave = null;
         };
         Object.defineProperty(finalPayload, '__markAsync', {
             value: () => {},
@@ -1919,11 +1941,13 @@ const saveEdit = async () => {
             enumerable: false
         });
         // Safety fallback in case a parent listener doesn't invoke updateInventoryItem/saveItemToInventory
-        setTimeout(finishSave, 15000);
+        setTimeout(() => finishSave(''), 15000);
         emit('save', finalPayload);
     } catch (e) {
         processing.value = false;
         hideLoader();
+        stopAmbient('');
+        if (stopActiveAmbientSave === stopAmbient) stopActiveAmbientSave = null;
         addToast({ type: 'error', message: 'Save failed: ' + e.message });
     }
 };

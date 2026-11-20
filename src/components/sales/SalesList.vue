@@ -999,6 +999,7 @@ import ItemDrawer from '../common/ItemDrawer.vue';
 import { useAuth } from '../../composables/useAuth';
 import { useMemberCapabilities } from '../../lib/memberAccess';
 import { useInventory } from '../../composables/useInventory';
+import { useCalmRealtime } from '../../composables/useCalmRealtime';
 import { useRicochetSalesSync } from '../../composables/useRicochetSalesSync';
 import { resolveMultiQtyCost } from '../../composables/useItemDrawerForm';
 import { client } from '../../lib/appwrite';
@@ -1030,6 +1031,7 @@ const props = defineProps<{
 const { currentTeam } = useAuth();
 const { capabilities } = useMemberCapabilities();
 const { inventoryItems, fetchInventory, upsertLocalItems } = useInventory();
+const { markCalmSelfMutation, handleCalmRealtimeEvent } = useCalmRealtime();
 
 const isSettlementRoute = computed(() => props.initialTab === 'coop');
 const canAccessSalesSurface = computed(() =>
@@ -1078,11 +1080,13 @@ const handleItemInspectorSave = async (payload: any) => {
     return;
   }
 
+  let saveSucceeded = false;
   try {
     const updatedDoc = await updateInventoryItem(targetId, payload);
     if (updatedDoc) {
       inspectedItem.value = updatedDoc;
     }
+    saveSucceeded = true;
     addToast({ type: 'success', message: '✅ Saved item changes.' });
     closeItemInspector();
   } catch (err: any) {
@@ -1092,7 +1096,7 @@ const handleItemInspectorSave = async (payload: any) => {
       message: toUserMessage(err, 'Could not save item changes. Please try again.')
     });
   } finally {
-    try { payload?.__onSaveComplete?.(); } catch {}
+    try { payload?.__onSaveComplete?.(saveSucceeded ? '✅ Saved' : ''); } catch {}
   }
 };
 
@@ -1107,8 +1111,9 @@ const handleItemInspectorSubEvent = (patch?: any) => {
 
 const handleRecordedSalesSaved = async ({ sales: newSales }: { sales: SaleDocument[]; linkedItemIds: string[] }) => {
   for (const created of newSales) {
+    if (created?.$id) markCalmSelfMutation(created.$id, 'sales');
     if (!sales.value.find((s) => s.$id === created.$id)) {
-      sales.value.unshift(created);
+      sales.value = [created, ...sales.value];
     }
   }
   if (currentTeam.value?.$id) {
@@ -1151,9 +1156,12 @@ const openLinkTicketModal = (sale: any) => {
 };
 
 const handleSaleLinkedOrReassigned = async ({ saleId, updatedSale }: { saleId: string; updatedSale: any }) => {
+  if (saleId) markCalmSelfMutation(saleId, 'sales');
   const idx = sales.value.findIndex((s) => s.$id === saleId);
   if (idx !== -1 && updatedSale) {
-    sales.value[idx] = { ...sales.value[idx], ...updatedSale };
+    const next = [...sales.value];
+    next[idx] = { ...next[idx], ...updatedSale };
+    sales.value = next;
   }
   if (currentTeam.value?.$id) {
     await fetchInventory(currentTeam.value.$id).catch(() => {});
@@ -1826,31 +1834,39 @@ const initSalesRealtime = () => {
     salesUnsubscribe = client.subscribe(
       `databases.${DB_ID}.collections.sales.documents`,
       (response) => {
-        const isCreate = response.events.some(e => e.includes('.create'));
-        const isUpdate = response.events.some(e => e.includes('.update'));
-        const isDelete = response.events.some(e => e.includes('.delete'));
+        const events = Array.isArray(response.events) ? response.events : [];
+        const isDelete = events.some(e => e.includes('.delete'));
+        const isCreate = !isDelete && events.some(e => e.includes('.create'));
+        const isUpdate = !isDelete && !isCreate && events.some(e => e.includes('.update'));
         const doc = response.payload as any;
-        if (!doc || !doc.$id) return;
+        if (!doc || !doc.$id || (!isCreate && !isUpdate && !isDelete)) return;
 
         // Filter by tenant
         if (currentTeam.value && doc.tenantId && doc.tenantId !== currentTeam.value.$id) {
           return;
         }
 
-        if (isCreate) {
-          if (!sales.value.find(s => s.$id === doc.$id)) {
-            sales.value.unshift(doc);
-          }
-        } else if (isUpdate) {
-          const idx = sales.value.findIndex(s => s.$id === doc.$id);
-          if (idx !== -1) {
-            sales.value[idx] = { ...sales.value[idx], ...doc };
-          } else {
-            sales.value.unshift(doc);
-          }
-        } else if (isDelete) {
-          sales.value = sales.value.filter(s => s.$id !== doc.$id);
-        }
+        const exists = sales.value.some(s => s.$id === doc.$id);
+        handleCalmRealtimeEvent({
+          scope: 'sales',
+          id: doc.$id,
+          eventType: isDelete ? 'delete' : isCreate ? 'create' : 'update',
+          existsInList: exists,
+          applyImmediate: () => {
+            if (isDelete) {
+              sales.value = sales.value.filter(s => s.$id !== doc.$id);
+            } else {
+              const idx = sales.value.findIndex(s => s.$id === doc.$id);
+              if (idx !== -1) {
+                const next = [...sales.value];
+                next[idx] = { ...next[idx], ...doc };
+                sales.value = next;
+              } else {
+                sales.value = [doc, ...sales.value];
+              }
+            }
+          },
+        });
       }
     );
 
