@@ -4,6 +4,13 @@ import { Permission, Role } from 'appwrite';
 import { withRateLimitRetry } from './retry';
 import { renderScoutReportMarkdown } from './scoutReportSections';
 import { isDraftPlaceholderUpc } from './curatorOwnership';
+import {
+    getLiveInventorySnapshot,
+    notifyInventoryUpsert,
+    notifyInventoryRemove,
+    parseSearchQuery,
+    scoreInventoryItemSearch,
+} from './searchEngine';
 
 import { isAlphaMode } from '../stores/env';
 
@@ -1463,6 +1470,8 @@ export async function saveItemToInventory(itemData: any, imageFile: File | null,
             permissions
         );
 
+        coldSearchCache = null;
+        notifyInventoryUpsert([response]);
         return response;
     } catch (error) {
         console.error("Appwrite Save Error:", error);
@@ -1574,36 +1583,103 @@ export async function getItemsByPurchaseId(purchaseId: string, orderId?: string,
     }
 }
 
+let coldSearchCache: { collId: string; fetchedAt: number; docs: any[] } | null = null;
+const COLD_SEARCH_TTL_MS = 60_000;
+const COLD_SEARCH_SELECT_FIELDS = [
+    '$id',
+    '$createdAt',
+    'title',
+    'identity',
+    'upc',
+    'locationSku',
+    'status',
+    'storageLocation',
+    'cost',
+    'resalePrice',
+    'quantity',
+    'imageId',
+    'galleryImageIds',
+    'purchaseId',
+    'orderId',
+    'cartId',
+    'keywords'
+];
+
 export async function searchItems(queryStr: string) {
     try {
-        if (!queryStr) return [];
-        const raw = queryStr.trim();
-        const numericDigits = raw.replace(/\D/g, '');
-        const q = raw.toLowerCase();
+        if (!queryStr || !queryStr.trim()) return [];
+        const parsed = parseSearchQuery(queryStr);
+        if (parsed.isEmpty) return [];
 
-        const response = await databases.listDocuments(DB_ID, getCollectionId(), [
-            Query.limit(100),
-            Query.orderDesc('$createdAt')
-        ]);
+        let pool = getLiveInventorySnapshot();
+        if (!pool || pool.length === 0) {
+            const collId = getCollectionId();
+            const isCacheValid =
+                coldSearchCache &&
+                coldSearchCache.collId === collId &&
+                Date.now() - coldSearchCache.fetchedAt <= COLD_SEARCH_TTL_MS;
 
-        return response.documents.filter((d: any) => {
-            const titleMatch = (d.title || d.itemName || '').toLowerCase().includes(q);
-            const identityMatch = (d.identity || d.$id || '').toLowerCase().includes(q);
-            const itemUpc = (d.upc || d.sku || '').toLowerCase();
-            const upcMatch = itemUpc.includes(q);
+            if (!isCacheValid) {
+                const docs: any[] = [];
+                let cursor: string | null = null;
+                let useSelect = true;
+                let hasMore = true;
 
-            let numMatch = false;
-            if (numericDigits.length >= 1) {
-                const itemUpcDigits = itemUpc.replace(/\D/g, '');
-                if (itemUpcDigits) {
-                    if (itemUpcDigits.endsWith(numericDigits) || itemUpcDigits.includes(numericDigits)) numMatch = true;
-                    const padded = numericDigits.padStart(4, '0');
-                    if (itemUpcDigits.endsWith(padded) || itemUpc.includes(padded)) numMatch = true;
+                while (hasMore && docs.length < 5000) {
+                    const buildQueries = (withSelect: boolean) => {
+                        const q: any[] = [Query.orderDesc('$id'), Query.limit(500)];
+                        if (withSelect) q.push(Query.select(COLD_SEARCH_SELECT_FIELDS));
+                        if (cursor) q.push(Query.cursorAfter(cursor));
+                        return q;
+                    };
+
+                    let res: any;
+                    try {
+                        res = await databases.listDocuments(DB_ID, collId, buildQueries(useSelect));
+                    } catch (selectErr) {
+                        if (useSelect) {
+                            useSelect = false;
+                            res = await databases.listDocuments(DB_ID, collId, buildQueries(false));
+                        } else {
+                            throw selectErr;
+                        }
+                    }
+
+                    if (!res.documents || res.documents.length === 0) {
+                        hasMore = false;
+                    } else {
+                        docs.push(...res.documents);
+                        cursor = res.documents[res.documents.length - 1].$id;
+                        if (res.documents.length < 500 || docs.length >= res.total) {
+                            hasMore = false;
+                        }
+                    }
                 }
+
+                coldSearchCache = { collId, fetchedAt: Date.now(), docs };
             }
 
-            return titleMatch || identityMatch || upcMatch || numMatch;
-        }).slice(0, 20);
+            pool = coldSearchCache?.docs || [];
+        }
+
+        const scored: Array<{ doc: any; score: number; createdTs: number }> = [];
+        for (const doc of pool) {
+            const res = scoreInventoryItemSearch(doc, parsed, { includeNotes: false });
+            if (res.matched) {
+                scored.push({
+                    doc,
+                    score: res.score,
+                    createdTs: new Date(doc.$createdAt || doc.createdAt || 0).getTime() || 0,
+                });
+            }
+        }
+
+        scored.sort((a, b) => {
+            if (b.score !== a.score) return b.score - a.score;
+            return b.createdTs - a.createdTs;
+        });
+
+        return scored.slice(0, 25).map((entry) => entry.doc);
     } catch (error) {
         console.warn("Search items failed:", error);
         return [];
@@ -1615,8 +1691,15 @@ export async function linkItemToPurchase(
     purchaseId: string | null,
     orderId?: string | null
 ) {
+    if (!purchaseId) {
+        return await updateInventoryItem(itemId, {
+            purchaseId: '',
+            cartId: '',
+            orderId: '',
+        });
+    }
     return await updateInventoryItem(itemId, {
-        purchaseId: purchaseId || '',
+        purchaseId,
         ...(orderId !== undefined ? { orderId: orderId || '' } : {}),
     });
 }
@@ -1686,6 +1769,8 @@ export async function deleteInventoryItem(documentId: string) {
             getCollectionId(), 
             documentId
         ));
+        coldSearchCache = null;
+        notifyInventoryRemove([documentId]);
         return true;
     } catch (error) {
         console.error("Error deleting item:", error);
@@ -1804,6 +1889,7 @@ export async function updateInventoryItem(documentId: string, updates: Partial<a
         }
         if (updates.parentLotId !== undefined) data.parentLotId = updates.parentLotId;
         if (updates.purchaseId !== undefined) data.purchaseId = updates.purchaseId === '' ? null : updates.purchaseId;
+        if (updates.cartId !== undefined) data.cartId = (updates.cartId === '' || updates.cartId === null) ? null : String(updates.cartId).trim();
         if (updates.saleId !== undefined) data.saleId = updates.saleId === '' ? null : updates.saleId;
         
         // Ensure updated items retain draft placeholders unless a locked non-draft prefix upgrades them
@@ -2199,6 +2285,8 @@ export async function updateInventoryItem(documentId: string, updates: Partial<a
             }
         }
 
+        coldSearchCache = null;
+        notifyInventoryUpsert([response]);
         return response;
     } catch (error) {
          console.error("Error updating item:", error);

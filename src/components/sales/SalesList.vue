@@ -977,8 +977,8 @@
         :isOpen="!!inspectedItem"
         :inventoryItems="inventoryItems"
         @close="closeItemInspector"
-        @saved="handleItemInspectorSaved"
-        @save="handleItemInspectorSaved"
+        @save="handleItemInspectorSave"
+        @saved="handleItemInspectorSubEvent"
       />
 
     </div>
@@ -1003,6 +1003,9 @@ import { useRicochetSalesSync } from '../../composables/useRicochetSalesSync';
 import { resolveMultiQtyCost } from '../../composables/useItemDrawerForm';
 import { client } from '../../lib/appwrite';
 import { salesApi } from '../../lib/sales';
+import { updateInventoryItem } from '../../lib/inventory';
+import { toUserMessage } from '../../lib/userFacingErrors';
+import { addToast } from '../../stores/toast';
 import { isIntentionalNoSkuOrderId } from '../../lib/salesChannels';
 import { warehousesApi, matchesLocationFilter, findFacility, resolveDefaultRicochetLocationMeta, getAllLocationSettingMetas } from '../../lib/warehouses';
 import PaginationDock from '../common/PaginationDock.vue';
@@ -1026,7 +1029,7 @@ const props = defineProps<{
 
 const { currentTeam } = useAuth();
 const { capabilities } = useMemberCapabilities();
-const { inventoryItems, fetchInventory } = useInventory();
+const { inventoryItems, fetchInventory, upsertLocalItems } = useInventory();
 
 const isSettlementRoute = computed(() => props.initialTab === 'coop');
 const canAccessSalesSurface = computed(() =>
@@ -1067,11 +1070,39 @@ const closeItemInspector = () => {
   }
 };
 
-const handleItemInspectorSaved = async () => {
-  if (currentTeam.value?.$id) {
-    await fetchInventory(currentTeam.value.$id).catch(() => {});
+const handleItemInspectorSave = async (payload: any) => {
+  const targetId = inspectedItem.value?.$id || inspectedItem.value?.id;
+  if (!targetId || !payload) {
+    try { payload?.__onSaveComplete?.(); } catch {}
+    closeItemInspector();
+    return;
   }
-  closeItemInspector();
+
+  try {
+    const updatedDoc = await updateInventoryItem(targetId, payload);
+    if (updatedDoc) {
+      inspectedItem.value = updatedDoc;
+    }
+    addToast({ type: 'success', message: '✅ Saved item changes.' });
+    closeItemInspector();
+  } catch (err: any) {
+    console.warn('[SalesList] Item save failed:', err);
+    addToast({
+      type: 'error',
+      message: toUserMessage(err, 'Could not save item changes. Please try again.')
+    });
+  } finally {
+    try { payload?.__onSaveComplete?.(); } catch {}
+  }
+};
+
+const handleItemInspectorSubEvent = (patch?: any) => {
+  if (!patch || !inspectedItem.value?.$id) return;
+  if (patch.$id) {
+    upsertLocalItems([patch]);
+  }
+  const latest = (inventoryItems.value || []).find((i: any) => i.$id === inspectedItem.value?.$id);
+  inspectedItem.value = latest || { ...inspectedItem.value, ...patch };
 };
 
 const handleRecordedSalesSaved = async ({ sales: newSales }: { sales: SaleDocument[]; linkedItemIds: string[] }) => {

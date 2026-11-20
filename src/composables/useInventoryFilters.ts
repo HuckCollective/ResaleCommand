@@ -11,6 +11,7 @@ import {
 } from '../lib/inventoryVibes';
 import { useDataFilter, type SortDirection, type FilterChip } from './useDataFilter';
 import { matchesMySkuFilter, normalizeUpcPrefix } from '../lib/curatorOwnership';
+import { parseSearchQuery, scoreInventoryItemSearch, type ProseMatchOrigin } from '../lib/searchEngine';
 
 export type InventorySortColumn = 'title' | 'cost' | 'resalePrice' | 'soldPrice' | 'soldDate' | 'margin' | 'upc' | 'vendor' | 'status' | 'location' | '$updatedAt' | '$createdAt';
 export type { SortDirection, FilterChip };
@@ -98,6 +99,7 @@ export function useInventoryFilters(
     const filterParentLotId = ref('');
     const filterPO = ref('');
     const filterSO = ref('');
+    const searchIncludeNotes = ref(false);
 
     // -- VENDOR RESOLUTION HELPER --
     const getVendorName = (item: any): string => {
@@ -333,24 +335,53 @@ export function useInventoryFilters(
         return list;
     });
 
-    // -- STATUS & HEALTH COUNTERS --
+    // -- BARCODE / OWNER SCOPE HELPER --
+    const matchesBarcodeScope = (anyItem: any, bc: string): boolean => {
+        if (!bc || bc === 'all') return true;
+        const code = (anyItem?.upc || anyItem?.locationSku || anyItem?.sku || '').trim().toUpperCase();
+        if (bc === '__mine__') {
+            const hasOwnerIdentity = Boolean(
+                options.currentUserId?.value ||
+                (options.ownedPrefixes?.value && options.ownedPrefixes.value.length > 0)
+            );
+            if (!hasOwnerIdentity) return true;
+            return matchesMySkuFilter(
+                anyItem,
+                options.ownedPrefixes?.value || [],
+                options.currentUserId?.value || ''
+            );
+        }
+        if (bc === '__missing__') return code === '';
+        if (bc === '__numeric__') return Boolean(code && /^\d+$/.test(code));
+        if (bc === '__has_barcode__') return Boolean(code);
+        return matchesPartnerPrefix(anyItem, bc);
+    };
+
+    const ownerScopedItems = computed(() => {
+        const bc = filterBarcode.value;
+        if (!bc || bc === 'all') return sourceItems.value;
+        return sourceItems.value.filter(i => matchesBarcodeScope(i, bc));
+    });
+
+    // -- STATUS & HEALTH COUNTERS (Aligned with Owner Scope & Active Stock) --
     const countActive = computed(() => {
-        return sourceItems.value.filter(i => isActiveInventory((i as any).status)).length;
+        return ownerScopedItems.value.filter(i => isActiveInventory((i as any).status)).length;
     });
 
     const countByStatus = (status: string) => {
         const target = normalizeInventoryStatus(status);
         if (target === 'received' && status.toLowerCase() === 'active') return countActive.value;
         if (status.toLowerCase() === 'active') return countActive.value;
-        return sourceItems.value.filter(i => {
+        return ownerScopedItems.value.filter(i => {
             const s = normalizeInventoryStatus((i as any).status);
             return s === target;
         }).length;
     };
 
     const countMissingPhotos = computed(() => {
-        return sourceItems.value.filter(i => {
+        return ownerScopedItems.value.filter(i => {
             const anyItem = i as any;
+            if (!isActiveInventory(anyItem.status)) return false;
             if (anyItem.imageId || (anyItem.galleryImageIds && anyItem.galleryImageIds.length > 0)) return false;
             if (anyItem.conditionNotes && (anyItem.conditionNotes.includes('[MAIN IMAGE ID:') || anyItem.conditionNotes.includes('[IMAGE_ID:'))) return false;
             return true;
@@ -358,16 +389,16 @@ export function useInventoryFilters(
     });
 
     const countMissingPricing = computed(() => {
-        return sourceItems.value.filter(i => {
+        return ownerScopedItems.value.filter(i => {
             const itm = i as any;
-            if (itm.status === 'sold' || itm.status === 'scouted') return false;
+            if (!isActiveInventory(itm.status)) return false;
             const price = parseVal(itm, 'resalePrice', 'Resale') || parseVal(itm, 'estValue', 'Est. Low') || parseVal(itm, 'listPrice', 'Est');
             return price <= 0;
         }).length;
     });
 
     const countReadyToList = computed(() => {
-        return sourceItems.value.filter(i => {
+        return ownerScopedItems.value.filter(i => {
             const itm = i as any;
             if (!['acquired', 'received'].includes(itm.status)) return false;
             if (!itm.title || itm.title.trim() === '') return false;
@@ -395,91 +426,26 @@ export function useInventoryFilters(
         }).length;
     });
 
-    // -- 2. TOKENIZED DEEP SEARCH PREDICATE OVERRIDE --
-    const inventorySearchPredicate = (item: any, q: string, rawQuery: string, _digits: string): boolean => {
-        const itemUpc = (item.upc || item.sku || '').toLowerCase();
-        const itemLocSku = (item.locationSku || '').toLowerCase();
-
-        // Multi-SKU comma-separated list search (e.g. "HUCK-1431, HUCK-0049, HUCK-1475")
-        if (rawQuery.includes(',')) {
-            const tokens = rawQuery.split(',').map(t => t.trim().toLowerCase()).filter(Boolean);
-            if (tokens.length > 1) {
-                return tokens.some(token => 
-                    itemUpc.includes(token) || 
-                    itemLocSku.includes(token) ||
-                    (item.title || '').toLowerCase().includes(token) ||
-                    (item.$id || '').toLowerCase().includes(token)
-                );
-            }
-        }
-
-        // Explicit prefix queries like 'upc:huck-', 'barcode:0012', 'sku:0ej', or 'loc:hg'
-        if (q.startsWith('upc:') || q.startsWith('barcode:') || q.startsWith('sku:')) {
-            const target = q.replace(/^(upc|barcode|sku):/, '').trim();
-            return itemUpc.includes(target) || itemLocSku.includes(target);
-        }
-        if (q.startsWith('loc:')) {
-            const target = q.replace(/^loc:/, '').trim();
-            return (item.storageLocation || '').toLowerCase().includes(target);
-        }
-
-        const tokens = q.split(/\s+/).filter(Boolean);
-        if (tokens.length === 0) return true;
-
-        const titleLower = (item.title || item.itemName || '').toLowerCase();
-        const idLower = (item.$id || '').toLowerCase();
-        const identityLower = (item.identity || '').toLowerCase();
-        const binLower = (item.storageLocation || '').toLowerCase();
-        const orderLower = (item.orderId || item.sourceOrderId || '').toLowerCase();
-        const cartLower = (item.cartId || '').toLowerCase();
-        const purchaseLower = (item.purchaseId || '').toLowerCase();
-        const sourcingLower = (item.sourcingLocation || '').toLowerCase();
-        const notesLower = (item.conditionNotes || '').toLowerCase();
-        const marketDescLower = (item.marketDescription || '').toLowerCase();
-        const componentsLower = (item.components || '').toLowerCase();
-        const vendorLower = getVendorName(item).toLowerCase();
-        const keywordsArr = Array.isArray(item.keywords) ? item.keywords.map((k: string) => String(k).toLowerCase()) : [];
-        const itemUpcDigits = itemUpc.replace(/\D/g, '');
-
-        return tokens.every(token => {
-            if (
-                titleLower.includes(token) ||
-                idLower.includes(token) ||
-                identityLower.includes(token) ||
-                itemUpc.includes(token) ||
-                itemLocSku.includes(token) ||
-                binLower.includes(token) ||
-                sourcingLower.includes(token) ||
-                orderLower.includes(token) ||
-                cartLower.includes(token) ||
-                purchaseLower.includes(token) ||
-                notesLower.includes(token) ||
-                marketDescLower.includes(token) ||
-                componentsLower.includes(token) ||
-                vendorLower.includes(token) ||
-                keywordsArr.some((k: string) => k.includes(token))
-            ) {
-                return true;
-            }
-
-            if (tokens.length === 1) {
-                if (item.cartId && matchingPurchaseIds.value.has(item.cartId)) return true;
-                if (item.purchaseId && matchingPurchaseIds.value.has(item.purchaseId)) return true;
-            }
-
-            const tokenDigits = token.replace(/\D/g, '');
-            if (tokenDigits.length >= 1 && itemUpcDigits) {
-                if (itemUpcDigits.endsWith(tokenDigits) || itemUpcDigits.includes(tokenDigits)) {
-                    return true;
-                }
-                const padded = tokenDigits.padStart(4, '0');
-                if (itemUpcDigits.endsWith(padded) || itemUpc.includes(padded)) {
-                    return true;
-                }
-            }
-
-            return false;
+    // -- 2. TOKENIZED DEEP SEARCH & RELEVANCE SCORER --
+    // Note: useDataFilter allocates searchQuery lazily below; parsedSearch reads searchQuery reactively inside computeds & predicates.
+    const evalItemSearch = (item: any, includeNotesOverride?: boolean) => {
+        const parsed = parseSearchQuery(searchQuery.value);
+        return scoreInventoryItemSearch(item, parsed, {
+            includeNotes: includeNotesOverride ?? searchIncludeNotes.value,
+            vendorName: getVendorName(item),
+            matchesPurchaseLookup: Boolean(
+                (item.cartId && matchingPurchaseIds.value.has(item.cartId)) ||
+                (item.purchaseId && matchingPurchaseIds.value.has(item.purchaseId))
+            ),
         });
+    };
+
+    const inventorySearchPredicate = (item: any, _q: string, _rawQuery: string, _digits: string): boolean => {
+        return evalItemSearch(item).matched;
+    };
+
+    const inventorySearchScorer = (item: any, _q: string, _rawQuery: string): number => {
+        return evalItemSearch(item).score;
     };
 
     // -- 3. SORT ACCESSORS --
@@ -508,6 +474,7 @@ export function useInventoryFilters(
         searchQuery,
         sortColumn,
         sortDirection,
+        hasUserSelectedSort,
         currentPage,
         pageSize,
         pageSizeOptions,
@@ -518,11 +485,14 @@ export function useInventoryFilters(
         getSortIcon
     } = useDataFilter<any>(sourceItems, {
         searchPredicate: inventorySearchPredicate,
+        searchScoreAccessor: inventorySearchScorer,
         sortAccessors: inventorySortAccessors,
         defaultSortKey: '$createdAt',
         defaultSortDirection: 'desc',
         defaultPageSize: options.defaultPageSize || 50
     });
+
+    const parsedSearch = computed(() => parseSearchQuery(searchQuery.value));
 
     // Auto-sort by soldDate DESC when viewing sold inventory
     watch(filterStatus, (newStatus, oldStatus) => {
@@ -535,8 +505,8 @@ export function useInventoryFilters(
         }
     });
 
-    // Custom filtering pipeline for inventory domain rules
-    const inventoryFilteredItems = computed(() => {
+    // Custom filtering pipeline for inventory domain rules (shared between table/grid & Spatial Bar)
+    const matchesInventoryDomainFilters = (item: any, skipLocation = false): boolean => {
         const q = searchQuery.value.trim();
         const st = filterStatus.value.toLowerCase();
         const loc = filterLocation.value;
@@ -551,193 +521,198 @@ export function useInventoryFilters(
         const doHideCombined = hideCombined.value;
         const doHideDeconstructed = hideDeconstructed.value;
 
-        // Apply pre-filter rules from generic pipeline
-        return filteredItems.value.filter(item => {
-            const anyItem = item as any;
-            const itemStatus = (anyItem.status || 'acquired').toLowerCase();
+        const anyItem = item as any;
+        const itemStatus = (anyItem.status || 'acquired').toLowerCase();
 
-            // 0. Core Exclusion: Deconstructed / Split lots
-            if (doHideDeconstructed && itemStatus === 'deconstructed' && st !== 'deconstructed') {
+        // 0. Core Exclusion: Deconstructed / Split lots
+        if (doHideDeconstructed && itemStatus === 'deconstructed' && st !== 'deconstructed') {
+            return false;
+        }
+
+        // 1. Core Exclusion: Combined / Merged items
+        if (doHideCombined && itemStatus === 'combined' && st !== 'combined') {
+            return false;
+        }
+
+        // 2. Core Exclusion: Trackers & Scouted (unacquired items)
+        if (doHideTracked && (itemStatus === 'tracked' || itemStatus === 'scouted') && st !== 'tracked') {
+            return false;
+        }
+
+        // 3. Core Exclusion: Sold items (bypassed when inspecting sold items via insight or SO filter)
+        if (doHideSold && itemStatus === 'sold' && st !== 'sold' && insight !== 'missing_sold_price' && !filterSO.value) {
+            return false;
+        }
+
+        // 4. Status Filter (Only when no insight filter forcing status)
+        if (!insight && !filterParentLotId.value) {
+            if (st === 'active') {
+                // Active Stock mode: governed directly by the exclusion flags above.
+            } else if (st === 'tracked') {
+                if (normalizeInventoryStatus(itemStatus) !== 'tracked') return false;
+            } else if (st !== 'all') {
+                if (normalizeInventoryStatus(itemStatus) !== normalizeInventoryStatus(st)) return false;
+            }
+        }
+
+        // 5. Purchase ID filter (Direct PO links)
+        if (filterPurchaseId.value && !q) {
+            const matchesPurchase = anyItem.purchaseId === filterPurchaseId.value ||
+                                    anyItem.cartId === filterPurchaseId.value ||
+                                    matchingPurchaseIds.value.has(anyItem.purchaseId) ||
+                                    matchingPurchaseIds.value.has(anyItem.cartId);
+            if (!matchesPurchase) return false;
+        }
+
+        // 6. Parent Lot ID Lineage
+        if (filterParentLotId.value) {
+            const matchesLot = (anyItem.$id && matchingLotDocIds.value.has(anyItem.$id.toLowerCase())) ||
+                               (anyItem.parentLotId && matchingLotDocIds.value.has(anyItem.parentLotId.toLowerCase())) ||
+                               (anyItem.upc && matchingLotDocIds.value.has(anyItem.upc.toLowerCase()));
+            if (!matchesLot) return false;
+        }
+
+        // 7. PO / Sourcing Order filter
+        if (filterPO.value) {
+            const target = filterPO.value.trim().toLowerCase();
+            const matchesPo = (anyItem.purchaseId && (anyItem.purchaseId.toLowerCase().includes(target) || matchingPurchaseIds.value.has(anyItem.purchaseId))) ||
+                              (anyItem.orderId && (anyItem.orderId.toLowerCase().includes(target) || matchingPurchaseIds.value.has(anyItem.orderId))) ||
+                              (anyItem.cartId && (anyItem.cartId.toLowerCase().includes(target) || matchingPurchaseIds.value.has(anyItem.cartId))) ||
+                              (anyItem.sourcingLocation && anyItem.sourcingLocation.toLowerCase().includes(target)) ||
+                              (anyItem.conditionNotes && anyItem.conditionNotes.toLowerCase().includes(target)) ||
+                              (anyItem.upc && anyItem.upc.toLowerCase().startsWith(target));
+            if (!matchesPo) return false;
+        }
+
+        // 8. SO / Sales Order filter
+        if (filterSO.value) {
+            const target = filterSO.value.trim().toLowerCase();
+            const matchesSo = (anyItem.saleId && anyItem.saleId.toLowerCase() === target) ||
+                              (anyItem.locationSku && anyItem.locationSku.toLowerCase() === target);
+            if (!matchesSo) return false;
+        }
+
+        // 9. Placed & Located filter
+        if (placedOnly) {
+            const hasLocation = !!anyItem.storageLocation || (anyItem.sellingLocations && anyItem.sellingLocations.length > 0);
+            const isPlaced = itemStatus === 'placed';
+            if (!hasLocation || !isPlaced) return false;
+        }
+
+        // 10. Location / Booth filter (supports __unassigned__, HD, HH, HG, MD, DT, and custom bins)
+        if (!skipLocation && loc && loc !== 'all' && loc.trim() !== '') {
+            if (!matchesSpatialLocation(anyItem, loc)) return false;
+        }
+
+        // 11. Sales Channel filter
+        if (ch && ch !== 'all') {
+            const rawTarget = ch.trim().toLowerCase();
+            const cleanTarget = rawTarget.replace(/[^a-z0-9]/g, '');
+            const matchesLoc = (val: any): boolean => {
+                if (!val) return false;
+                if (Array.isArray(val)) return val.some(v => matchesLoc(v));
+                const str = String(val).trim().toLowerCase();
+                const cleanStr = str.replace(/[^a-z0-9]/g, '');
+                return str === rawTarget || cleanStr === cleanTarget || (cleanTarget.length > 2 && (cleanStr.includes(cleanTarget) || cleanTarget.includes(cleanStr)));
+            };
+            if (!matchesLoc(anyItem.sellingLocations)) return false;
+        }
+
+        // 12. Barcode / Partner Prefix / 0EJ filter
+        if (bc && bc !== 'all') {
+            if (!matchesBarcodeScope(anyItem, bc)) return false;
+        }
+
+        // 12b. Operational Smart Queue filter
+        if (queue) {
+            if (!matchesSmartQueue(anyItem, queue)) return false;
+        }
+
+        // 13. Lot Type filter
+        if (lot === 'lots_only') {
+            const isLot = anyItem.quantity > 1 || (anyItem.title && anyItem.title.toLowerCase().startsWith('lot of'));
+            if (!isLot) return false;
+        } else if (lot === 'extracted_only') {
+            if (!anyItem.parentLotId) return false;
+        } else if (lot === 'standalone_only') {
+            if (anyItem.parentLotId || anyItem.quantity > 1 || (anyItem.title && anyItem.title.toLowerCase().startsWith('lot of'))) {
                 return false;
             }
+        }
 
-            // 1. Core Exclusion: Combined / Merged items
-            if (doHideCombined && itemStatus === 'combined' && st !== 'combined') {
-                return false;
+        // 14. Tag / Keyword Filters
+        if (filterKeywords.value.length > 0) {
+            if (!anyItem.keywords || anyItem.keywords.length === 0) return false;
+            const itemKeywordsLower = anyItem.keywords.map((k: string) => k.toLowerCase());
+            const hasAllKeywords = filterKeywords.value.every(kw => itemKeywordsLower.includes(kw.toLowerCase()));
+            if (!hasAllKeywords) return false;
+        }
+
+        // 15. AI Health Insights
+        if (insight) {
+            if (insight === 'missing_sold_price') {
+                const hasSoldOrTagPrice =
+                    parseVal(anyItem, 'soldPrice', 'Sold') ||
+                    parseVal(anyItem, 'resalePrice', 'Resale') ||
+                    parseVal(anyItem, 'listPrice', 'Est') ||
+                    parseVal(anyItem, 'price', 'Sold');
+                if (itemStatus !== 'sold' || hasSoldOrTagPrice) return false;
+            } else if (insight === 'missing_est_value' || insight === 'missing_pricing') {
+                if (itemStatus === 'sold' || (parseVal(anyItem, 'resalePrice', 'Resale') || parseVal(anyItem, 'estValue', 'Est. Low') || parseVal(anyItem, 'listPrice', 'Est'))) return false;
+            } else if (insight === 'missing_cost') {
+                if (itemStatus === 'sold' || (parseVal(anyItem, 'cost', 'Paid') || parseVal(anyItem, 'purchasePrice', 'Paid'))) return false;
+            } else if (insight === 'missing_description') {
+                if (anyItem.marketDescription && anyItem.marketDescription.length >= 10) return false;
+            } else if (insight === 'missing_photos') {
+                if (anyItem.imageId || (anyItem.galleryImageIds && anyItem.galleryImageIds.length > 0)) return false;
+                if (anyItem.conditionNotes && (anyItem.conditionNotes.includes('[MAIN IMAGE ID:') || anyItem.conditionNotes.includes('[IMAGE_ID:'))) return false;
+            } else if (insight === 'ready_to_list') {
+                if (!['acquired', 'received'].includes(itemStatus)) return false;
+                if (!anyItem.title || anyItem.title.trim() === '') return false;
+                if (!parseVal(anyItem, 'resalePrice', 'Resale') && !parseVal(anyItem, 'estValue', 'Est. Low')) return false;
+                const hasPhoto = anyItem.imageId || (anyItem.galleryImageIds && anyItem.galleryImageIds.length > 0) || (anyItem.conditionNotes && (anyItem.conditionNotes.includes('[MAIN IMAGE ID:') || anyItem.conditionNotes.includes('[IMAGE_ID:')));
+                if (!hasPhoto) return false;
+            } else if (insight === 'needs_shop_update') {
+                const hasFlag = Array.isArray(anyItem.redFlags) && anyItem.redFlags.includes('needs_shop_update');
+                const hasNote = typeof anyItem.conditionNotes === 'string' && anyItem.conditionNotes.includes('[NEEDS_SHOP_UPDATE]');
+                if (!hasFlag && !hasNote) return false;
             }
+        }
 
-            // 2. Core Exclusion: Trackers & Scouted (unacquired items)
-            if (doHideTracked && (itemStatus === 'tracked' || itemStatus === 'scouted') && st !== 'tracked') {
-                return false;
-            }
+        return true;
+    };
 
-            // 3. Core Exclusion: Sold items (bypassed when inspecting sold items via insight or SO filter)
-            if (doHideSold && itemStatus === 'sold' && st !== 'sold' && insight !== 'missing_sold_price' && !filterSO.value) {
-                return false;
-            }
-
-            // 4. Status Filter (Only when no insight filter forcing status)
-            if (!insight && !filterParentLotId.value) {
-                if (st === 'active') {
-                    // Active Stock mode: governed directly by the exclusion flags above.
-                } else if (st === 'tracked') {
-                    if (normalizeInventoryStatus(itemStatus) !== 'tracked') return false;
-                } else if (st !== 'all') {
-                    if (normalizeInventoryStatus(itemStatus) !== normalizeInventoryStatus(st)) return false;
-                }
-            }
-
-            // 5. Purchase ID filter (Direct PO links)
-            if (filterPurchaseId.value && !q) {
-                const matchesPurchase = anyItem.purchaseId === filterPurchaseId.value ||
-                                        anyItem.cartId === filterPurchaseId.value ||
-                                        matchingPurchaseIds.value.has(anyItem.purchaseId) ||
-                                        matchingPurchaseIds.value.has(anyItem.cartId);
-                if (!matchesPurchase) return false;
-            }
-
-            // 6. Parent Lot ID Lineage
-            if (filterParentLotId.value) {
-                const matchesLot = (anyItem.$id && matchingLotDocIds.value.has(anyItem.$id.toLowerCase())) ||
-                                   (anyItem.parentLotId && matchingLotDocIds.value.has(anyItem.parentLotId.toLowerCase())) ||
-                                   (anyItem.upc && matchingLotDocIds.value.has(anyItem.upc.toLowerCase()));
-                if (!matchesLot) return false;
-            }
-
-            // 7. PO / Sourcing Order filter
-            if (filterPO.value) {
-                const target = filterPO.value.trim().toLowerCase();
-                const matchesPo = (anyItem.purchaseId && (anyItem.purchaseId.toLowerCase().includes(target) || matchingPurchaseIds.value.has(anyItem.purchaseId))) ||
-                                  (anyItem.orderId && (anyItem.orderId.toLowerCase().includes(target) || matchingPurchaseIds.value.has(anyItem.orderId))) ||
-                                  (anyItem.cartId && (anyItem.cartId.toLowerCase().includes(target) || matchingPurchaseIds.value.has(anyItem.cartId))) ||
-                                  (anyItem.sourcingLocation && anyItem.sourcingLocation.toLowerCase().includes(target)) ||
-                                  (anyItem.conditionNotes && anyItem.conditionNotes.toLowerCase().includes(target)) ||
-                                  (anyItem.upc && anyItem.upc.toLowerCase().startsWith(target));
-                if (!matchesPo) return false;
-            }
-
-            // 8. SO / Sales Order filter
-            if (filterSO.value) {
-                const target = filterSO.value.trim().toLowerCase();
-                const matchesSo = (anyItem.saleId && anyItem.saleId.toLowerCase() === target) ||
-                                  (anyItem.locationSku && anyItem.locationSku.toLowerCase() === target);
-                if (!matchesSo) return false;
-            }
-
-            // 9. Placed & Located filter
-            if (placedOnly) {
-                const hasLocation = !!anyItem.storageLocation || (anyItem.sellingLocations && anyItem.sellingLocations.length > 0);
-                const isPlaced = itemStatus === 'placed';
-                if (!hasLocation || !isPlaced) return false;
-            }
-
-            // 10. Location / Booth filter (supports __unassigned__, HD, HH, HG, MD, DT, and custom bins)
-            if (loc && loc !== 'all' && loc.trim() !== '') {
-                if (!matchesSpatialLocation(anyItem, loc)) return false;
-            }
-
-            // 11. Sales Channel filter
-            if (ch && ch !== 'all') {
-                const rawTarget = ch.trim().toLowerCase();
-                const cleanTarget = rawTarget.replace(/[^a-z0-9]/g, '');
-                const matchesLoc = (val: any): boolean => {
-                    if (!val) return false;
-                    if (Array.isArray(val)) return val.some(v => matchesLoc(v));
-                    const str = String(val).trim().toLowerCase();
-                    const cleanStr = str.replace(/[^a-z0-9]/g, '');
-                    return str === rawTarget || cleanStr === cleanTarget || (cleanTarget.length > 2 && (cleanStr.includes(cleanTarget) || cleanTarget.includes(cleanStr)));
-                };
-                if (!matchesLoc(anyItem.sellingLocations)) return false;
-            }
-
-            // 12. Barcode / Partner Prefix / 0EJ filter
-            if (bc && bc !== 'all') {
-                const code = (anyItem.upc || anyItem.locationSku || anyItem.sku || '').trim().toUpperCase();
-                if (bc === '__mine__') {
-                    const hasOwnerIdentity = Boolean(
-                        options.currentUserId?.value ||
-                        (options.ownedPrefixes?.value && options.ownedPrefixes.value.length > 0)
-                    );
-                    if (
-                        hasOwnerIdentity &&
-                        !matchesMySkuFilter(
-                            anyItem,
-                            options.ownedPrefixes?.value || [],
-                            options.currentUserId?.value || ''
-                        )
-                    ) {
-                        return false;
-                    }
-                } else if (bc === '__missing__') {
-                    if (code !== '') return false;
-                } else if (bc === '__numeric__') {
-                    if (!code || !/^\d+$/.test(code)) return false;
-                } else if (bc === '__has_barcode__') {
-                    if (!code) return false;
-                } else {
-                    if (!matchesPartnerPrefix(anyItem, bc)) return false;
-                }
-            }
-
-            // 12b. Operational Smart Queue filter
-            if (queue) {
-                if (!matchesSmartQueue(anyItem, queue)) return false;
-            }
-
-            // 13. Lot Type filter
-            if (lot === 'lots_only') {
-                const isLot = anyItem.quantity > 1 || (anyItem.title && anyItem.title.toLowerCase().startsWith('lot of'));
-                if (!isLot) return false;
-            } else if (lot === 'extracted_only') {
-                if (!anyItem.parentLotId) return false;
-            } else if (lot === 'standalone_only') {
-                if (anyItem.parentLotId || anyItem.quantity > 1 || (anyItem.title && anyItem.title.toLowerCase().startsWith('lot of'))) {
-                    return false;
-                }
-            }
-
-            // 14. Tag / Keyword Filters
-            if (filterKeywords.value.length > 0) {
-                if (!anyItem.keywords || anyItem.keywords.length === 0) return false;
-                const itemKeywordsLower = anyItem.keywords.map((k: string) => k.toLowerCase());
-                const hasAllKeywords = filterKeywords.value.every(kw => itemKeywordsLower.includes(kw.toLowerCase()));
-                if (!hasAllKeywords) return false;
-            }
-
-            // 15. AI Health Insights
-            if (insight) {
-                if (insight === 'missing_sold_price') {
-                    const hasSoldOrTagPrice =
-                        parseVal(anyItem, 'soldPrice', 'Sold') ||
-                        parseVal(anyItem, 'resalePrice', 'Resale') ||
-                        parseVal(anyItem, 'listPrice', 'Est') ||
-                        parseVal(anyItem, 'price', 'Sold');
-                    if (itemStatus !== 'sold' || hasSoldOrTagPrice) return false;
-                } else if (insight === 'missing_est_value' || insight === 'missing_pricing') {
-                    if (itemStatus === 'sold' || (parseVal(anyItem, 'resalePrice', 'Resale') || parseVal(anyItem, 'estValue', 'Est. Low') || parseVal(anyItem, 'listPrice', 'Est'))) return false;
-                } else if (insight === 'missing_cost') {
-                    if (itemStatus === 'sold' || (parseVal(anyItem, 'cost', 'Paid') || parseVal(anyItem, 'purchasePrice', 'Paid'))) return false;
-                } else if (insight === 'missing_description') {
-                    if (anyItem.marketDescription && anyItem.marketDescription.length >= 10) return false;
-                } else if (insight === 'missing_photos') {
-                    if (anyItem.imageId || (anyItem.galleryImageIds && anyItem.galleryImageIds.length > 0)) return false;
-                    if (anyItem.conditionNotes && (anyItem.conditionNotes.includes('[MAIN IMAGE ID:') || anyItem.conditionNotes.includes('[IMAGE_ID:'))) return false;
-                } else if (insight === 'ready_to_list') {
-                    if (!['acquired', 'received'].includes(itemStatus)) return false;
-                    if (!anyItem.title || anyItem.title.trim() === '') return false;
-                    if (!parseVal(anyItem, 'resalePrice', 'Resale') && !parseVal(anyItem, 'estValue', 'Est. Low')) return false;
-                    const hasPhoto = anyItem.imageId || (anyItem.galleryImageIds && anyItem.galleryImageIds.length > 0) || (anyItem.conditionNotes && (anyItem.conditionNotes.includes('[MAIN IMAGE ID:') || anyItem.conditionNotes.includes('[IMAGE_ID:')));
-                    if (!hasPhoto) return false;
-                } else if (insight === 'needs_shop_update') {
-                    const hasFlag = Array.isArray(anyItem.redFlags) && anyItem.redFlags.includes('needs_shop_update');
-                    const hasNote = typeof anyItem.conditionNotes === 'string' && anyItem.conditionNotes.includes('[NEEDS_SHOP_UPDATE]');
-                    if (!hasFlag && !hasNote) return false;
-                }
-            }
-
-            return true;
-        });
+    const inventoryFilteredItems = computed(() => {
+        return filteredItems.value.filter(item => matchesInventoryDomainFilters(item, false));
     });
+
+    const spatialScopedItems = computed(() => {
+        return filteredItems.value.filter(item => matchesInventoryDomainFilters(item, true));
+    });
+
+    const proseOnlyMatchCount = computed<number>(() => {
+        const ps = parsedSearch.value;
+        if (ps.isEmpty || searchIncludeNotes.value || ps.isMultiSkuList || ps.prefix) {
+            return 0;
+        }
+        let count = 0;
+        for (const item of sourceItems.value) {
+            if (!matchesInventoryDomainFilters(item, false)) continue;
+            if (!evalItemSearch(item, false).matched && evalItemSearch(item, true).matched) {
+                count++;
+            }
+        }
+        return count;
+    });
+
+    const getSearchMatchOrigin = (item: any): ProseMatchOrigin | null => {
+        const ps = parsedSearch.value;
+        if (ps.isEmpty) return null;
+        if (!searchIncludeNotes.value && ps.prefix !== 'notes' && ps.prefix !== 'desc') {
+            return null;
+        }
+        return evalItemSearch(item).proseOrigin;
+    };
 
     // Paged slice for grid and table
     const inventoryPagedItems = computed(() => {
@@ -766,7 +741,8 @@ export function useInventoryFilters(
         filterPurchaseId,
         filterParentLotId,
         filterPO,
-        filterSO
+        filterSO,
+        searchIncludeNotes
     ], () => {
         currentPage.value = 1;
     }, { deep: true });
@@ -993,6 +969,14 @@ export function useInventoryFilters(
             });
         }
 
+        if (searchIncludeNotes.value) {
+            chips.push({
+                id: 'includeNotes',
+                label: 'Incl. Descriptions & Notes',
+                onRemove: () => { searchIncludeNotes.value = false; }
+            });
+        }
+
         return chips;
     });
 
@@ -1016,11 +1000,14 @@ export function useInventoryFilters(
         if (filterPO.value) c++;
         if (filterSO.value) c++;
         if (searchQuery.value.trim()) c++;
+        if (searchIncludeNotes.value) c++;
         return c;
     });
 
     const clearFilters = () => {
         searchQuery.value = '';
+        searchIncludeNotes.value = false;
+        hasUserSelectedSort.value = false;
         filterStatus.value = 'active';
         filterLocation.value = 'all';
         filterChannel.value = 'all';
@@ -1054,6 +1041,9 @@ export function useInventoryFilters(
         }
         if (p.has('search') || p.has('q')) {
             searchQuery.value = p.get('search') || p.get('q') || '';
+        }
+        if (p.get('includeNotes') === '1' || p.get('includeNotes') === 'true') {
+            searchIncludeNotes.value = true;
         }
         if (p.has('purchaseId')) {
             filterPurchaseId.value = p.get('purchaseId') || '';
@@ -1112,6 +1102,9 @@ export function useInventoryFilters(
     return {
         // Core State & Aliases
         searchQuery,
+        searchIncludeNotes,
+        proseOnlyMatchCount,
+        getSearchMatchOrigin,
         filterStatus,
         filterLocation,
         filterBinLocation: filterLocation, // Alias for InventoryManager
@@ -1139,6 +1132,7 @@ export function useInventoryFilters(
         // Sorting
         sortColumn,
         sortDirection,
+        hasUserSelectedSort,
         setSort,
         getSortIcon,
         // Option Lists
@@ -1167,6 +1161,7 @@ export function useInventoryFilters(
         // Filtered Lists & Pagination
         filteredItems: inventoryFilteredItems,
         filteredInventory: inventoryFilteredItems, // Alias for InventoryManager
+        spatialScopedItems,
         pagedItems: inventoryPagedItems,
         pagedInventory: inventoryPagedItems, // Alias for InventoryTableView
         displayedInventory: inventoryPagedItems, // Alias for InventoryManager

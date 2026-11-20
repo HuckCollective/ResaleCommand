@@ -5,8 +5,9 @@ import { useLoader } from './useLoader';
 
 import { isAlphaMode } from '../stores/env';
 import { generateAutoUpc, isValidOrgUpc, getCollectionId, DB_ID } from '../lib/inventory';
+import { registerInventoryStoreBridge } from '../lib/searchEngine';
 
-// Shared state for the general inventory view (shallowRef avoids deep reactive proxies on 60KB rawAnalysis across 1,494 items)
+// Shared state for the general inventory view (shallowRef avoids deep reactive proxies on 60KB rawAnalysis across 1,900+ items)
 const inventoryItems = shallowRef<Models.Document[]>([]);
 const totalItems = ref(0);
 const loading = ref(false);
@@ -15,6 +16,111 @@ let currentTeamId: string | null = null;
 let unsubscribe: (() => void) | null = null;
 const generatingProgress = ref(0);
 const generatingTotal = ref(0);
+
+// Anti-clobber mutation tracking & generation-safe fetch guards
+const localMutationTimestamps = new Map<string, number>();
+const localRemovedTimestamps = new Map<string, number>();
+let activeFetchGeneration = 0;
+let pendingFollowUpTeamId: string | null = null;
+
+const itemByIdMap = computed<Map<string, Models.Document>>(() => {
+    const map = new Map<string, Models.Document>();
+    for (const item of inventoryItems.value) {
+        if (item?.$id) map.set(item.$id, item);
+    }
+    return map;
+});
+
+/**
+ * ShallowRef-safe canonical mutators: always assign a new array reference (and new modified item objects)
+ * so every downstream computed (filters, Spatial Bar, Queues, Health Audit, Trays) updates synchronously.
+ */
+export function upsertLocalItems(docs: any[]): void {
+    if (!Array.isArray(docs) || docs.length === 0) return;
+    const now = Date.now();
+    const next = [...inventoryItems.value];
+    const indexById = new Map<string, number>();
+    for (let i = 0; i < next.length; i++) {
+        const id = next[i]?.$id;
+        if (id) indexById.set(id, i);
+    }
+
+    let changed = false;
+    for (const doc of docs) {
+        if (!doc || typeof doc !== 'object' || !doc.$id) continue;
+        localMutationTimestamps.set(doc.$id, now);
+        localRemovedTimestamps.delete(doc.$id);
+        const existingIdx = indexById.get(doc.$id);
+        if (existingIdx !== undefined) {
+            next[existingIdx] = { ...next[existingIdx], ...doc };
+            changed = true;
+        } else {
+            next.unshift(doc);
+            indexById.clear();
+            for (let i = 0; i < next.length; i++) {
+                if (next[i]?.$id) indexById.set(next[i].$id, i);
+            }
+            totalItems.value++;
+            changed = true;
+        }
+    }
+
+    if (changed) {
+        inventoryItems.value = next;
+    }
+}
+
+export function patchLocalItems(ids: string[], updates: Record<string, any>): void {
+    if (!Array.isArray(ids) || ids.length === 0 || !updates) return;
+    const idSet = new Set(ids.filter((id) => typeof id === 'string' && id.trim().length > 0));
+    if (idSet.size === 0) return;
+
+    const now = Date.now();
+    const isoNow = new Date(now).toISOString();
+    let changed = false;
+
+    const next = inventoryItems.value.map((item) => {
+        if (!item || !idSet.has(item.$id)) return item;
+        changed = true;
+        localMutationTimestamps.set(item.$id, now);
+        localRemovedTimestamps.delete(item.$id);
+        return {
+            ...item,
+            ...updates,
+            $updatedAt: updates.$updatedAt || isoNow,
+        };
+    });
+
+    if (changed) {
+        inventoryItems.value = next;
+    }
+}
+
+export function removeLocalItems(ids: string[]): void {
+    if (!Array.isArray(ids) || ids.length === 0) return;
+    const idSet = new Set(ids.filter((id) => typeof id === 'string' && id.trim().length > 0));
+    if (idSet.size === 0) return;
+
+    const now = Date.now();
+    for (const id of idSet) {
+        localRemovedTimestamps.set(id, now);
+        localMutationTimestamps.delete(id);
+    }
+
+    const before = inventoryItems.value.length;
+    const next = inventoryItems.value.filter((item) => item && !idSet.has(item.$id));
+    if (next.length !== before) {
+        inventoryItems.value = next;
+        totalItems.value = Math.max(0, totalItems.value - (before - next.length));
+    }
+}
+
+registerInventoryStoreBridge({
+    getSnapshot: () => inventoryItems.value,
+    upsert: upsertLocalItems,
+    patch: patchLocalItems,
+    remove: removeLocalItems,
+});
 
 export function useInventory() {
     
@@ -26,32 +132,18 @@ export function useInventory() {
         unsubscribe = client.subscribe(
             `databases.${DB_ID}.collections.${getCollectionId()}.documents`,
             (response) => {
-                const eventType = response.events[0];
+                const events = Array.isArray(response.events) ? response.events : [];
                 const item = response.payload as Models.Document;
+                if (!item || !item.$id) return;
 
                 // 1. Filter by Tenant (Security/Relevance)
                 if (currentTeamId && (item as any).tenantId !== currentTeamId) return;
 
-                // 2. Handle Events
-                if (eventType.includes('.create')) {
-                    // Check if already exists (prevent duplicates if local optimistic update happened)
-                    if (!inventoryItems.value.find(i => i.$id === item.$id)) {
-                        inventoryItems.value = [item, ...inventoryItems.value];
-                    }
-                    totalItems.value++;
-                } else if (eventType.includes('.update')) {
-                    const idx = inventoryItems.value.findIndex(i => i.$id === item.$id);
-                    if (idx !== -1) {
-                        const next = [...inventoryItems.value];
-                        next[idx] = { ...next[idx], ...item };
-                        inventoryItems.value = next;
-                    } else {
-                        // Moved into view (e.g. status change)? Add to top
-                        inventoryItems.value = [item, ...inventoryItems.value];
-                    }
-                } else if (eventType.includes('.delete')) {
-                    inventoryItems.value = inventoryItems.value.filter(i => i.$id !== item.$id);
-                    totalItems.value--;
+                // 2. Handle Events via shallowRef-safe mutators
+                if (events.some((e) => e.includes('.create')) || events.some((e) => e.includes('.update'))) {
+                    upsertLocalItems([item]);
+                } else if (events.some((e) => e.includes('.delete'))) {
+                    removeLocalItems([item.$id]);
                 }
             }
         );
@@ -66,18 +158,22 @@ export function useInventory() {
     let fetchPromise: Promise<void> | null = null;
 
     const fetchInventory = async (teamId?: string) => {
-        if (teamId !== undefined) currentTeamId = teamId;
-
-        // If already fetching, return existing promise to avoid duplicate concurrent loops
+        // If already fetching, queue a single follow-up fetch instead of dropping post-save refreshes
         if (loading.value && fetchPromise) {
+            pendingFollowUpTeamId = teamId !== undefined ? teamId : (currentTeamId ?? '');
             return fetchPromise;
         }
 
+        if (teamId !== undefined) currentTeamId = teamId;
+
         loading.value = true;
         error.value = null;
+        const myGen = ++activeFetchGeneration;
+        const fetchStartedAt = Date.now();
         
-        const { showLoader, updateLoader, hideLoader } = useLoader();
-        if (inventoryItems.value.length === 0) {
+        const { showLoader, hideLoader } = useLoader();
+        const isInitialColdLoad = inventoryItems.value.length === 0;
+        if (isInitialColdLoad) {
             showLoader("Loading Inventory...");
         }
         
@@ -87,7 +183,7 @@ export function useInventory() {
                 let cursor: string | null = null;
                 let hasMoreItems = true;
                 let total = 0;
-                const pageSize = 100;
+                const pageSize = 500;
 
                 while (hasMoreItems) {
                     const queries: any[] = [
@@ -113,9 +209,15 @@ export function useInventory() {
                     totalItems.value = total;
 
                     if (response.documents.length > 0) {
+                        const isFirstBatch = allDocs.length === 0;
                         allDocs.push(...response.documents);
                         cursor = response.documents[response.documents.length - 1].$id;
-                        inventoryItems.value = [...allDocs];
+
+                        // Paint Batch 1 immediately (<400ms) & release full-screen loader; remaining batches commit once at end
+                        if (isFirstBatch && isInitialColdLoad && inventoryItems.value.length === 0) {
+                            inventoryItems.value = [...allDocs];
+                            hideLoader();
+                        }
                     }
 
                     console.log(`[useInventory] Batch: ${response.documents.length}, Accumulated: ${allDocs.length}, Collection total: ${total} (${getCollectionId()})`);
@@ -126,14 +228,48 @@ export function useInventory() {
                     }
                 }
 
-                // Deterministic stable sort by intake creation date ($createdAt DESC) so editing an item never jumps its position
-                allDocs.sort((a: any, b: any) => {
-                    const aTime = new Date(a.$createdAt || a.createdAt || 0).getTime();
-                    const bTime = new Date(b.$createdAt || b.createdAt || 0).getTime();
-                    return bTime - aTime;
-                });
+                if (myGen === activeFetchGeneration) {
+                    // Anti-clobber guard: preserve any local creates, edits, or deletes made while this fetch was in flight
+                    const mergedMap = new Map<string, Models.Document>();
+                    for (const doc of allDocs) {
+                        if (doc?.$id) mergedMap.set(doc.$id, doc);
+                    }
+                    for (const localDoc of inventoryItems.value) {
+                        const id = localDoc?.$id;
+                        if (!id) continue;
+                        const mutTs = localMutationTimestamps.get(id) || 0;
+                        if (mutTs >= fetchStartedAt) {
+                            const fetchedDoc = mergedMap.get(id);
+                            if (!fetchedDoc) {
+                                const delTs = localRemovedTimestamps.get(id) || 0;
+                                if (delTs < mutTs) mergedMap.set(id, localDoc);
+                            } else {
+                                const localTime = new Date(localDoc.$updatedAt || 0).getTime();
+                                const fetchedTime = new Date(fetchedDoc.$updatedAt || 0).getTime();
+                                if (localTime >= fetchedTime) {
+                                    mergedMap.set(id, { ...fetchedDoc, ...localDoc });
+                                }
+                            }
+                        }
+                    }
+                    for (const [delId, delTs] of localRemovedTimestamps.entries()) {
+                        if (delTs >= fetchStartedAt && (localMutationTimestamps.get(delId) || 0) <= delTs) {
+                            mergedMap.delete(delId);
+                        }
+                    }
 
-                inventoryItems.value = allDocs;
+                    const mergedDocs = Array.from(mergedMap.values());
+                    // Deterministic stable sort by intake creation date ($createdAt DESC) so editing an item never jumps its position
+                    mergedDocs.sort((a: any, b: any) => {
+                        const aTime = new Date(a.$createdAt || a.createdAt || 0).getTime();
+                        const bTime = new Date(b.$createdAt || b.createdAt || 0).getTime();
+                        return bTime - aTime;
+                    });
+
+                    inventoryItems.value = mergedDocs;
+                    totalItems.value = Math.max(total, mergedDocs.length);
+                }
+
                 initRealtime();
                 hasMore.value = false;
             } catch (e: any) {
@@ -144,6 +280,12 @@ export function useInventory() {
                 fetchPromise = null;
                 // Hide the global Vue loader
                 hideLoader();
+
+                if (pendingFollowUpTeamId !== null) {
+                    const nextTeam = pendingFollowUpTeamId || undefined;
+                    pendingFollowUpTeamId = null;
+                    void fetchInventory(nextTeam);
+                }
             }
         })();
 
@@ -158,9 +300,8 @@ export function useInventory() {
      * Add an item to the local list (optimistic update or after creation)
      */
     const addLocalItem = (item: Models.Document) => {
-        // Prevent dupes
-        if (!inventoryItems.value.find(i => i.$id === item.$id)) {
-             inventoryItems.value = [item, ...inventoryItems.value];
+        if (item?.$id) {
+            upsertLocalItems([item]);
         }
     };
 
@@ -208,7 +349,7 @@ export function useInventory() {
                         }
                     }
                 }
-                item.upc = newUpc; // Update local state for immediate UI reflection
+                patchLocalItems([item.$id], { upc: newUpc }); // Update shallowRef immutably for immediate UI reflection
                 updatedCount++;
                 generatingProgress.value = updatedCount;
                 
@@ -266,6 +407,7 @@ export function useInventory() {
 
     return {
         inventoryItems,
+        itemByIdMap,
         totalItems,
         loading,
         error,
@@ -273,6 +415,9 @@ export function useInventory() {
         fetchInventory,
         loadNextPage,
         addLocalItem,
+        upsertLocalItems,
+        patchLocalItems,
+        removeLocalItems,
         generateUpcs,
         getNextUpc,
         generatingProgress,

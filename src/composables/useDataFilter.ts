@@ -13,6 +13,8 @@ export interface DataFilterOptions<T> {
     searchFields?: (keyof T | string)[];
     /** Custom search predicate override */
     searchPredicate?: (item: T, query: string, rawQuery: string, digits: string) => boolean;
+    /** Optional relevance score accessor used during active text searches */
+    searchScoreAccessor?: (item: T, query: string, rawQuery: string) => number;
     /** Initial sort key */
     defaultSortKey?: string;
     /** Initial sort direction */
@@ -43,6 +45,7 @@ export function useDataFilter<T extends Record<string, any>>(
     // 2. Sorting
     const sortColumn = ref<string>(options.defaultSortKey || '$updatedAt');
     const sortDirection = ref<SortDirection>(options.defaultSortDirection || 'desc');
+    const hasUserSelectedSort = ref(false);
 
     // 3. Dynamic Filter State
     const activeFilters = ref<Record<string, any>>({ ...(options.defaultFilters || {}) });
@@ -54,6 +57,7 @@ export function useDataFilter<T extends Record<string, any>>(
 
     // Helper to toggle or set sort
     const setSort = (col: string) => {
+        hasUserSelectedSort.value = true;
         if (sortColumn.value === col) {
             sortDirection.value = sortDirection.value === 'asc' ? 'desc' : 'asc';
         } else {
@@ -80,6 +84,7 @@ export function useDataFilter<T extends Record<string, any>>(
     const resetFilters = () => {
         searchQuery.value = '';
         activeFilters.value = { ...(options.defaultFilters || {}) };
+        hasUserSelectedSort.value = false;
     };
 
     // Default comparator for sorting
@@ -140,26 +145,49 @@ export function useDataFilter<T extends Record<string, any>>(
         });
 
         // Step B: Sort
-        return filtered.sort((a, b) => {
-            const col = sortColumn.value;
-            let valA: any;
-            let valB: any;
+        const defaultCol = options.defaultSortKey || '$updatedAt';
+        const defaultDir = options.defaultSortDirection || 'desc';
+        const col = sortColumn.value;
+        const shouldSortByRelevance = Boolean(
+            rawQuery &&
+            options.searchScoreAccessor &&
+            (col === 'relevance' ||
+                (!hasUserSelectedSort.value && col === defaultCol && sortDirection.value === defaultDir))
+        );
 
-            if (options.sortAccessors && options.sortAccessors[col]) {
-                valA = options.sortAccessors[col](a);
-                valB = options.sortAccessors[col](b);
-            } else {
-                valA = a[col];
-                valB = b[col];
-
-                // Auto-detect date fields
-                if (col.includes('At') || col.includes('Date') || col === '$createdAt' || col === '$updatedAt') {
-                    valA = new Date(valA || a.$updatedAt || a.$createdAt || 0).getTime();
-                    valB = new Date(valB || b.$updatedAt || b.$createdAt || 0).getTime();
-                }
+        const resolveSortValue = (item: T, targetCol: string) => {
+            if (options.sortAccessors && options.sortAccessors[targetCol]) {
+                return options.sortAccessors[targetCol](item);
             }
+            const rawVal = item[targetCol];
+            if (
+                targetCol.includes('At') ||
+                targetCol.includes('Date') ||
+                targetCol === '$createdAt' ||
+                targetCol === '$updatedAt'
+            ) {
+                return new Date(rawVal || item.$updatedAt || item.$createdAt || 0).getTime();
+            }
+            return rawVal;
+        };
 
-            return compareValues(valA, valB, sortDirection.value);
+        if (shouldSortByRelevance && options.searchScoreAccessor) {
+            const scoreMap = new Map<T, number>();
+            for (const item of filtered) {
+                scoreMap.set(item, options.searchScoreAccessor(item, q, rawQuery));
+            }
+            return filtered.sort((a, b) => {
+                const scoreDiff = (scoreMap.get(b) || 0) - (scoreMap.get(a) || 0);
+                if (scoreDiff !== 0) return scoreDiff;
+                return compareValues(resolveSortValue(a, defaultCol), resolveSortValue(b, defaultCol), defaultDir);
+            });
+        }
+
+        const effectiveCol = col === 'relevance' ? defaultCol : col;
+        const effectiveDir = col === 'relevance' ? defaultDir : sortDirection.value;
+
+        return filtered.sort((a, b) => {
+            return compareValues(resolveSortValue(a, effectiveCol), resolveSortValue(b, effectiveCol), effectiveDir);
         });
     });
 
@@ -183,6 +211,7 @@ export function useDataFilter<T extends Record<string, any>>(
         searchQuery,
         sortColumn,
         sortDirection,
+        hasUserSelectedSort,
         activeFilters,
         currentPage,
         pageSize,

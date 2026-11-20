@@ -2,6 +2,7 @@ import { ref } from 'vue';
 import { Permission, Role, type Models } from 'appwrite';
 import { databases, ID, Query } from '../lib/appwrite';
 import { updateInventoryItem, deleteInventoryItem, getCollectionId, DB_ID } from '../lib/inventory';
+import { notifyInventoryPatch, notifyInventoryRemove, notifyInventoryUpsert } from '../lib/searchEngine';
 import { generateGenericCsv, generateEbayCsv, generatePoshmarkCsv, generateRicochetCsv, downloadCsv } from '../lib/exportUtils';
 import { withRateLimitRetry } from '../lib/retry';
 import { syncPurchaseStatusForItems } from '../lib/purchases';
@@ -60,6 +61,7 @@ export function useInventoryBulkActions(onSuccess?: (affectedIds?: string[], upd
                             message: `Successfully moved ${count} items to "${targetLocation}".` 
                         });
                         bulkLocationTarget.value = '';
+                        notifyInventoryPatch(itemIds, { storageLocation: targetLocation });
                         if (onSuccess) await onSuccess(itemIds, { storageLocation: targetLocation });
                         return true;
                     }
@@ -161,6 +163,7 @@ export function useInventoryBulkActions(onSuccess?: (affectedIds?: string[], upd
                             message: `Updated status to "${targetStatus}" for ${count} items.` 
                         });
                         bulkStatusTarget.value = '';
+                        notifyInventoryPatch(itemIds, { status: targetStatus });
                         if (onSuccess) await onSuccess(itemIds, { status: targetStatus });
                         return true;
                     }
@@ -253,6 +256,7 @@ export function useInventoryBulkActions(onSuccess?: (affectedIds?: string[], upd
                     if (data.success) {
                         const count = data.deletedCount ?? total;
                         addToast({ type: 'success', message: `Deleted ${count} items.` });
+                        notifyInventoryRemove(itemIds);
                         if (onSuccess) await onSuccess(itemIds, { _deleted: true });
                         return true;
                     }
@@ -393,6 +397,7 @@ export function useInventoryBulkActions(onSuccess?: (affectedIds?: string[], upd
                             type: 'success', 
                             message: `Updated ${count} items (${summaryChanges.join(', ')}).` 
                         });
+                        notifyInventoryPatch(itemIds, safeUpdates);
                         if (onSuccess) await onSuccess(itemIds, safeUpdates);
                         return true;
                     }
@@ -569,8 +574,9 @@ export function useInventoryBulkActions(onSuccess?: (affectedIds?: string[], upd
                     status: 'combined'
                 });
             });
-            await Promise.all(promises);
+            const updatedChildren = await Promise.all(promises);
 
+            notifyInventoryUpsert([bundleRecord, ...updatedChildren]);
             syncPurchaseStatusForItems(items).catch(err => console.warn('[createBundle] PO sync warning:', err));
 
             addToast({
@@ -608,14 +614,18 @@ export function useInventoryBulkActions(onSuccess?: (affectedIds?: string[], upd
                 children = res.documents;
             }
 
+            const restoredDocs: any[] = [];
             for (const child of children) {
-                await databases.updateDocument(DB_ID, collId, child.$id, {
+                const updatedChild = await databases.updateDocument(DB_ID, collId, child.$id, {
                     parentLotId: null,
                     status: (child.status === 'combined' || child.status === 'archived') ? 'acquired' : child.status
                 });
+                restoredDocs.push(updatedChild);
             }
 
             await databases.deleteDocument(DB_ID, collId, lotItem.$id);
+            if (restoredDocs.length > 0) notifyInventoryUpsert(restoredDocs);
+            notifyInventoryRemove([lotItem.$id]);
 
             addToast({
                 type: 'success',
