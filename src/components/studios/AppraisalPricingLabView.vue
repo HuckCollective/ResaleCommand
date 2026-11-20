@@ -38,7 +38,7 @@
         <button
           type="button"
           class="btn btn-primary btn-sm text-primary-content font-black rounded-xl gap-1.5 shadow-xs"
-          @click="isTestbenchOpen = true"
+          @click="openTestbenchDrawer('scout_backtest')"
         >
           <Icon icon="solar:test-tube-minimalistic-bold" class="w-4 h-4 shrink-0" />
           <span>Try It Testbench</span>
@@ -582,24 +582,34 @@
                   </span>
                 </td>
                 <td class="whitespace-nowrap">
-                  <span
-                    v-if="row.chip === 'on_target'"
-                    class="badge badge-xs badge-success text-success-content font-bold whitespace-nowrap"
-                  >
-                    🎯 On Target
-                  </span>
-                  <span
-                    v-else-if="row.chip === 'under_priced_gem'"
-                    class="badge badge-xs badge-info text-info-content font-bold whitespace-nowrap"
-                  >
-                    💎 Sold Higher (&gt;115%)
-                  </span>
-                  <span
-                    v-else
-                    class="badge badge-xs badge-warning text-warning-content font-bold whitespace-nowrap"
-                  >
-                    ⚠️ Sold Lower (&lt;85%)
-                  </span>
+                  <div class="flex items-center gap-1.5">
+                    <span
+                      v-if="row.chip === 'on_target'"
+                      class="badge badge-xs badge-success text-success-content font-bold whitespace-nowrap"
+                    >
+                      🎯 On Target
+                    </span>
+                    <span
+                      v-else-if="row.chip === 'under_priced_gem'"
+                      class="badge badge-xs badge-info text-info-content font-bold whitespace-nowrap"
+                    >
+                      💎 Sold Higher (&gt;115%)
+                    </span>
+                    <span
+                      v-else
+                      class="badge badge-xs badge-warning text-warning-content font-bold whitespace-nowrap"
+                    >
+                      ⚠️ Sold Lower (&lt;85%)
+                    </span>
+                    <button
+                      type="button"
+                      class="btn btn-ghost btn-xs px-1.5"
+                      title="Backtest this sold item in Speed Scout &amp; 6-Bias Lab"
+                      @click.stop="openRowInScoutBacktest(row)"
+                    >
+                      🧪
+                    </button>
+                  </div>
                 </td>
               </tr>
             </tbody>
@@ -1027,7 +1037,7 @@
           <button
             type="button"
             class="btn btn-outline btn-sm rounded-xl font-bold"
-            @click="isTestbenchOpen = true"
+            @click="openTestbenchDrawer('text_micro')"
           >
             🧪 Try It
           </button>
@@ -1264,32 +1274,276 @@
     </section>
 
     <!-- =================================================================== -->
-    <!-- SLIDE-OVER DRAWER: TRY IT PRICE & VENUE TESTBENCH                    -->
+    <!-- SLIDE-OVER DRAWER: 2-TAB SPEED SCOUT & 6-BIAS / MICRO TESTBENCH     -->
     <!-- =================================================================== -->
     <SlideOverDrawer
       v-model="isTestbenchOpen"
-      title="🧪 Price & Venue Testbench"
-      subtitle="Test live calibration rules, booth exclusions & 3-tier max bids"
-      size="lg"
+      title="🧪 Speed Scout &amp; Pricing Testbench"
+      subtitle="Stateless 6-Bias backtests, live latency/token telemetry &amp; venue rules"
+      size="xl"
     >
       <div class="space-y-4">
-        <!-- Quick 1-Click Sample Presets -->
-        <div class="space-y-1.5">
-          <div class="text-[11px] font-bold uppercase tracking-wider text-base-content/65">
-            Quick Presets:
+        <!-- 2-Tab Mode Switch -->
+        <div role="tablist" class="tabs tabs-boxed bg-base-200/80 p-1 rounded-2xl">
+          <button
+            type="button"
+            role="tab"
+            class="tab flex-1 text-xs font-black rounded-xl"
+            :class="testbenchMode === 'scout_backtest' ? 'tab-active bg-base-100 shadow-xs text-primary' : ''"
+            @click="testbenchMode = 'scout_backtest'"
+          >
+            📸 Speed Scout &amp; 6-Bias Backtest
+          </button>
+          <button
+            type="button"
+            role="tab"
+            class="tab flex-1 text-xs font-black rounded-xl"
+            :class="testbenchMode === 'text_micro' ? 'tab-active bg-base-100 shadow-xs text-primary' : ''"
+            @click="testbenchMode = 'text_micro'"
+          >
+            🏷️ Text Micro-Estimate
+          </button>
+        </div>
+
+        <!-- TAB 1: STATELESS SPEED SCOUT & 6-BIAS BACKTEST -->
+        <div v-if="testbenchMode === 'scout_backtest'" class="space-y-4">
+          <div class="flex flex-wrap items-center justify-between gap-2 px-3 py-2 rounded-xl bg-success/10 border border-success/30 text-xs">
+            <span class="font-bold text-success">🔒 Read-Only Audit — zero inventory edits saved</span>
+            <span class="text-[11px] text-base-content/70">Uses saved photos &amp; notes without mutating catalog records</span>
           </div>
-          <div class="flex items-center gap-1.5 flex-wrap">
+
+          <div class="flex flex-wrap items-center gap-2">
             <button
-              v-for="preset in testbenchPresets"
-              :key="preset.label"
               type="button"
-              class="btn btn-xs btn-outline rounded-xl font-bold"
-              @click="applyTestPreset(preset)"
+              class="btn btn-xs btn-secondary text-secondary-content rounded-xl font-black"
+              :disabled="scoutRunning || batchRunning"
+              @click="runHuck11508Preset"
             >
-              {{ preset.label }}
+              📚 HUCK-11508 (25-Book Bulk Lot)
+            </button>
+            <button
+              v-if="!batchRunning"
+              type="button"
+              class="btn btn-xs btn-outline btn-primary rounded-xl font-bold"
+              :disabled="scoutRunning || !(scorecard?.rows?.length)"
+              @click="runThreeSoldScorecardBacktest"
+            >
+              ▶ Backtest 3 Sold Scorecard Items
+            </button>
+            <button
+              v-else
+              type="button"
+              class="btn btn-xs btn-error text-error-content rounded-xl font-bold"
+              @click="cancelSoldBatchBacktest"
+            >
+              ⏹ Cancel Batch
             </button>
           </div>
+
+          <div class="flex flex-col sm:flex-row gap-2">
+            <input
+              v-model="scoutLookupInput"
+              type="text"
+              placeholder="Enter SKU / UPC or Item ID (e.g. HUCK-11508)"
+              class="input input-bordered input-sm flex-1 bg-base-100 font-mono text-xs"
+              @keydown.enter.prevent="runScoutBacktestForLookup()"
+            />
+            <button
+              type="button"
+              class="btn btn-primary btn-sm text-primary-content font-black rounded-xl gap-1.5 shrink-0"
+              :disabled="scoutRunning || batchRunning || !scoutLookupInput.trim()"
+              @click="runScoutBacktestForLookup()"
+            >
+              <span v-if="scoutRunning" class="loading loading-spinner loading-xs"></span>
+              <span>▶ Run Scout &amp; 6-Bias Audit</span>
+            </button>
+          </div>
+
+          <div
+            v-if="scoutBacktestError"
+            role="alert"
+            class="alert alert-error rounded-xl py-2.5 text-xs font-semibold"
+          >
+            {{ scoutBacktestError }}
+          </div>
+
+          <!-- Single-Item Benchmark Strip + 6-Bias Grid + Compact lot_items -->
+          <div v-if="scoutBacktestResult" class="space-y-3 pt-1 border-t border-base-300">
+            <div class="grid grid-cols-2 sm:grid-cols-4 gap-2">
+              <div class="p-2.5 rounded-xl bg-base-200/70 border border-base-300">
+                <div class="text-[10px] font-bold uppercase text-base-content/60">⚡ Latency</div>
+                <div class="font-mono font-black text-base text-primary">
+                  {{ ((scoutBacktestResult.meta?.latencyMs || 0) / 1000).toFixed(1) }}s
+                </div>
+                <div class="text-[10px] text-base-content/65 truncate">
+                  {{ scoutBacktestResult.meta?.model || 'gemini-flash-latest' }}
+                </div>
+              </div>
+              <div class="p-2.5 rounded-xl bg-base-200/70 border border-base-300">
+                <div class="text-[10px] font-bold uppercase text-base-content/60">🪙 Tokens &amp; Cost</div>
+                <div class="font-mono font-black text-base">
+                  {{ formatCompactNumber(scoutBacktestResult.meta?.totalTokens || 0) }}
+                </div>
+                <div class="text-[10px] font-mono text-base-content/65">
+                  ${{ Number(scoutBacktestResult.meta?.estimatedUsd || 0).toFixed(4) }} · {{ scoutBacktestResult.meta?.thinkingLevel || 'LOW' }}
+                </div>
+              </div>
+              <div class="p-2.5 rounded-xl bg-base-200/70 border border-base-300">
+                <div class="text-[10px] font-bold uppercase text-base-content/60">🖼️ Gallery Stride</div>
+                <div class="font-mono font-black text-base">
+                  {{ scoutBacktestResult.meta?.visionPhotosScanned || 0 }}/{{ scoutBacktestResult.meta?.totalAvailablePhotos || 0 }}
+                </div>
+                <div class="text-[10px] text-base-content/65">
+                  {{ scoutBacktestResult.meta?.stridedSamplingUsed ? 'Evenly Strided' : 'Full Gallery' }}
+                </div>
+              </div>
+              <div class="p-2.5 rounded-xl bg-base-200/70 border border-base-300">
+                <div class="text-[10px] font-bold uppercase text-base-content/60">📦 Lot Decomposition</div>
+                <div class="font-mono font-black text-base text-success">
+                  {{ scoutBacktestResult.meta?.lotRowCount || 0 }} groups
+                </div>
+                <div class="text-[10px] font-mono text-base-content/65">
+                  {{ scoutBacktestResult.meta?.lotUnitSum || 1 }} total units
+                </div>
+              </div>
+            </div>
+
+            <!-- 6-Bias Health Grid -->
+            <div v-if="scoutBacktestResult.meta?.bias_diagnostics?.length" class="space-y-1.5">
+              <div class="text-[11px] font-black uppercase tracking-wider text-base-content/70">
+                🛡️ 6-Bias Health Audit
+              </div>
+              <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                <div
+                  v-for="diag in scoutBacktestResult.meta.bias_diagnostics"
+                  :key="diag.key"
+                  class="p-2.5 rounded-xl border text-xs space-y-1"
+                  :class="diag.status === 'pass' ? 'bg-success/10 border-success/35' : 'bg-warning/15 border-warning/45'"
+                >
+                  <div class="flex items-center justify-between gap-1.5">
+                    <span class="font-black text-base-content">{{ diag.label }}</span>
+                    <span
+                      class="badge badge-xs font-bold shrink-0"
+                      :class="diag.status === 'pass' ? 'badge-success text-success-content' : 'badge-warning text-warning-content'"
+                    >
+                      {{ diag.status === 'pass' ? '✅ Pass' : '⚠️ Review' }}
+                    </span>
+                  </div>
+                  <p class="text-[11px] text-base-content/80 leading-snug">{{ diag.detail }}</p>
+                </div>
+              </div>
+            </div>
+
+            <!-- Compact lot_items Preview -->
+            <div
+              v-if="scoutBacktestResult.primary?.lot_items?.length"
+              class="border border-base-300 rounded-xl overflow-hidden"
+            >
+              <div class="px-3 py-2 bg-base-200/60 border-b border-base-300 flex items-center justify-between text-xs font-black">
+                <span>📋 Decomposed Lot Rows ({{ scoutBacktestResult.primary.lot_items.length }} Groups • {{ scoutBacktestResult.meta?.lotUnitSum || 0 }} Units)</span>
+                <span class="font-mono text-primary">
+                  Fair {{ scoutBacktestResult.primary?.price_breakdown?.fair || '-' }}
+                </span>
+              </div>
+              <div class="max-h-60 overflow-y-auto divide-y divide-base-200">
+                <div
+                  v-for="(li, lIdx) in scoutBacktestResult.primary.lot_items"
+                  :key="lIdx"
+                  class="px-3 py-2 flex items-center justify-between gap-2 text-xs"
+                >
+                  <div class="flex items-center gap-1.5 min-w-0">
+                    <span class="badge badge-xs badge-neutral font-mono shrink-0">#{{ Number(lIdx) + 1 }}</span>
+                    <span
+                      v-if="Number(li.quantity || 1) > 1"
+                      class="badge badge-xs badge-secondary text-secondary-content font-mono font-bold shrink-0"
+                    >
+                      ×{{ li.quantity }}
+                    </span>
+                    <span class="badge badge-xs badge-ghost shrink-0">{{ li.tier_label || li.tier || 'Core' }}</span>
+                    <span class="font-bold truncate">{{ li.name || li.title || li.identity }}</span>
+                  </div>
+                  <div class="font-mono text-[11px] shrink-0 text-right">
+                    <span class="font-bold text-primary">{{ li.price_breakdown?.fair || li.estimated_value || '-' }}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Sold-Price Realization Comparison Table -->
+          <div v-if="batchResults.length > 0" class="space-y-2 pt-2 border-t border-base-300">
+            <div class="text-[11px] font-black uppercase tracking-wider text-base-content/75">
+              🎯 Sold-Price Realization Comparison ({{ batchResults.length }})
+            </div>
+            <div class="overflow-x-auto border border-base-300 rounded-xl">
+              <table class="table table-xs w-full">
+                <thead>
+                  <tr class="bg-base-200/60 text-[10px] uppercase">
+                    <th>Item</th>
+                    <th class="text-right">It Sold For</th>
+                    <th class="text-right">Prior Scout %</th>
+                    <th class="text-right">New Candidate %</th>
+                    <th class="text-right">Accuracy Delta</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="br in batchResults" :key="br.upc + ':' + br.title">
+                    <td class="max-w-[180px]">
+                      <div class="font-bold truncate text-xs">{{ br.title }}</div>
+                      <div class="text-[10px] font-mono text-base-content/60">
+                        {{ br.upc }} · {{ (br.latencyMs / 1000).toFixed(1) }}s · {{ br.biasPasses }}/6 Bias
+                      </div>
+                    </td>
+                    <td class="text-right font-mono font-bold text-success text-xs">
+                      ${{ Number(br.soldGross || 0).toFixed(2) }}
+                    </td>
+                    <td class="text-right font-mono text-xs">
+                      <span v-if="br.priorPct > 0">{{ br.priorPct }}%</span>
+                      <span v-else class="opacity-50">—</span>
+                    </td>
+                    <td class="text-right font-mono font-black text-xs">
+                      <span v-if="br.status === 'done' && br.newPct > 0" :class="getRealizationTextClass(br.newPct)">
+                        {{ br.newPct }}%
+                      </span>
+                      <span v-else-if="br.status === 'error'" class="text-error">Err</span>
+                      <span v-else class="opacity-50">—</span>
+                    </td>
+                    <td class="text-right whitespace-nowrap">
+                      <span
+                        v-if="br.status === 'done' && br.priorPct > 0 && br.newPct > 0"
+                        class="badge badge-xs font-mono font-bold"
+                        :class="br.deltaPts >= 0 ? 'badge-success text-success-content' : 'badge-warning text-warning-content'"
+                      >
+                        {{ br.deltaPts >= 0 ? `+${br.deltaPts}pt closer` : `${br.deltaPts}pt` }}
+                      </span>
+                      <span v-else class="badge badge-xs badge-ghost">{{ br.biasPasses }}/6 Pass</span>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
         </div>
+
+        <!-- TAB 2: TEXT MICRO-ESTIMATE (Existing Form & Channel Comparison) -->
+        <div v-else class="space-y-4">
+          <!-- Quick 1-Click Sample Presets -->
+          <div class="space-y-1.5">
+            <div class="text-[11px] font-bold uppercase tracking-wider text-base-content/65">
+              Quick Presets:
+            </div>
+            <div class="flex items-center gap-1.5 flex-wrap">
+              <button
+                v-for="preset in testbenchPresets"
+                :key="preset.label"
+                type="button"
+                class="btn btn-xs btn-outline rounded-xl font-bold"
+                @click="applyTestPreset(preset)"
+              >
+                {{ preset.label }}
+              </button>
+            </div>
+          </div>
 
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <label class="form-control sm:col-span-2">
@@ -1467,6 +1721,7 @@
             </table>
           </div>
         </div>
+        </div>
       </div>
     </SlideOverDrawer>
 
@@ -1527,8 +1782,8 @@
         <button
           type="button"
           class="btn h-11 flex-1 sm:flex-initial px-3.5 sm:px-5 rounded-2xl inline-flex items-center justify-center gap-1.5 transition-all duration-200 bg-primary text-primary-content font-black shadow-md border border-primary-content/25 active:scale-95 hover:brightness-110 cursor-pointer shrink-0"
-          @click="isTestbenchOpen = true"
-          title="Open Price & Venue Testbench"
+          @click="openTestbenchDrawer('scout_backtest')"
+          title="Open Speed Scout &amp; Price Testbench"
         >
           <Icon icon="solar:test-tube-bold" class="w-4 h-4 drop-shadow-xs shrink-0" />
           <span class="font-black text-xs tracking-wide whitespace-nowrap">Try It</span>
@@ -1551,6 +1806,7 @@ import { account, databases } from '../../lib/appwrite';
 import { DB_ID, getCollectionId } from '../../lib/inventory';
 import { getAllLocationSettingMetas, type LocationSettingMeta } from '../../lib/warehouses';
 import { addToast } from '../../stores/toast';
+import { parsePriceValue } from '../../lib/lot-strategy';
 import type {
   AppraisalRulesConfig,
   EstimateVsSoldScorecard,
@@ -1618,10 +1874,33 @@ const ledgerForm = ref<{
   note: '',
 });
 
-// Testbench Drawer State
+// Testbench Drawer State (Declared above functions/onMounted to prevent TDZ)
 const isTestbenchOpen = ref<boolean>(false);
+const testbenchMode = ref<'scout_backtest' | 'text_micro'>('scout_backtest');
 const runningTest = ref<boolean>(false);
 const testResult = ref<any | null>(null);
+const scoutLookupInput = ref<string>('HUCK-11508');
+const scoutRunning = ref<boolean>(false);
+const scoutBacktestError = ref<string | null>(null);
+const scoutBacktestResult = ref<any | null>(null);
+const batchRunning = ref<boolean>(false);
+let batchAbortController: AbortController | null = null;
+const batchResults = ref<
+  Array<{
+    upc: string;
+    title: string;
+    soldGross: number;
+    priorScoutMid: number;
+    priorPct: number;
+    newScoutMid: number;
+    newPct: number;
+    deltaPts: number;
+    latencyMs: number;
+    biasPasses: number;
+    status: 'done' | 'error';
+    error?: string;
+  }>
+>([]);
 const testForm = ref({
   title: '',
   category: '',
@@ -2343,6 +2622,201 @@ async function openItemInDrawer(itemId: string) {
 function closeItemDrawer() {
   isItemDrawerOpen.value = false;
   selectedDrawerItem.value = null;
+}
+
+function openTestbenchDrawer(mode: 'scout_backtest' | 'text_micro' = 'scout_backtest') {
+  closeItemDrawer();
+  testbenchMode.value = mode;
+  isTestbenchOpen.value = true;
+}
+
+function computeCandidateUnitMidAndPct(data: any, soldGross: number) {
+  const primary = Array.isArray(data?.items) && data.items[0] ? data.items[0] : data;
+  const meta = data?.benchmark_meta || primary?.benchmark_meta || null;
+  const rawFairMid = parsePriceValue(
+    primary?.price_breakdown?.fair || primary?.pricing_potential?.fair || primary?.estimated_value,
+    'midpoint',
+    0
+  );
+  const qty = Math.max(1, Number(meta?.resolvedItem?.quantity || 1));
+  const perUnitMid =
+    qty > 1 && soldGross > 0 && rawFairMid > soldGross * qty * 0.4 ? rawFairMid / qty : rawFairMid;
+  const newPct = perUnitMid > 0 && soldGross > 0 ? Math.round((soldGross / perUnitMid) * 100) : 0;
+  return { primary, meta, perUnitMid, newPct };
+}
+
+async function runScoutBacktestForLookup(
+  overrideLookup?: string,
+  scorecardRowContext?: {
+    upc?: string;
+    title?: string;
+    soldUnitGross?: number;
+    scoutMidpoint?: number;
+    realizationPct?: number;
+  }
+) {
+  const target = (overrideLookup ?? scoutLookupInput.value).trim();
+  if (!target) return;
+  scoutLookupInput.value = target;
+  scoutRunning.value = true;
+  scoutBacktestError.value = null;
+
+  try {
+    const headers = await buildLabAuthHeaders();
+    const res = await fetch('/api/identify-item', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers,
+      body: JSON.stringify({
+        benchmarkLookup: target,
+        includeBenchmarkMeta: true,
+      }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || data?.error) {
+      throw new Error(data?.details || data?.error || 'Could not complete Speed Scout audit.');
+    }
+
+    const soldGross = Number(
+      scorecardRowContext?.soldUnitGross || data?.benchmark_meta?.resolvedItem?.soldPrice || 0
+    );
+    const { primary, meta, perUnitMid, newPct } = computeCandidateUnitMidAndPct(data, soldGross);
+    scoutBacktestResult.value = { data, primary, meta };
+
+    if (soldGross > 0) {
+      const priorMid = Number(
+        scorecardRowContext?.scoutMidpoint || meta?.resolvedItem?.priorScoutMid || 0
+      );
+      const priorPct = Number(
+        scorecardRowContext?.realizationPct ||
+          (priorMid > 0 ? Math.round((soldGross / priorMid) * 100) : 0)
+      );
+      const deltaPts =
+        priorPct > 0 && newPct > 0 ? Math.abs(priorPct - 100) - Math.abs(newPct - 100) : 0;
+      const biasPasses = (meta?.bias_diagnostics || []).filter((d: any) => d?.status === 'pass').length;
+      batchResults.value = [
+        {
+          upc: scorecardRowContext?.upc || meta?.resolvedItem?.upc || target,
+          title: scorecardRowContext?.title || meta?.resolvedItem?.title || primary?.title || target,
+          soldGross,
+          priorScoutMid: priorMid,
+          priorPct,
+          newScoutMid: perUnitMid,
+          newPct,
+          deltaPts,
+          latencyMs: Number(meta?.latencyMs || 0),
+          biasPasses,
+          status: 'done',
+        },
+      ];
+    }
+  } catch (err: any) {
+    scoutBacktestError.value = err?.message || 'Unable to run Speed Scout audit.';
+  } finally {
+    scoutRunning.value = false;
+  }
+}
+
+async function runHuck11508Preset() {
+  scoutLookupInput.value = 'HUCK-11508';
+  await runScoutBacktestForLookup('HUCK-11508');
+}
+
+function openRowInScoutBacktest(row: any) {
+  if (!row) return;
+  closeItemDrawer();
+  testbenchMode.value = 'scout_backtest';
+  isTestbenchOpen.value = true;
+  const lookup = String(row.upc || row.itemId || '').trim();
+  if (lookup) {
+    runScoutBacktestForLookup(lookup, row);
+  }
+}
+
+function cancelSoldBatchBacktest() {
+  if (batchAbortController) {
+    batchAbortController.abort();
+    batchAbortController = null;
+  }
+  batchRunning.value = false;
+}
+
+async function runThreeSoldScorecardBacktest() {
+  const candidates = (filteredScoredRows.value.length > 0
+    ? filteredScoredRows.value
+    : scorecard.value?.rows || []
+  ).slice(0, 3);
+  if (candidates.length === 0) return;
+
+  batchAbortController = new AbortController();
+  batchRunning.value = true;
+  scoutBacktestError.value = null;
+  batchResults.value = [];
+
+  try {
+    const headers = await buildLabAuthHeaders();
+    for (const row of candidates) {
+      if (batchAbortController?.signal.aborted) break;
+      const lookup = String(row.upc || row.itemId || '').trim();
+      if (!lookup) continue;
+
+      try {
+        const res = await fetch('/api/identify-item', {
+          method: 'POST',
+          credentials: 'same-origin',
+          headers,
+          body: JSON.stringify({
+            benchmarkLookup: lookup,
+            includeBenchmarkMeta: true,
+          }),
+          signal: batchAbortController.signal,
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || data?.error) {
+          throw new Error(data?.details || data?.error || 'Audit failed');
+        }
+        const soldGross = Number(row.soldUnitGross || 0);
+        const priorPct = Number(row.realizationPct || 0);
+        const { primary, meta, perUnitMid, newPct } = computeCandidateUnitMidAndPct(data, soldGross);
+        const deltaPts =
+          priorPct > 0 && newPct > 0 ? Math.abs(priorPct - 100) - Math.abs(newPct - 100) : 0;
+        const biasPasses = (meta?.bias_diagnostics || []).filter((d: any) => d?.status === 'pass').length;
+
+        batchResults.value.push({
+          upc: row.upc || lookup,
+          title: row.title || primary?.title || lookup,
+          soldGross,
+          priorScoutMid: Number(row.scoutMidpoint || 0),
+          priorPct,
+          newScoutMid: perUnitMid,
+          newPct,
+          deltaPts,
+          latencyMs: Number(meta?.latencyMs || 0),
+          biasPasses,
+          status: 'done',
+        });
+      } catch (itemErr: any) {
+        if (itemErr?.name === 'AbortError') break;
+        batchResults.value.push({
+          upc: row.upc || lookup,
+          title: row.title || lookup,
+          soldGross: Number(row.soldUnitGross || 0),
+          priorScoutMid: Number(row.scoutMidpoint || 0),
+          priorPct: Number(row.realizationPct || 0),
+          newScoutMid: 0,
+          newPct: 0,
+          deltaPts: 0,
+          latencyMs: 0,
+          biasPasses: 0,
+          status: 'error',
+          error: itemErr?.message || 'Skipped',
+        });
+      }
+    }
+  } finally {
+    batchRunning.value = false;
+    batchAbortController = null;
+  }
 }
 
 async function handleDrawerItemSaved() {

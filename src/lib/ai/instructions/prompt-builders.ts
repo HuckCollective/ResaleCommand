@@ -1,3 +1,20 @@
+/**
+ * Evenly samples up to `maxCount` elements across a gallery while preserving
+ * strictly ascending order and always retaining the first and last photos.
+ */
+export function selectStridedGallerySlice<T>(items: readonly T[], maxCount: number): T[] {
+  if (!Array.isArray(items) || items.length === 0 || maxCount <= 0) return [];
+  if (items.length <= maxCount) return [...items];
+  if (maxCount === 1) return [items[0]];
+  const out: T[] = [];
+  const lastIdx = items.length - 1;
+  for (let i = 0; i < maxCount; i++) {
+    const idx = Math.round((i * lastIdx) / (maxCount - 1));
+    out.push(items[idx]);
+  }
+  return out;
+}
+
 export function buildSpeedScoutUserPrompt(params: {
   authoritativeUserNotes?: string;
   scrapedListingContext?: string;
@@ -20,8 +37,12 @@ export function buildSpeedScoutUserPrompt(params: {
   }
 
   if (params.declaredUnitCount && params.declaredUnitCount >= 2) {
+    const maxRowRule =
+      params.declaredUnitCount > 10
+        ? ` Keep total 'lot_items' rows <= 12 (never 1-to-1 per unit when > 10 units): extract 4-8 standout singles (quantity: 1), group like series/author/format runs into '(xN)' rows, and roll remaining common units into a remainder '(xN)' pack.`
+        : '';
     sections.push(
-      `[6. MULTI-ITEM LOT DECOMPOSITION REQUIREMENT]\nListing declares ${params.declaredUnitCount} physical units. You MUST populate 'lot_items' (>= 2 lines) and set 'detected_unit_count' to ${params.declaredUnitCount}. Extract standout/higher-value items visible via spine/cover OCR as individual 'showcase' singles (quantity: 1), group like series/author/format items into 'core' lines with 'quantity: N' and '(xN)' in the name, and group any remaining/unreadable units into a 'quick_turn' remainder pack line with 'quantity: N' and '(xN)' so that the sum of 'quantity' across all 'lot_items' equals ${params.declaredUnitCount}. All price fields on a line represent the LINE TOTAL for all 'quantity' units on that line.`
+      `[6. MULTI-ITEM LOT DECOMPOSITION & ANTI-TIER-INFLATION REQUIREMENT]\nListing declares ${params.declaredUnitCount} physical units. You MUST populate 'lot_items' (>= 2 lines) and set 'detected_unit_count' to ${params.declaredUnitCount}.${maxRowRule} Sum of 'quantity' across all 'lot_items' MUST equal EXACTLY ${params.declaredUnitCount}. ANTI-TIER-INFLATION LAW: Every standout 'quantity: 1' single MUST use its TRUE cash-cleared comp tier ('showcase' ONLY if per-unit cleared Fair value >= $35; 'core' for $16-$34; 'quick_turn' for < $16 — NEVER inflate $4-$15 paperbacks or budget items into 'showcase' or $35+ just to create a hero single). Grouped '(xN)' rows set 'tier' from per-unit value while all price fields ('estimated_value', 'pricing_potential', 'price_breakdown', 'buy_range') equal the LINE TOTAL across all 'quantity' units on that row.`
     );
   }
 
@@ -96,10 +117,10 @@ export function buildLotInspectionUserPrompt(params: {
   const countInstruction = hasVerifiedExisting
     ? `Match and inspect the ${existingCount} verified constituent items listed below 1-to-1. Do NOT merge or regroup verified items.`
     : isLargeUnverifiedLot
-      ? `The reseller states this bulk lot contains ${effectiveTargetQty} physical units (> 10 units). Decompose it into AT MOST 12 structured 'lot_items' rows whose 'quantity' values sum to EXACTLY ${effectiveTargetQty}: extract the top 6-8 standout/hero titles legible via verbatim cover/spine OCR as individual 'showcase' singles (quantity: 1), roll matching author/series/format runs into grouped 'core' lines with 'quantity: N' and '(xN)' in 'name', and roll remaining common/unreadable units into a 'quick_turn' remainder floor pack with 'quantity: N' and '(xN)' in 'name'.`
+      ? `The reseller states this bulk lot contains ${effectiveTargetQty} physical units (> 10 units). Decompose it into AT MOST 12 structured 'lot_items' rows whose 'quantity' values sum to EXACTLY ${effectiveTargetQty}: extract the top 6-8 standout titles legible via verbatim cover/spine OCR as individual singles (quantity: 1 — using their TRUE cash-cleared comp tier: 'showcase' ONLY if Fair >= $35, 'core' for $16-$34, 'quick_turn' for < $16), roll matching author/series/format runs into grouped lines with 'quantity: N' and '(xN)' in 'name', and roll remaining common/unreadable units into a 'quick_turn' remainder floor pack with 'quantity: N' and '(xN)' in 'name'.`
       : effectiveTargetQty && effectiveTargetQty > 1
         ? `The reseller states this lot contains EXACTLY ${effectiveTargetQty} items (<= 10 units). You MUST reconcile all photos to identify and extract all ${effectiveTargetQty} distinct pieces 1-to-1 (quantity: 1 each, unless identical duplicate copies).`
-        : `If <= 10 distinct physical pieces are visible in the gallery photos, identify and extract every piece 1-to-1 (quantity: 1). If > 10 physical pieces are visible in an uncounted bulk lot, extract the top 6-8 standout 'showcase' singles (quantity: 1) and roll remaining units into grouped 'core' and 'quick_turn' '(xN)' lines so total 'lot_items' stays <= 12 rows and 'quantity' values sum to the total visible unit count.`;
+        : `If <= 10 distinct physical pieces are visible in the gallery photos, identify and extract every piece 1-to-1 (quantity: 1). If > 10 physical pieces are visible in an uncounted bulk lot, extract the top 6-8 standout singles (quantity: 1 — using true cash-cleared comp tier: 'showcase' ONLY if >= $35, never inflating budget paperbacks) and roll remaining units into grouped 'core' and 'quick_turn' '(xN)' lines so total 'lot_items' stays <= 12 rows and 'quantity' values sum to the total visible unit count.`;
 
   const viewsInstruction = isLargeUnverifiedLot
     ? `- Photo #N in this prompt = image_index N-1 (0-based). Valid image_index range: 0 to ${Math.max(0, params.imageCount - 1)}.
@@ -116,9 +137,9 @@ export function buildLotInspectionUserPrompt(params: {
       ? `\n\n[5. LARGE LOT GROUPED DECOMPOSITION & LINE-TOTAL PRICING LAW]
 - Threshold Rule: Use 1-to-1 per-piece extraction ONLY when the lot has <= 10 physical units. Whenever the lot has > 10 physical units (${effectiveTargetQty ? `here: ${effectiveTargetQty} units` : 'uncounted bulk lot'}), NEVER output > 12 rows in "lot_items".
 - Required Bucket Structure (<= 12 total rows, sum(quantity) === ${effectiveTargetQty && effectiveTargetQty > 10 ? effectiveTargetQty : 'total visible units'}):
-  1. "showcase" (top 6-8 standout/hero titles legible from spine or cover OCR): output each as its own single row with "quantity": 1 and a tight per-item bounding_box + views[].
-  2. "core" (remaining identifiable series, author, or format runs): roll into grouped rows with "quantity": N and "(xN)" at the end of "name", using a cluster/shelf bounding_box.
-  3. "quick_turn" (remaining common, budget, or unreadable filler units): roll into 1-2 remainder pack rows with "quantity": N and "(xN)" at the end of "name", using a cluster/shelf bounding_box, so 100% of physical units are accounted for without duplicating any item.
+  1. Standout Singles (top 6-8 recognizable titles legible from spine or cover OCR): output each as its own single row with "quantity": 1 and a tight per-item bounding_box + views[]. ANTI-TIER-INFLATION LAW: Assign each standout single's TRUE cash-cleared comp tier ('showcase' ONLY if per-unit cleared Fair value >= $35; 'core' for $16-$34; 'quick_turn' for < $16). NEVER inflate $4-$15 mass-market paperbacks or budget singles into 'showcase' or $35+!
+  2. Series / Author / Format Runs: roll matching multi-unit runs into grouped rows with "quantity": N and "(xN)" at the end of "name", setting 'tier' from per-unit value and using a cluster/shelf bounding_box.
+  3. Remainder Floor Packs (remaining common, budget, or unreadable filler units): roll into 1-2 remainder pack rows with "tier": "quick_turn", "quantity": N, and "(xN)" at the end of "name", using a cluster/shelf bounding_box, so 100% of physical units are accounted for without duplicating any item.
 - LINE TOTAL PRICING LAW: Every price field on a "lot_items" entry ("estimated_value", "pricing_potential", "price_breakdown", "buy_range") MUST equal the LINE TOTAL across all "quantity" units on that row (never per-unit when quantity > 1), and top-level "price_breakdown" must equal the sum of all "lot_items" line totals.`
       : '';
 

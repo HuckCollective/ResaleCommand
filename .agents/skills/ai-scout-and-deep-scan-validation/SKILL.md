@@ -128,3 +128,27 @@ Before releasing changes to `identify-item.ts` or `ai-inspection.ts`, verify:
 * **Appwrite `/preview` Aspect-Ratio Rule**: When an image is used for `bounding_box` detection or cropping, request `/preview` with **only one** of `width` or `height`, never both. Passing both makes Appwrite crop/resize and distorts the aspect ratio, which shifts normalized bounding-box coordinates.
 * **Deterministic Gallery Index Order**: Images sent to AI are indexed in a stable `0..N` order matching the gallery order shown in the UI. `image_index` / `views[].image_index` returned by the model must map back to that same order, so never reorder, dedupe, or re-sort the list between sending and mapping results.
 * **`detectItemCategory` Physical Substrate Priority**: Substrate indicators (`physical_substrate === "WALL_ART"`, `plaque`, `laminated`, `wood`, `wall art`, `art print`, `framed`, `lithograph`, `canvas`, `poster`) classify an item as `art_decor` **before** genre words (e.g. "fantasy") or the `books` fallback are evaluated.
+
+---
+
+## 6. Evergreen Model Routing, Anti-Tier-Inflation, Exact Unit-Sum Math & 6-Bias Regression Gate
+
+### A. Evergreen `-latest` Model & 3-Mode `ThinkingLevel` Rule
+- **Zero Hardcoded Versioned Model IDs:** Keep `GEMINI_FALLBACK_MODELS` in `src/lib/gemini.ts` 100% evergreen (`[DEFAULT_GEMINI_MODEL, "gemini-flash-latest", "gemini-flash-lite-latest", "gemini-pro-latest"]`). Never hardcode `gemini-2.5-flash` or pinned date snapshots in runtime rosters.
+- **3-Mode Adaptive `ThinkingConfig` Negotiation (`'level'` $\to$ `'budget'` $\to$ `'omit'`):** Modern Gemini Flash `-latest` aliases deprecate `thinkingBudget` and `MINIMAL`. `resolveThinkingConfigForMode()` emits `ThinkingLevel.LOW | MEDIUM | HIGH` in `'level'` mode (defaulting structured schema calls to `ThinkingLevel.LOW`), steps to `'budget'` or `'omit'` only on `400` `"thinking"` rejection, and **never** mixes `thinkingLevel` and `thinkingBudget` in the same request.
+
+### B. Anti-Tier-Inflation Law & `is_key_issue = false` Guard
+- Standout `quantity: 1` singles on `> 10`-unit lots must keep their **true cash-cleared comp tier** (`'showcase'` ONLY if cleared Fair comp value $\ge \$35$; `'core'` for $\$16\text{--}\$34$; `'quick_turn'` for $< \$16$).
+- Deterministic post-processing (`applyAntiTierInflationGuard`) downgrades any `'showcase'` row with per-unit Fair midpoint $< \$28$ to `'core'` ($\ge \$15$) or `'quick_turn'` ($< \$15$) **AND explicitly sets `is_key_issue = false`** before `verifyAndSanitizeLotResult()` runs.
+
+### C. Exact Unit-Sum Reconciliation & `<= 12`-Row Grouping
+- Multi-unit lots with $> 10$ units must decompose into $\le 12$ grouped `lot_items` rows (`collapseExcessLotItems`) AND pass through `reconcileLotItemQuantities()` so $\sum \text{quantity}_i \equiv \text{targetQuantity}$ with proportionally rescaled `(xN)` line-total pricing.
+
+### D. Evenly Strided Gallery Sampling & Zero Unlisted Native Imports
+- Multi-photo galleries exceeding `maxVisionPhotos` (`8` for $>10$-unit bulk lots in Deep Scan; `12` for Speed Scout) must sample evenly via `selectStridedGallerySlice()` so beginning, middle, and spine/cover end photos are all inspected without reordering original gallery indices.
+- **Zero Unlisted Bare Imports Rule:** Never `import('sharp')` or reference packages absent from root `package.json` `dependencies` in Astro SSR / Vercel API routes — use Appwrite single-dimension `/preview?width=1200&output=webp&quality=82` (never passing both `width` and `height`) with direct `/view` fallback.
+
+### E. Mandatory 2-Layer Efficacy & 6-Bias Regression Gate
+Before shipping changes to Speed Scout or AI Deep Scan:
+1. Run sandboxed `node scripts/validate-templates.mjs` plus unit verification covering bare imports, `GEMINI_FALLBACK_MODELS` evergreen check, `selectStridedGallerySlice`, `applyAntiTierInflationGuard`, `reconcileLotItemQuantities`, and `evaluateScoutBiasDiagnostics`.
+2. Verify live in `/studios/appraisal` (**Try It Testbench $\to$ 📸 Speed Scout & 6-Bias Backtest**) on `HUCK-11508` and Sold Scorecard rows (`🧪`) confirming `< 45s` latency, $\le 12$ rows summing to exact lot quantity, `6/6` Bias Health pass, and zero writes to `resale_db.items`.

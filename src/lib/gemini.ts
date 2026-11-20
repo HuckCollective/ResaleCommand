@@ -2,6 +2,7 @@ import {
     GoogleGenAI,
     HarmCategory,
     HarmBlockThreshold,
+    ThinkingLevel,
     type GenerateContentConfig,
 } from "@google/genai";
 import {
@@ -66,14 +67,92 @@ export const DEFAULT_GEMINI_MODEL =
 /** Per-attempt timeout (ms) before failing over cleanly to the next valid API model. */
 export const PER_ATTEMPT_TIMEOUT_MS = 25_000;
 
-/** Ordered World-1 API fallback roster (strictly valid Google GenAI API model IDs). */
+/** Ordered World-1 API fallback roster (strictly evergreen `-latest` Google GenAI API model IDs). */
 export const GEMINI_FALLBACK_MODELS = [
     DEFAULT_GEMINI_MODEL,
     "gemini-flash-latest",
-    "gemini-2.5-flash",
     "gemini-flash-lite-latest",
     "gemini-pro-latest",
 ] as const;
+
+export type GeminiThinkingMode = "level" | "budget" | "omit";
+
+export function initialThinkingModeForModel(modelName: string): "level" | "budget" {
+    return /gemini-2\.5/i.test(String(modelName || "")) ? "budget" : "level";
+}
+
+function normalizeThinkingLevelEnum(rawLevel: any): ThinkingLevel | undefined {
+    if (!rawLevel) return undefined;
+    const upper = String(rawLevel).trim().toUpperCase();
+    // Deprecated MINIMAL is normalized to LOW so modern Gemini Flash aliases never 400
+    if (upper === "MINIMAL" || upper === "LOW") return ThinkingLevel.LOW;
+    if (upper === "MEDIUM") return ThinkingLevel.MEDIUM;
+    if (upper === "HIGH") return ThinkingLevel.HIGH;
+    return undefined;
+}
+
+export function resolveThinkingConfigForMode(
+    requestPayload: any,
+    genCfg: any = {},
+    mode: GeminiThinkingMode = "level"
+): GenerateContentConfig["thinkingConfig"] | undefined {
+    if (mode === "omit") return undefined;
+
+    const explicitThinkingCfg = requestPayload?.thinkingConfig || genCfg?.thinkingConfig;
+    const rawLevel =
+        requestPayload?.thinkingLevel ??
+        genCfg?.thinkingLevel ??
+        explicitThinkingCfg?.thinkingLevel;
+    const rawBudget =
+        typeof requestPayload?.thinkingBudget === "number"
+            ? requestPayload.thinkingBudget
+            : typeof genCfg?.thinkingBudget === "number"
+              ? genCfg.thinkingBudget
+              : typeof explicitThinkingCfg?.thinkingBudget === "number"
+                ? explicitThinkingCfg.thinkingBudget
+                : undefined;
+    const includeThoughts =
+        typeof explicitThinkingCfg?.includeThoughts === "boolean"
+            ? explicitThinkingCfg.includeThoughts
+            : undefined;
+    const hasStructuredSchema = Boolean(genCfg?.responseSchema || genCfg?.responseJsonSchema);
+
+    if (mode === "level") {
+        // Never emit thinkingBudget in level mode (mutually exclusive in Gemini API)
+        let targetLevel = normalizeThinkingLevelEnum(rawLevel);
+        if (!targetLevel && rawBudget !== undefined) {
+            targetLevel =
+                rawBudget <= 512
+                    ? ThinkingLevel.LOW
+                    : rawBudget <= 2048
+                      ? ThinkingLevel.MEDIUM
+                      : ThinkingLevel.HIGH;
+        }
+        if (!targetLevel && hasStructuredSchema) {
+            targetLevel = ThinkingLevel.LOW;
+        }
+        if (!targetLevel) return undefined;
+        return includeThoughts !== undefined
+            ? { thinkingLevel: targetLevel, includeThoughts }
+            : { thinkingLevel: targetLevel };
+    }
+
+    // Legacy 'budget' mode (never emit thinkingLevel alongside thinkingBudget)
+    let targetBudget = rawBudget;
+    if (targetBudget === undefined && rawLevel !== undefined) {
+        const lvl = normalizeThinkingLevelEnum(rawLevel);
+        if (lvl === ThinkingLevel.LOW) targetBudget = 0;
+        else if (lvl === ThinkingLevel.MEDIUM) targetBudget = 1024;
+        else if (lvl === ThinkingLevel.HIGH) targetBudget = 4096;
+    }
+    if (targetBudget === undefined && hasStructuredSchema) {
+        targetBudget = 0;
+    }
+    if (targetBudget === undefined) return undefined;
+    return includeThoughts !== undefined
+        ? { thinkingBudget: targetBudget, includeThoughts }
+        : { thinkingBudget: targetBudget };
+}
 
 /** Optional thinking token budget presets for `@google/genai` `thinkingConfig`. */
 export const THINKING_BUDGET_PRESETS = {
@@ -114,10 +193,16 @@ function wrapGenAiResponse(res: any) {
     };
 }
 
-function normalizeGenerateRequest(
+export function normalizeGenerateRequest(
     requestPayload: any,
-    omitThinkingConfig = false
+    thinkingModeOrOmit: GeminiThinkingMode | boolean = "level"
 ): { contents: any; config: GenerateContentConfig } {
+    const mode: GeminiThinkingMode =
+        thinkingModeOrOmit === true
+            ? "omit"
+            : thinkingModeOrOmit === false
+              ? "level"
+              : thinkingModeOrOmit;
     const baseConfig: GenerateContentConfig = {
         safetySettings: RESALE_SAFETY_SETTINGS,
         systemInstruction: SYSTEM_INSTRUCTION,
@@ -159,20 +244,9 @@ function normalizeGenerateRequest(
             ...(callerAbortSignal ? { abortSignal: callerAbortSignal } : {}),
         };
 
-        if (!omitThinkingConfig) {
-            const explicitThinkingCfg = requestPayload.thinkingConfig || genCfg.thinkingConfig;
-            const explicitBudget =
-                typeof requestPayload.thinkingBudget === "number"
-                    ? requestPayload.thinkingBudget
-                    : typeof genCfg.thinkingBudget === "number"
-                      ? genCfg.thinkingBudget
-                      : undefined;
-
-            if (explicitThinkingCfg) {
-                mergedConfig.thinkingConfig = explicitThinkingCfg;
-            } else if (explicitBudget !== undefined) {
-                mergedConfig.thinkingConfig = { thinkingBudget: explicitBudget };
-            }
+        const resolvedThinkingCfg = resolveThinkingConfigForMode(requestPayload, genCfg, mode);
+        if (resolvedThinkingCfg) {
+            mergedConfig.thinkingConfig = resolvedThinkingCfg;
         }
 
         const contents =
@@ -188,10 +262,11 @@ function normalizeGenerateRequest(
 
 export const getModel = (modelName = DEFAULT_GEMINI_MODEL) => {
     const ai = getGenAiClient();
+    const initialMode = initialThinkingModeForModel(modelName);
     return {
         model: modelName,
         generateContent: async (payload: any) => {
-            const { contents, config } = normalizeGenerateRequest(payload);
+            const { contents, config } = normalizeGenerateRequest(payload, initialMode);
             const res = await ai.models.generateContent({
                 model: modelName,
                 contents,
@@ -280,7 +355,9 @@ export const generateContentWithBackoff = async (
 
     const candidateModels = Array.from(new Set(GEMINI_FALLBACK_MODELS));
     let modelIdx = 0;
-    let omitThinkingOnCurrent = false;
+    let thinkingMode: GeminiThinkingMode = initialThinkingModeForModel(
+        candidateModels[0] || DEFAULT_GEMINI_MODEL
+    );
 
     let retries = maxRetries;
     let delayMs = baseDelayMs;
@@ -312,7 +389,7 @@ export const generateContentWithBackoff = async (
         try {
             const { contents, config } = normalizeGenerateRequest(
                 requestPayload,
-                omitThinkingOnCurrent
+                thinkingMode
             );
             callerAbortSignal = config.abortSignal;
             callerSuppliedAbort = Boolean(callerAbortSignal);
@@ -346,7 +423,9 @@ export const generateContentWithBackoff = async (
                 );
                 if (retries > 1 && modelIdx < candidateModels.length - 1) {
                     modelIdx++;
-                    omitThinkingOnCurrent = false;
+                    thinkingMode = initialThinkingModeForModel(
+                        candidateModels[modelIdx] || DEFAULT_GEMINI_MODEL
+                    );
                     retries--;
                     continue;
                 }
@@ -371,7 +450,7 @@ export const generateContentWithBackoff = async (
                 thoughtTokens: Number(usage.thoughtsTokenCount) || 0,
                 totalTokens: Number(usage.totalTokenCount) || 0,
                 latencyMs,
-                fallback: modelIdx > 0 || omitThinkingOnCurrent,
+                fallback: modelIdx > 0 || thinkingMode === "omit",
                 rulesVersion: effectiveTelemetry?.rulesVersion ?? null,
                 itemId: effectiveTelemetry?.itemId ?? null,
             });
@@ -414,7 +493,9 @@ export const generateContentWithBackoff = async (
                 );
                 if (retries > 1 && modelIdx < candidateModels.length - 1) {
                     modelIdx++;
-                    omitThinkingOnCurrent = false;
+                    thinkingMode = initialThinkingModeForModel(
+                        candidateModels[modelIdx] || DEFAULT_GEMINI_MODEL
+                    );
                     retries--;
                     continue;
                 }
@@ -424,12 +505,13 @@ export const generateContentWithBackoff = async (
                 );
             }
 
-            // Graceful fallback if a model tier rejects thinkingConfig
-            if (!omitThinkingOnCurrent && msg.includes("thinking")) {
+            // Bounded 3-mode thinking negotiation: 'level' -> 'budget' -> 'omit' (never drops thinking prematurely or loops)
+            if (thinkingMode !== "omit" && (msg.includes("thinking") || msg.includes("thought"))) {
+                const nextMode: GeminiThinkingMode = thinkingMode === "level" ? "budget" : "omit";
                 console.warn(
-                    `[Gemini] ${currentModelName} rejected thinkingConfig; retrying without thinkingConfig...`
+                    `[Gemini] ${currentModelName} rejected thinkingConfig in '${thinkingMode}' mode; negotiating '${nextMode}' mode...`
                 );
-                omitThinkingOnCurrent = true;
+                thinkingMode = nextMode;
                 continue;
             }
 
@@ -449,7 +531,9 @@ export const generateContentWithBackoff = async (
                 );
                 if (retries > 1 && modelIdx < candidateModels.length - 1) {
                     modelIdx++;
-                    omitThinkingOnCurrent = false;
+                    thinkingMode = initialThinkingModeForModel(
+                        candidateModels[modelIdx] || DEFAULT_GEMINI_MODEL
+                    );
                     retries--;
                     continue;
                 }
@@ -482,7 +566,9 @@ export const generateContentWithBackoff = async (
                     `[Gemini] Error on ${currentModelName}: ${err.message}. Retrying with next model...`
                 );
                 modelIdx++;
-                omitThinkingOnCurrent = false;
+                thinkingMode = initialThinkingModeForModel(
+                    candidateModels[modelIdx] || DEFAULT_GEMINI_MODEL
+                );
                 retries--;
             } else {
                 await recordFailureTelemetry(currentModelName, "ERROR");

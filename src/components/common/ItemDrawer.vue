@@ -1,14 +1,14 @@
 <template>
   <Teleport to="body">
-    <div class="relative z-450">
+    <div class="fixed inset-0 z-450">
       <!-- Backdrop (Solid bg-black/60 without blur to prevent severe GPU scroll lag across 50+ cards) -->
       <div
-        class="fixed inset-0 bg-black/60 transition-opacity"
+        class="absolute inset-0 bg-black/60 transition-opacity"
         @click.stop.prevent="closeDrawer"></div>
 
-      <!-- Drawer Container: Mobile full-width, Desktop expanded (860px / 980px) -->
+      <!-- Drawer Container: Strictly clamped inside [0..100vw, 0..100dvh] even in split-pane viewports -->
       <div
-        class="fixed inset-y-0 right-0 w-full md:w-155 lg:w-220 xl:w-250 bg-base-100 shadow-2xl flex flex-col transform transition-transform duration-300 ease-in-out">
+        class="absolute inset-y-0 right-0 w-full max-w-full h-dvh max-h-dvh overflow-hidden md:w-155 lg:w-220 xl:w-250 bg-base-100 shadow-2xl flex flex-col transform transition-transform duration-300 ease-in-out">
         <!-- 1. STICKY HEADER (Extracted Subcomponent) -->
         <ItemDrawerHeader
           :item="item"
@@ -192,7 +192,7 @@
 
         <!-- 3. LISTING DETAILS TAB (Extracted Subcomponent) -->
         <div
-          class="flex-1 overflow-y-auto p-4 sm:p-6 space-y-6"
+          class="flex-1 min-h-0 overflow-y-auto p-4 sm:p-6 space-y-6"
           v-show="mainTab === 'details'">
           <ItemDetailsTab
             :editForm="editForm"
@@ -211,6 +211,7 @@
             :calculatedMargin="calculatedMargin"
             :suggestedTitleStr="suggestedTitleStr"
             :analyzing="analyzing"
+            :canAnalyze="canAnalyze && itemAccess.canSaveAny"
             :analysisStatus="analysisStatus"
             :scoutResult="scoutResult"
             :scoutPurchaseStrategy="scoutPurchaseStrategy"
@@ -224,6 +225,7 @@
             :fetchingImages="fetchingImages"
             :downloadingImageUrls="downloadingImageUrls"
             :inventoryItems="mergedInventoryItems"
+            @analyze="analyzeExistingItem"
             @open-lot-tab="mainTab = 'lot'"
             @open-splitter="handleOpenSplitter"
             @copy-title="copyToClipboard(editForm.title)"
@@ -253,7 +255,7 @@
 
         <!-- 4. CHECKLIST / VERIFY TAB (Extracted Subcomponent) -->
         <div
-          class="flex-1 overflow-y-auto p-4 sm:p-6 space-y-5"
+          class="flex-1 min-h-0 overflow-y-auto p-4 sm:p-6 space-y-5"
           v-if="mainTab === 'verify'">
           <ItemVerifyTab
             :componentsList="verifyChecklist"
@@ -266,7 +268,7 @@
 
         <!-- 5. PROFIT PLAYBOOK TAB (Extracted Subcomponent) -->
         <div
-          class="flex-1 overflow-y-auto p-4 sm:p-6 space-y-5"
+          class="flex-1 min-h-0 overflow-y-auto p-4 sm:p-6 space-y-5"
           v-if="mainTab === 'lot'">
           <ItemLotTab
             :item="item"
@@ -274,6 +276,8 @@
             :lotChildren="lotChildren"
             :siblingItems="siblingItems"
             :canEditFull="itemAccess.canEditFull"
+            :analyzing="analyzing"
+            :canAnalyze="canAnalyze && itemAccess.canSaveAny"
             :uncombining="uncombining"
             :lotDashboardItem="lotDashboardItem"
             :totalSplitResaleValue="totalSplitResaleValue"
@@ -284,6 +288,7 @@
             :scout-purchase-strategy="scoutPurchaseStrategy"
             :parsed-raw-analysis="parsedRawAnalysis"
             :parsed-components="lotComponents"
+            @analyze="analyzeExistingItem"
             @selectItem="$emit('selectItem', $event)"
             @open-splitter="handleOpenSplitter"
             @uncombine="uncombineLot"

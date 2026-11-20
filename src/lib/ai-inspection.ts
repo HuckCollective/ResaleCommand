@@ -1,13 +1,13 @@
 import { model, generateContentWithBackoff, parseAiJson, type AiSurface } from './gemini';
 import { lotInspectionResponseSchema } from './ai/schemas/lot-inspection.schema';
 import { LOT_PLAYBOOK_SYSTEM_INSTRUCTION } from './ai/instructions/system-instructions';
-import { buildLotInspectionUserPrompt } from './ai/instructions/prompt-builders';
+import { buildLotInspectionUserPrompt, selectStridedGallerySlice } from './ai/instructions/prompt-builders';
 import { verifyAndSanitizeLotResult } from './ai/verification/verify-inspection';
 import { parsePriceValue } from './lot-strategy';
 
 export const MAX_LOT_VISION_PHOTOS = 12;
 export const MAX_LARGE_LOT_VISION_PHOTOS = 8;
-export const LOT_VISION_MAX_DIMENSION_PX = 1024;
+export const LOT_VISION_MAX_DIMENSION_PX = 1200;
 
 export interface InspectionImage {
     url?: string;
@@ -175,16 +175,6 @@ function cleanAndParseJSON(rawText: string): any {
     }
 }
 
-let cachedSharpLoader: Promise<any> | null = null;
-async function getSharp(): Promise<any | null> {
-    if (!cachedSharpLoader) {
-        cachedSharpLoader = import('sharp')
-            .then((m: any) => m?.default || m)
-            .catch(() => null);
-    }
-    return cachedSharpLoader;
-}
-
 /**
  * Extracts canonical storage file ID when an image URL points to a bucket file
  * so /preview?width=220 and /view URLs for the same photo never duplicate.
@@ -255,35 +245,211 @@ export function dedupeInspectionImages(images: InspectionImage[]): InspectionIma
     return out;
 }
 
-async function compressBufferForVision(
-    rawBuffer: Buffer,
-    fallbackMime: string
-): Promise<{ data: string; mimeType: string }> {
-    try {
-        const sharpFn = await getSharp();
-        if (sharpFn) {
-            const resized: Buffer = await sharpFn(rawBuffer)
-                .rotate()
-                .resize({
-                    width: LOT_VISION_MAX_DIMENSION_PX,
-                    height: LOT_VISION_MAX_DIMENSION_PX,
-                    fit: 'inside',
-                    withoutEnlargement: true,
-                })
-                .jpeg({ quality: 78, mozjpeg: true })
-                .toBuffer();
+/**
+ * Prevents AI Tier Inflation on budget items / mass-market paperbacks broken out
+ * as quantity: 1 singles: per-unit Fair midpoint < $28 is downgraded from 'showcase'
+ * to 'core' (>= $15) or 'quick_turn' (< $15) with is_key_issue explicitly cleared
+ * so verifyAndSanitizeLotResult never re-promotes it.
+ */
+export function applyAntiTierInflationGuard(items: ComponentItem[]): ComponentItem[] {
+    if (!Array.isArray(items) || items.length === 0) return [];
+    return items.map((item) => {
+        if (!item) return item;
+        const qty = Math.max(1, Number(item.quantity) || 1);
+        const lineFairMid = parsePriceValue(item.price_breakdown?.fair || item.estimated_value, 'midpoint', 0);
+        const perUnitFair = qty > 0 ? lineFairMid / qty : lineFairMid;
+        if ((item.tier === 'showcase' || item.is_key_issue) && perUnitFair > 0 && perUnitFair < 28) {
+            const downgradedTier: 'core' | 'quick_turn' = perUnitFair >= 15 ? 'core' : 'quick_turn';
             return {
-                data: resized.toString('base64'),
-                mimeType: 'image/jpeg',
+                ...item,
+                tier: downgradedTier,
+                tier_label: downgradedTier === 'core' ? '📦 Core' : '⚡ Quick Turn',
+                tier_number: downgradedTier === 'core' ? 2 : 3,
+                is_key_issue: false,
             };
         }
-    } catch (err: any) {
-        console.warn(`[ai-inspection] sharp downscale skipped, using original bytes: ${err?.message || err}`);
+        return item;
+    });
+}
+
+function rescaleComponentRowQuantity(
+    item: ComponentItem,
+    oldQtyRaw: number,
+    newQtyRaw: number
+): ComponentItem {
+    const oldQty = Math.max(1, Math.round(oldQtyRaw || 1));
+    const newQty = Math.max(1, Math.round(newQtyRaw || 1));
+    if (oldQty === newQty) {
+        return { ...item, quantity: newQty };
     }
-    return {
-        data: rawBuffer.toString('base64'),
-        mimeType: fallbackMime,
+
+    const ratio = newQty / oldQty;
+    const scaleField = (val: string | undefined, fallbackPerUnit: number, minTotal: number) => {
+        const base = parsePriceValue(val, 'midpoint', fallbackPerUnit * oldQty);
+        return Math.max(minTotal, Math.round(base * ratio));
     };
+
+    const oldFairTotal = parsePriceValue(item.price_breakdown?.fair || item.estimated_value, 'midpoint', 6 * oldQty);
+    const fairSum = Math.max(newQty * 2, Math.round(oldFairTotal * ratio));
+    const boutiqueSum = Math.max(
+        fairSum,
+        scaleField(
+            item.price_breakdown?.boutique_premium || item.pricing_potential?.boutique,
+            Math.round((oldFairTotal / oldQty) * 1.25),
+            fairSum
+        )
+    );
+    const mintSum = Math.max(
+        boutiqueSum,
+        scaleField(item.price_breakdown?.mint, Math.round((boutiqueSum / newQty) * 1.25), boutiqueSum)
+    );
+    const poorSum = Math.min(
+        fairSum,
+        Math.max(newQty, scaleField(item.price_breakdown?.poor, Math.round((oldFairTotal / oldQty) * 0.45), newQty))
+    );
+
+    const rewriteQtySuffix = (text: string | undefined): string | undefined => {
+        if (!text || typeof text !== 'string') return text;
+        const stripped = text.replace(/\s*\(x\d+\)\s*$/i, '').trim();
+        return newQty > 1 ? `${stripped} (x${newQty})` : stripped;
+    };
+
+    const updatedName = rewriteQtySuffix(item.name || item.identity || 'Lot Group') || `Lot Group (x${newQty})`;
+    const updatedIdentity = rewriteQtySuffix(item.identity || updatedName) || updatedName;
+    const rawTagBase = (item.tag_title || item.name || updatedName).replace(/\s*\(x\d+\)\s*$/i, '').trim();
+    const qtyTagSuffix = newQty > 1 ? ` (x${newQty})` : '';
+    const updatedTag = `${rawTagBase.slice(0, Math.max(0, 40 - qtyTagSuffix.length)).trim()}${qtyTagSuffix}`.slice(
+        0,
+        40
+    );
+
+    return {
+        ...item,
+        name: updatedName,
+        identity: updatedIdentity,
+        tag_title: updatedTag,
+        quantity: newQty,
+        estimated_value: `$${fairSum}`,
+        pricing_potential: {
+            ...(item.pricing_potential || {}),
+            fair: `$${fairSum}`,
+            boutique: `$${boutiqueSum}`,
+        },
+        price_breakdown: {
+            ...(item.price_breakdown || {}),
+            mint: `$${mintSum}`,
+            boutique_premium: `$${boutiqueSum}`,
+            fair: `$${fairSum}`,
+            poor: `$${poorSum}`,
+        },
+    };
+}
+
+/**
+ * Deterministically reconciles lot_items row count (<= maxRows) AND unit sum (=== targetQuantity)
+ * even when the model returns <= 12 rows whose individual quantities do not add up to targetQuantity,
+ * rescaling the adjusted grouped pack's line-total pricing proportionally.
+ */
+export function reconcileLotItemQuantities(
+    items: ComponentItem[],
+    targetQuantity?: number,
+    maxRows = 12
+): ComponentItem[] {
+    if (!Array.isArray(items) || items.length === 0) return [];
+    const target = typeof targetQuantity === 'number' && Number.isFinite(targetQuantity) ? Math.round(targetQuantity) : 0;
+
+    let working =
+        items.length > maxRows
+            ? collapseExcessLotItems(items, target >= 2 ? target : undefined, maxRows)
+            : items.map((it) => ({ ...it, quantity: Math.max(1, Math.round(Number(it?.quantity) || 1)) }));
+
+    if (target < 2) return working;
+
+    let currentSum = working.reduce((s, it) => s + Math.max(1, Number(it.quantity) || 1), 0);
+
+    if (currentSum < target) {
+        const delta = target - currentSum;
+        let groupIdx = -1;
+        for (let i = working.length - 1; i >= 0; i--) {
+            if (Number(working[i].quantity || 1) > 1 || /\(x\d+\)|remainder|pack|lot/i.test(String(working[i].name || ''))) {
+                groupIdx = i;
+                break;
+            }
+        }
+        if (groupIdx !== -1) {
+            const curQty = Math.max(1, Number(working[groupIdx].quantity) || 1);
+            working[groupIdx] = rescaleComponentRowQuantity(working[groupIdx], curQty, curQty + delta);
+        } else if (working.length < maxRows) {
+            const fairSum = delta * 6;
+            const boutiqueSum = delta * 8;
+            const mintSum = delta * 10;
+            const poorSum = delta * 3;
+            working.push({
+                name: `Assorted Remainder Lot Pack (x${delta})`,
+                identity: `Assorted Remainder Lot Pack (x${delta})`,
+                tag_title: `Remainder Pack (x${delta})`.slice(0, 40),
+                physical_substrate: working[0]?.physical_substrate || 'OTHER',
+                quantity: delta,
+                tier: 'quick_turn',
+                tier_label: '⚡ Quick Turn',
+                tier_number: 3,
+                is_key_issue: false,
+                condition: 'Mixed Vintage / Good',
+                estimated_value: `$${fairSum}`,
+                ocr_detected_text: '',
+                image_index: 0,
+                pricing_potential: { boutique: `$${boutiqueSum}`, fair: `$${fairSum}` },
+                price_breakdown: {
+                    mint: `$${mintSum}`,
+                    boutique_premium: `$${boutiqueSum}`,
+                    fair: `$${fairSum}`,
+                    poor: `$${poorSum}`,
+                    confidence: 'Medium',
+                },
+                red_flags: [],
+            });
+        } else {
+            const lastIdx = working.length - 1;
+            const curQty = Math.max(1, Number(working[lastIdx].quantity) || 1);
+            working[lastIdx] = rescaleComponentRowQuantity(working[lastIdx], curQty, curQty + delta);
+        }
+    } else if (currentSum > target) {
+        let excess = currentSum - target;
+        // Pass 1: decrement grouped rows (preserving >= 1 unit per row) from back to front
+        for (let i = working.length - 1; i >= 0 && excess > 0; i--) {
+            const curQty = Math.max(1, Number(working[i].quantity) || 1);
+            if (curQty <= 1) continue;
+            const reduceBy = Math.min(excess, curQty - 1);
+            if (reduceBy > 0) {
+                working[i] = rescaleComponentRowQuantity(working[i], curQty, curQty - reduceBy);
+                excess -= reduceBy;
+            }
+        }
+        // Pass 2: if excess still remains (too many single-unit rows), drop lowest-value trailing rows
+        while (excess > 0 && working.length > 1) {
+            let lowestIdx = working.length - 1;
+            let lowestVal = Infinity;
+            for (let i = working.length - 1; i >= 1; i--) {
+                const v = parsePriceValue(working[i].price_breakdown?.fair || working[i].estimated_value, 'midpoint', 0);
+                if (v < lowestVal) {
+                    lowestVal = v;
+                    lowestIdx = i;
+                }
+            }
+            const removed = working.splice(lowestIdx, 1)[0];
+            excess -= Math.max(1, Number(removed?.quantity) || 1);
+        }
+        // Pass 3: if dropping a multi-unit row caused slight underflow, top up or rescale back to exact target
+        currentSum = working.reduce((s, it) => s + Math.max(1, Number(it.quantity) || 1), 0);
+        if (currentSum < target) {
+            return reconcileLotItemQuantities(working, target, maxRows);
+        }
+        if (currentSum > target && working.length === 1) {
+            working[0] = rescaleComponentRowQuantity(working[0], Number(working[0].quantity) || 1, target);
+        }
+    }
+
+    return working;
 }
 
 /**
@@ -364,15 +530,16 @@ export function collapseExcessLotItems(
 }
 
 /**
- * Fetch and prepare an image into a compact <=1024px JPEG Gemini inlineData part.
+ * Fetch and prepare an image into a compact single-dimension WebP (/preview) or /view Gemini inlineData part.
  */
 async function fetchImagePart(image: InspectionImage): Promise<{ inlineData: { data: string; mimeType: string }; index: number } | null> {
     if (image.base64) {
         const cleanBase64 = image.base64.replace(/^data:image\/\w+;base64,/, '');
-        const rawBuf = Buffer.from(cleanBase64, 'base64');
-        const compressed = await compressBufferForVision(rawBuf, image.mimeType || 'image/jpeg');
         return {
-            inlineData: compressed,
+            inlineData: {
+                data: cleanBase64,
+                mimeType: image.mimeType || 'image/jpeg',
+            },
             index: image.index
         };
     } else if (image.url) {
@@ -395,7 +562,17 @@ async function fetchImagePart(image: InspectionImage): Promise<{ inlineData: { d
                     const parsedUrl = new URL(targetUrl);
                     const existingProj = parsedUrl.searchParams.get('project') || projectId;
 
-                    // Candidate 1: Direct /view URL (fast single GET, aspect-ratio true, resized locally via sharp)
+                    // Candidate 1: Aspect-ratio-safe single-dimension WebP transform (/preview?width=1200)
+                    const previewUrl = new URL(parsedUrl.toString());
+                    previewUrl.pathname = previewUrl.pathname.replace(/\/view$/, '/preview');
+                    previewUrl.searchParams.delete('height');
+                    previewUrl.searchParams.set('width', String(LOT_VISION_MAX_DIMENSION_PX));
+                    previewUrl.searchParams.set('output', 'webp');
+                    previewUrl.searchParams.set('quality', '82');
+                    previewUrl.searchParams.set('project', existingProj);
+                    candidateUrls.push(previewUrl.toString());
+
+                    // Candidate 2: Raw /view fallback if storage transformations are blocked on current plan
                     const viewUrl = new URL(parsedUrl.toString());
                     viewUrl.pathname = viewUrl.pathname.replace(/\/preview$/, '/view');
                     viewUrl.search = '';
@@ -420,19 +597,21 @@ async function fetchImagePart(image: InspectionImage): Promise<{ inlineData: { d
             let lastStatus = 0;
 
             for (const cUrl of candidateUrls) {
+                const isPreviewUrl = cUrl.includes('/preview');
+                const timeoutMs = isPreviewUrl ? 5000 : 8000;
                 try {
                     const attempt = await fetch(cUrl, {
                         headers,
-                        signal: AbortSignal.timeout(8000)
+                        signal: AbortSignal.timeout(timeoutMs)
                     });
                     if (attempt.ok) {
                         res = attempt;
                         break;
-                    } else if ((attempt.status === 401 || attempt.status === 403) && isAppwrite && apiKey) {
+                    } else if ((attempt.status === 401 || attempt.status === 403) && !isPreviewUrl && isAppwrite && apiKey) {
                         try {
                             const authAttempt = await fetch(cUrl, {
                                 headers: { ...headers, 'X-Appwrite-Key': apiKey },
-                                signal: AbortSignal.timeout(8000)
+                                signal: AbortSignal.timeout(timeoutMs)
                             });
                             if (authAttempt.ok) {
                                 res = authAttempt;
@@ -458,9 +637,11 @@ async function fetchImagePart(image: InspectionImage): Promise<{ inlineData: { d
             if (!mime.startsWith('image/') || mime === 'application/octet-stream') {
                 mime = 'image/jpeg';
             }
-            const compressed = await compressBufferForVision(rawBuffer, mime);
             return {
-                inlineData: compressed,
+                inlineData: {
+                    data: rawBuffer.toString('base64'),
+                    mimeType: mime,
+                },
                 index: image.index
             };
         } catch (e: any) {
@@ -636,10 +817,10 @@ export async function inspectLotWithGemini(
     const dedupedImages = dedupeInspectionImages(images);
     const maxVisionCount =
         targetQuantity && targetQuantity > 10 ? MAX_LARGE_LOT_VISION_PHOTOS : MAX_LOT_VISION_PHOTOS;
-    const cappedImages = dedupedImages.slice(0, maxVisionCount);
+    const cappedImages = selectStridedGallerySlice(dedupedImages, maxVisionCount);
     if (onProgress) onProgress(`Step 1 of 2: Loading ${cappedImages.length} gallery photos for deep vision analysis...`, 20);
 
-    // 1. Fetch and downscale up to maxVisionCount image parts concurrently
+    // 1. Fetch up to maxVisionCount evenly strided image parts concurrently
     const imagePartPromises = cappedImages.map(img => fetchImagePart(img));
     const rawImageParts = await Promise.all(imagePartPromises);
     const validImageParts = rawImageParts
@@ -667,7 +848,7 @@ export async function inspectLotWithGemini(
         imageCount: validImageParts.length
     });
 
-    // Build multimodal payload: text prompt followed by compact <=1024px gallery image parts
+    // Build multimodal payload: text prompt followed by strided gallery image parts
     const contentParts: any[] = [
         { text: promptText },
         ...validImageParts.map(p => ({ inlineData: p.inlineData }))
@@ -676,8 +857,8 @@ export async function inspectLotWithGemini(
     const synthResult = await generateContentWithBackoff({
         systemInstruction: LOT_PLAYBOOK_SYSTEM_INSTRUCTION,
         contents: [{ role: 'user', parts: contentParts }],
-        thinkingBudget: 0,
-        attemptTimeoutMs: 20_000,
+        thinkingLevel: 'LOW',
+        attemptTimeoutMs: 22_000,
         generationConfig: {
             responseMimeType: "application/json",
             responseSchema: lotInspectionResponseSchema,
@@ -724,12 +905,16 @@ export async function inspectLotWithGemini(
             if (views.length) item.views = views; else delete item.views;
         });
 
-        // Deterministic <=12-row safety net for >10-unit bulk lots
+        // Deterministic <=12-row safety net + exact unit-sum reconciliation + Anti-Tier-Inflation guard
         const hasSmallVerified =
             Boolean(context?.existingItems?.length && context.existingItems.length <= 12);
-        if (!hasSmallVerified && ((targetQuantity && targetQuantity > 10) || parsedSynth.lot_items.length > 12)) {
+        if (parsedSynth.lot_items.length > 12) {
             parsedSynth.lot_items = collapseExcessLotItems(parsedSynth.lot_items, targetQuantity, 12);
         }
+        if (!hasSmallVerified && targetQuantity && targetQuantity >= 2) {
+            parsedSynth.lot_items = reconcileLotItemQuantities(parsedSynth.lot_items, targetQuantity, 12);
+        }
+        parsedSynth.lot_items = applyAntiTierInflationGuard(parsedSynth.lot_items);
     }
 
     // Run deterministic verification & math sanity

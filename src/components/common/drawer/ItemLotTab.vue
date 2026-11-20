@@ -453,7 +453,11 @@
                     <div class="flex items-center gap-2 flex-wrap">
                         <h4 class="font-bold text-xs uppercase tracking-wider text-base-content flex items-center gap-1.5">
                             <Icon icon="solar:box-minimalistic-bold" class="w-4 h-4 text-secondary" />
-                            <span>Bundle Components ({{ resolvedComponents.length }} Items)</span>
+                            <span>Bundle Components ({{
+                                resolvedTotalUnits !== resolvedComponents.length
+                                    ? `${resolvedComponents.length} Groups • ${resolvedTotalUnits} Units`
+                                    : `${resolvedComponents.length} Items`
+                            }})</span>
                         </h4>
                         <span v-if="splitRecommendation" 
                               class="badge badge-xs sm:badge-sm font-black gap-1 shadow-2xs"
@@ -461,16 +465,29 @@
                             {{ splitRecommendation.pillText }}
                         </span>
                     </div>
-                    <button 
-                        v-if="canEditFull"
-                        type="button" 
-                        class="btn btn-2xs sm:btn-xs btn-warning font-black gap-1 shrink-0 shadow-xs" 
-                        @click="$emit('open-splitter')"
-                        title="Split this lot into individual inventory singles"
-                    >
-                        <Icon icon="solar:scissors-bold" class="w-3.5 h-3.5" />
-                        <span>✂️ Split Lot</span>
-                    </button>
+                    <div class="flex items-center gap-1.5 shrink-0">
+                        <button
+                            v-if="canAnalyze && canEditFull"
+                            type="button"
+                            class="btn btn-2xs sm:btn-xs btn-outline btn-secondary font-bold gap-1 shrink-0"
+                            :disabled="analyzing"
+                            @click="$emit('analyze')"
+                            title="Re-run Deep Scan across strided gallery photos"
+                        >
+                            <span v-if="analyzing" class="loading loading-spinner loading-2xs"></span>
+                            <span>{{ analyzing ? 'Scanning...' : '🔍 Re-Scan' }}</span>
+                        </button>
+                        <button 
+                            v-if="canEditFull"
+                            type="button" 
+                            class="btn btn-2xs sm:btn-xs btn-warning font-black gap-1 shrink-0 shadow-xs" 
+                            @click="$emit('open-splitter')"
+                            title="Split this lot into individual inventory singles"
+                        >
+                            <Icon icon="solar:scissors-bold" class="w-3.5 h-3.5" />
+                            <span>✂️ Split Lot</span>
+                        </button>
+                    </div>
                 </div>
 
                 <div class="space-y-2">
@@ -481,9 +498,15 @@
                     >
                         <div class="flex items-start justify-between gap-2">
                             <div class="min-w-0 flex-1">
-                                <div class="flex items-start gap-1.5">
+                                <div class="flex items-start gap-1.5 flex-wrap">
                                     <span class="badge badge-xs badge-neutral font-mono font-bold mt-0.5">#{{ cIdx + 1 }}</span>
                                     <p class="text-xs font-bold text-base-content leading-snug">{{ comp.name || comp.title || comp.identity }}</p>
+                                    <span
+                                        v-if="Number(comp.quantity || 1) > 1"
+                                        class="badge badge-xs badge-secondary text-secondary-content font-mono font-bold shrink-0"
+                                    >
+                                        ×{{ comp.quantity }}
+                                    </span>
                                 </div>
                                 <p v-if="comp.notes || comp.reason" class="text-[10px] opacity-60 mt-0.5">{{ comp.notes || comp.reason }}</p>
                             </div>
@@ -692,10 +715,19 @@ const props = defineProps({
     parsedComponents: {
         type: Array,
         default: () => []
+    },
+    analyzing: {
+        type: Boolean,
+        default: false
+    },
+    canAnalyze: {
+        type: Boolean,
+        default: true
     }
 });
 
 const emit = defineEmits([
+    'analyze',
     'selectItem', 
     'open-splitter', 
     'uncombine', 
@@ -724,6 +756,10 @@ const resolvedComponents = computed(() => {
         } catch (e) {}
     }
     return [];
+});
+
+const resolvedTotalUnits = computed(() => {
+    return resolvedComponents.value.reduce((sum, c) => sum + Math.max(1, Number(c?.quantity) || 1), 0);
 });
 
 const isMultiQty = computed(() => {

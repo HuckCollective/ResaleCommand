@@ -3,13 +3,24 @@ import { model, generateContentWithBackoff, DEFAULT_GEMINI_MODEL } from '../../l
 import { normalizeBundleComponents, parsePriceRange, extractSubItemQuantity } from '../../lib/bundle-pricing';
 import { speedScoutResponseSchema } from '../../lib/ai/schemas/speed-scout.schema';
 import { SPEED_SCOUT_SYSTEM_INSTRUCTION } from '../../lib/ai/instructions/system-instructions';
-import { buildSpeedScoutUserPrompt } from '../../lib/ai/instructions/prompt-builders';
+import {
+    buildSpeedScoutUserPrompt,
+    sanitizeLotInspectionNotes,
+    selectStridedGallerySlice,
+} from '../../lib/ai/instructions/prompt-builders';
+import {
+    applyAntiTierInflationGuard,
+    collapseExcessLotItems,
+    extractStorageFileId,
+    reconcileLotItemQuantities,
+} from '../../lib/ai-inspection';
 import { parsePriceValue } from '../../lib/lot-strategy';
 import { isGuestRequest, consumeGuestScan, GUEST_MAX_PHOTOS_PER_SCAN } from '../../lib/guestScoutLimiter';
 import { parsePacificDateToIso } from '../../lib/dateTimeUtils';
 import { verifyAppwriteJwtToMember, requireBookmarkletMember } from '../../lib/bml/serverAuth';
-import type { AiSurface } from '../../lib/aiTelemetry';
+import { estimateGeminiCallUsdMicros, type AiSurface } from '../../lib/aiTelemetry';
 import { loadAppraisalRules, compileRulesPrompt } from '../../lib/appraisalCalibration';
+import { getBucketId, getDatabaseId, getEnvVar, getItemsCollectionId } from '../../lib/appwriteEnv';
 import { resolveSourcingDomain } from '../../lib/sourcingDomains';
 import { getAllLocationSettingMetas } from '../../lib/warehouses';
 import { applyScoutReportGuardrails, extractDeclaredUnitCount } from '../../lib/scoutReportSections';
@@ -27,6 +38,184 @@ export const maxDuration = 300;
 
 const MAX_SCOUT_VISION_PHOTOS = 12;
 const MAX_DEEP_VISION_PHOTOS = 16;
+
+export interface ScoutBiasDiagnostic {
+    key:
+        | 'tierInflation'
+        | 'ocrGrounding'
+        | 'galleryCoverage'
+        | 'msrpAndFreight'
+        | 'verdictDiscipline'
+        | 'venueEligibility';
+    label: string;
+    status: 'pass' | 'warn';
+    detail: string;
+}
+
+export function evaluateScoutBiasDiagnostics(params: {
+    item: any;
+    declaredUnitCount?: number;
+    visionPhotosScanned: number;
+    totalAvailablePhotos: number;
+    maxVisionPhotos: number;
+    stridedSamplingUsed: boolean;
+    explicitMsrp?: number;
+    shippingTotal?: number;
+    venueMetas?: any[];
+}): ScoutBiasDiagnostic[] {
+    const it = params.item || {};
+    const lotItems = Array.isArray(it.lot_items) ? it.lot_items : [];
+    const declaredQty = Math.max(
+        1,
+        Number(params.declaredUnitCount || it.declared_unit_count || it.detected_unit_count || 1)
+    );
+
+    let inflatedShowcaseCount = 0;
+    let showcaseUnitCount = 0;
+    let lotUnitSum = 0;
+    for (const row of lotItems) {
+        const qty = Math.max(1, extractSubItemQuantity(row));
+        lotUnitSum += qty;
+        const lineFair = parsePriceValue(
+            row?.price_breakdown?.fair || row?.pricing_potential?.fair || row?.estimated_value,
+            'midpoint',
+            0
+        );
+        const perUnitFair = qty > 0 ? lineFair / qty : lineFair;
+        if (row?.tier === 'showcase' || row?.is_key_issue) {
+            showcaseUnitCount += qty;
+            if (perUnitFair > 0 && perUnitFair < 28) inflatedShowcaseCount++;
+        }
+    }
+    const showcaseRatio = declaredQty > 10 && lotItems.length > 0 ? showcaseUnitCount / declaredQty : 0;
+    const tierInflationPass = inflatedShowcaseCount === 0 && showcaseRatio <= 0.5;
+    const tierInflation: ScoutBiasDiagnostic = {
+        key: 'tierInflation',
+        label: '1. Anti-Tier Inflation',
+        status: tierInflationPass ? 'pass' : 'warn',
+        detail: tierInflationPass
+            ? lotItems.length > 0
+                ? `${lotItems.length} rows audited; zero <$28 showcase inflation`
+                : 'Single-item tier matches cleared comp range'
+            : `${inflatedShowcaseCount} under-$28 row(s) or ${Math.round(showcaseRatio * 100)}% marked Showcase`,
+    };
+
+    const ocrBlob = String(it.ocr_detected_text || '').trim();
+    const titleBlob = `${String(it.title || '')} ${String(it.identity || '')} ${ocrBlob}`;
+    const hasWatermarkLeak = /property\s+of\s+goodwill|goodwill\s+nynj|shopgoodwill\.com/i.test(titleBlob);
+    const ocrPass =
+        !hasWatermarkLeak &&
+        (params.visionPhotosScanned === 0 || ocrBlob.length > 0 || String(it.title || '').trim().length >= 6);
+    const ocrGrounding: ScoutBiasDiagnostic = {
+        key: 'ocrGrounding',
+        label: '2. Physical OCR Grounding',
+        status: ocrPass ? 'pass' : 'warn',
+        detail: hasWatermarkLeak
+            ? 'Detected marketplace watermark leak in title/OCR text'
+            : ocrBlob
+              ? `Grounded OCR (${ocrBlob.slice(0, 48)}${ocrBlob.length > 48 ? '...' : ''})`
+              : params.visionPhotosScanned > 0
+                ? 'Photos scanned cleanly with verified title'
+                : 'Text-only pass (0 photos scanned)',
+    };
+
+    const galleryPass =
+        params.visionPhotosScanned > 0 &&
+        (params.totalAvailablePhotos <= params.maxVisionPhotos || params.stridedSamplingUsed);
+    const galleryCoverage: ScoutBiasDiagnostic = {
+        key: 'galleryCoverage',
+        label: '3. Gallery Coverage',
+        status: galleryPass ? 'pass' : 'warn',
+        detail:
+            params.visionPhotosScanned === 0
+                ? '0 photos reached vision engine'
+                : params.totalAvailablePhotos > params.maxVisionPhotos
+                  ? `Strided ${params.visionPhotosScanned}/${params.totalAvailablePhotos} gallery photos`
+                  : `Scanned ${params.visionPhotosScanned}/${Math.max(params.visionPhotosScanned, params.totalAvailablePhotos)} photos`,
+    };
+
+    const fairMid = parsePriceValue(
+        it.price_breakdown?.fair || it.pricing_potential?.fair,
+        'midpoint',
+        0
+    );
+    const msrpOk =
+        !params.explicitMsrp ||
+        params.explicitMsrp <= 0 ||
+        fairMid <= params.explicitMsrp * 0.65;
+    const shipOk =
+        !params.shippingTotal ||
+        params.shippingTotal <= 0 ||
+        Boolean(it.shipping_info) ||
+        Boolean(it.canonical_tiers?.effectiveShip >= 0);
+    const msrpAndFreight: ScoutBiasDiagnostic = {
+        key: 'msrpAndFreight',
+        label: '4. Anti-MSRP & Freight',
+        status: msrpOk && shipOk ? 'pass' : 'warn',
+        detail: !msrpOk
+            ? `Fair ($${fairMid.toFixed(0)}) exceeds 65% of $${params.explicitMsrp} MSRP`
+            : !shipOk
+              ? 'Inbound shipping total not reflected in breakdown'
+              : `Fair $${fairMid.toFixed(0)} comp-anchored (zero retail MSRP anchoring)`,
+    };
+
+    const verdict = String(it.purchase_strategy?.verdict || 'WATCH').toUpperCase();
+    const balancedNet = it.canonical_tiers?.tiers?.balanced?.netProfit;
+    const profitOk =
+        !(verdict === 'BUY_NOW' || verdict === 'CHASE_AUCTION') ||
+        balancedNet === undefined ||
+        balancedNet > 0;
+    const lotRowOk = declaredQty <= 10 || lotItems.length <= 12;
+    const lotSumOk = declaredQty < 2 || lotItems.length === 0 || lotUnitSum === declaredQty;
+    const verdictPass = profitOk && lotRowOk && lotSumOk;
+    const verdictDiscipline: ScoutBiasDiagnostic = {
+        key: 'verdictDiscipline',
+        label: '5. Verdict & Lot Math',
+        status: verdictPass ? 'pass' : 'warn',
+        detail: !profitOk
+            ? `Verdict ${verdict} despite negative balanced net ($${Number(balancedNet).toFixed(2)})`
+            : !lotRowOk
+              ? `${lotItems.length} rows exceeds <=12 cap for ${declaredQty}-unit lot`
+              : !lotSumOk
+                ? `Lot sum ${lotUnitSum} != declared ${declaredQty} units`
+                : lotItems.length > 0
+                  ? `${verdict} · ${lotItems.length} rows summing to ${lotUnitSum}/${declaredQty} units`
+                  : `${verdict} aligns with signed P&L math`,
+    };
+
+    const bestPlat = String(it.market_report?.best_platform || '').trim();
+    const isApparelOrBulky =
+        String(it.physical_substrate || '') === 'APPAREL_GARMENT' ||
+        /\b(shirt|jacket|coat|sweater|dress|hoodie|jeans|pants|skirt|apparel|clothing)\b/i.test(
+            `${String(it.title || '')} ${String(it.identity || '')}`
+        );
+    const dtMeta = Array.isArray(params.venueMetas)
+        ? params.venueMetas.find((m: any) => String(m?.code || '').toUpperCase() === 'DT')
+        : null;
+    const dtMatch =
+        /\bdusty\s*tiger\b|\(\s*DT\s*\)/i.test(bestPlat) ||
+        Boolean(dtMeta?.name && bestPlat.toLowerCase().includes(String(dtMeta.name).toLowerCase()));
+    const venuePass = !(isApparelOrBulky && dtMatch);
+    const venueEligibility: ScoutBiasDiagnostic = {
+        key: 'venueEligibility',
+        label: '6. Venue Policy Check',
+        status: venuePass ? 'pass' : 'warn',
+        detail: venuePass
+            ? bestPlat
+                ? `Routed to ${bestPlat}`
+                : 'Compliant with venue category & size caps'
+            : `Apparel/bulky item routed to small-curio venue (${bestPlat})`,
+    };
+
+    return [
+        tierInflation,
+        ocrGrounding,
+        galleryCoverage,
+        msrpAndFreight,
+        verdictDiscipline,
+        venueEligibility,
+    ];
+}
 
 function resolvePrimaryBoothMeta(warehouses: any[]) {
     const metas = getAllLocationSettingMetas(warehouses || []);
@@ -386,19 +575,29 @@ export const ALL: APIRoute = async ({ request }) => {
     let requestMode: 'scout' | 'deep' = 'scout';
     let requestItemId: string | undefined = undefined;
     let outerTargetLocations: any[] = [];
+    let includeBenchmarkMeta = false;
+    let benchmarkResolvedItem: any = null;
+    let benchmarkResolvedUnitCount = 0;
+    let explicitMsrpHint = 0;
+    let totalAvailablePhotos = 0;
+    let stridedSamplingUsed = false;
 
-    // Verify signed Bookmarklet Bearer token (rcbml_v1) if sent from universal Scout bookmarklet
+    // Verify signed Bookmarklet Bearer token (rcbml_v1) or X-Appwrite-JWT if sent
     const authHeader = request.headers.get('authorization') || request.headers.get('Authorization') || '';
     const bmlTokenHeader = request.headers.get('x-rc-bml-token') || request.headers.get('X-RC-BML-Token') || '';
+    const jwtHeader = request.headers.get('X-Appwrite-JWT') || request.headers.get('x-appwrite-jwt') || '';
     let hasValidBmlBearer = false;
+    let cachedVerifiedJwtMember: Awaited<ReturnType<typeof verifyAppwriteJwtToMember>> | null = null;
     if (/^Bearer\s+\S+/i.test(authHeader) || bmlTokenHeader.trim().length > 0) {
         const bmlAuth = await requireBookmarkletMember(request);
         if (!bmlAuth.ok) return bmlAuth.response;
         hasValidBmlBearer = true;
+    } else if (jwtHeader.trim().length > 0) {
+        cachedVerifiedJwtMember = await verifyAppwriteJwtToMember(jwtHeader.trim());
     }
 
     // GUEST PREVIEW: unauthenticated visitors get a limited scan (daily quota, max photos, no URLs/locations).
-    const isGuest = !hasValidBmlBearer && isGuestRequest(request);
+    const isGuest = !hasValidBmlBearer && !cachedVerifiedJwtMember?.ok && isGuestRequest(request);
     if (isGuest) {
         const quota = consumeGuestScan(request);
         if (!quota.allowed) {
@@ -436,6 +635,9 @@ export const ALL: APIRoute = async ({ request }) => {
         console.log(`Debug - Using Model: ${DEFAULT_GEMINI_MODEL}`);
 
         const toBase64 = (buffer: ArrayBuffer) => {
+            if (typeof globalThis.Buffer !== 'undefined') {
+                return globalThis.Buffer.from(buffer).toString('base64');
+            }
             let binary = '';
             const bytes = new Uint8Array(buffer);
             const len = bytes.byteLength;
@@ -444,10 +646,6 @@ export const ALL: APIRoute = async ({ request }) => {
             }
             if (typeof btoa === 'function') {
                 return btoa(binary);
-            }
-            if (typeof globalThis.Buffer !== 'undefined') {
-                // @ts-ignore
-                return globalThis.Buffer.from(buffer).toString('base64');
             }
             return '';
         };
@@ -492,14 +690,16 @@ export const ALL: APIRoute = async ({ request }) => {
                         const existingProj = parsed.searchParams.get('project') || projectId;
                         const preview = new URL(parsed.toString());
                         preview.pathname = preview.pathname.replace(/\/view$/, '/preview');
-                        preview.searchParams.set('width', '1000');
-                        preview.searchParams.set('height', '1000');
+                        preview.searchParams.delete('height');
+                        preview.searchParams.set('width', '1200');
                         preview.searchParams.set('output', 'webp');
-                        preview.searchParams.set('quality', '80');
+                        preview.searchParams.set('quality', '82');
                         preview.searchParams.set('project', existingProj);
                         candidateUrls.push(preview.toString());
 
                         const view = new URL(parsed.toString());
+                        view.pathname = view.pathname.replace(/\/preview$/, '/view');
+                        view.search = '';
                         view.searchParams.set('project', existingProj);
                         candidateUrls.push(view.toString());
                     } catch {
@@ -511,22 +711,31 @@ export const ALL: APIRoute = async ({ request }) => {
 
                 let res: Response | null = null;
                 for (const cUrl of candidateUrls) {
-                    // Appwrite never needs a marketplace Referer; remote CDNs retry across [listing origin, CDN origin]
+                    // Skip redundant auth retries on plan-blocked /preview transforms
+                    const isPreviewUrl = cUrl.includes('/preview');
                     const refererTries = isAppwrite ? [referers[referers.length - 1]] : referers;
                     for (const ref of refererTries) {
                         const tryHeaders = { ...headers };
                         if (ref) tryHeaders['Referer'] = ref;
                         else delete tryHeaders['Referer'];
                         try {
-                            const attempt = await fetch(cUrl, { headers: tryHeaders, signal: AbortSignal.timeout(9000) });
+                            const attempt = await fetch(cUrl, {
+                                headers: tryHeaders,
+                                signal: AbortSignal.timeout(isPreviewUrl ? 5000 : 8000),
+                            });
                             if (attempt.ok) {
                                 res = attempt;
                                 break;
-                            } else if ((attempt.status === 401 || attempt.status === 403) && isAppwrite && process.env.APPWRITE_API_KEY) {
+                            } else if (
+                                (attempt.status === 401 || attempt.status === 403) &&
+                                !isPreviewUrl &&
+                                isAppwrite &&
+                                process.env.APPWRITE_API_KEY
+                            ) {
                                 try {
                                     const authAttempt = await fetch(cUrl, {
                                         headers: { ...tryHeaders, 'X-Appwrite-Key': process.env.APPWRITE_API_KEY },
-                                        signal: AbortSignal.timeout(9000),
+                                        signal: AbortSignal.timeout(8000),
                                     });
                                     if (authAttempt.ok) {
                                         res = authAttempt;
@@ -565,10 +774,22 @@ export const ALL: APIRoute = async ({ request }) => {
             return null;
         };
 
-        // Fetches remote images in parallel while strictly preserving 0..N gallery index order
+        // Fetches evenly strided, File-ID-deduped remote images in parallel
         const fetchOrderedImageParts = async (urls: string[], maxCount: number) => {
             if (!Array.isArray(urls) || urls.length === 0 || maxCount <= 0) return;
-            const targetSlice = urls.slice(0, maxCount);
+            const seenFileKeys = new Set<string>();
+            const dedupedUrls: string[] = [];
+            for (const raw of urls) {
+                const u = String(raw || '').trim();
+                if (!u) continue;
+                const fk = extractStorageFileId(u) || u;
+                if (seenFileKeys.has(fk)) continue;
+                seenFileKeys.add(fk);
+                dedupedUrls.push(u);
+            }
+            totalAvailablePhotos = Math.max(totalAvailablePhotos, dedupedUrls.length);
+            stridedSamplingUsed = stridedSamplingUsed || dedupedUrls.length > maxCount;
+            const targetSlice = selectStridedGallerySlice(dedupedUrls, maxCount);
             const results = await Promise.all(targetSlice.map((u) => fetchSingleImagePart(u)));
             for (const r of results) {
                 if (r && r.part) {
@@ -639,7 +860,7 @@ export const ALL: APIRoute = async ({ request }) => {
                     (Array.isArray(json.remoteImageUrls) && json.remoteImageUrls.length > 0);
 
                 if (isGuest) {
-                    if (hasRemote || /https?:\/\//i.test(String(json.notes || ''))) {
+                    if (hasRemote || json.benchmarkLookup || /https?:\/\//i.test(String(json.notes || ''))) {
                         return guestBlocked(
                             'Online listing / auction URL scouting is reserved for Collective members. Upload up to 2 photos instead.'
                         );
@@ -649,9 +870,9 @@ export const ALL: APIRoute = async ({ request }) => {
                     }
                 } else {
                     const hasRemoteUrl = hasRemote || /https?:\/\//i.test(String(json.notes || ''));
-                    const jwtHeader = request.headers.get('X-Appwrite-JWT') || '';
                     if (hasRemoteUrl && jwtHeader) {
-                        const verifiedMember = await verifyAppwriteJwtToMember(jwtHeader);
+                        const verifiedMember =
+                            cachedVerifiedJwtMember || (await verifyAppwriteJwtToMember(jwtHeader));
                         if (!verifiedMember.ok && verifiedMember.status === 403) {
                             return new Response(
                                 JSON.stringify({
@@ -665,23 +886,144 @@ export const ALL: APIRoute = async ({ request }) => {
                     }
                 }
 
-                if (json.notes) {
-                    userNotes = String(json.notes);
+                const lookupKey = typeof json.benchmarkLookup === 'string' ? json.benchmarkLookup.trim() : '';
+                includeBenchmarkMeta = Boolean(json.includeBenchmarkMeta || lookupKey);
+                if (Number(json.msrpTagPrice || json.explicitMsrp) > 0) {
+                    explicitMsrpHint = Number(json.msrpTagPrice || json.explicitMsrp);
                 }
-                if (typeof json.url === 'string' && json.url.trim()) {
-                    explicitUrl = json.url.trim();
-                }
-                if (json.mode === 'deep') {
-                    requestMode = 'deep';
-                }
-                if (json.itemId) {
-                    requestItemId = String(json.itemId).slice(0, 64);
-                }
-                if (json.zipCode) {
-                    zipCode = String(json.zipCode).trim();
-                }
-                if (json.clientDomListing && typeof json.clientDomListing === 'object') {
-                    clientDomListing = json.clientDomListing as ClientDomListingPayload;
+
+                if (lookupKey) {
+                    const bmAuth = await requireBookmarkletMember(request, { allowSameOriginCookieFallback: true });
+                    if (!bmAuth.ok) {
+                        return new Response(
+                            JSON.stringify({
+                                error: 'Members only',
+                                details:
+                                    'Sign in as a Works@TheHC Founder or Curator to run Speed Scout backtests.',
+                            }),
+                            {
+                                status: bmAuth.response?.status || 401,
+                                headers: { 'Content-Type': 'application/json' },
+                            }
+                        );
+                    }
+
+                    const endpoint = getEnvVar('PUBLIC_APPWRITE_ENDPOINT', 'https://sfo.cloud.appwrite.io/v1');
+                    const projectId = getEnvVar('PUBLIC_APPWRITE_PROJECT_ID', '69714b35003a8adab6bb');
+                    const dbId = getDatabaseId();
+                    const itemsCol = getItemsCollectionId();
+                    const bucketId = getBucketId();
+                    const apiKey = getEnvVar('APPWRITE_API_KEY', '');
+
+                    if (!apiKey) {
+                        return new Response(
+                            JSON.stringify({
+                                error: 'Backtest unavailable',
+                                details: 'Server read credentials are not configured for backtesting.',
+                            }),
+                            { status: 500, headers: { 'Content-Type': 'application/json' } }
+                        );
+                    }
+
+                    const { Client, Databases, Query } = await import('node-appwrite');
+                    const serverClient = new Client().setEndpoint(endpoint).setProject(projectId).setKey(apiKey);
+                    const serverDb = new Databases(serverClient);
+
+                    let doc: any = null;
+                    try {
+                        doc = await serverDb.getDocument(dbId, itemsCol, lookupKey);
+                    } catch {
+                        const upcUpper = lookupKey.toUpperCase();
+                        const found = await serverDb.listDocuments(dbId, itemsCol, [
+                            Query.equal('upc', [upcUpper, lookupKey]),
+                            Query.limit(1),
+                        ]);
+                        doc = found.documents?.[0] || null;
+                    }
+
+                    if (!doc) {
+                        return new Response(
+                            JSON.stringify({
+                                error: 'Item not found',
+                                details: `Could not locate inventory record "${lookupKey}" for read-only backtest.`,
+                            }),
+                            { status: 404, headers: { 'Content-Type': 'application/json' } }
+                        );
+                    }
+
+                    // Strict Read-Only Hydration (ZERO writes to items or scoutPrior)
+                    requestItemId = doc.$id;
+                    const fileIds: string[] = [];
+                    if (typeof doc.imageId === 'string' && doc.imageId.trim()) fileIds.push(doc.imageId.trim());
+                    if (Array.isArray(doc.galleryImageIds)) {
+                        for (const gid of doc.galleryImageIds) {
+                            if (typeof gid === 'string' && gid.trim()) fileIds.push(gid.trim());
+                        }
+                    }
+                    const cleanBaseEndpoint = endpoint.replace(/\/+$/, '');
+                    preferredRemoteUrls = Array.from(new Set(fileIds))
+                        .slice(0, 40)
+                        .map(
+                            (fid) =>
+                                `${cleanBaseEndpoint}/storage/buckets/${bucketId}/files/${encodeURIComponent(fid)}/preview?width=1200&output=webp&quality=82&project=${encodeURIComponent(projectId)}`
+                        );
+
+                    const sanitizedDocNotes = sanitizeLotInspectionNotes(
+                        [doc.conditionNotes, doc.description].filter(Boolean).join('\n')
+                    );
+                    const qtyNum = Math.max(1, Number(doc.quantity) || 1);
+                    const titleStr = String(doc.title || doc.name || doc.upc || 'Inventory Item').trim();
+                    const docCost = Number(doc.cost ?? doc.purchasePrice ?? 0) || 0;
+                    const contextHeader = `Title: ${titleStr}${qtyNum > 1 ? ` (${qtyNum} units)` : ''}${docCost > 0 ? `\nAcquired Cost: $${docCost.toFixed(2)}` : ''}`;
+                    userNotes = [contextHeader, sanitizedDocNotes, String(json.notes || '').trim()]
+                        .filter(Boolean)
+                        .join('\n\n');
+
+                    const titleExtractedQty = extractDeclaredUnitCount(titleStr);
+                    benchmarkResolvedUnitCount = Math.max(qtyNum, titleExtractedQty > 1 ? titleExtractedQty : 1);
+
+                    let priorScoutMid = 0;
+                    try {
+                        const sp = typeof doc.scoutPrior === 'string' ? JSON.parse(doc.scoutPrior) : doc.scoutPrior;
+                        priorScoutMid = Number(sp?.mid ?? sp?.fairMid ?? 0) || 0;
+                    } catch {}
+                    if (!priorScoutMid) {
+                        const lo = Number(doc.estLow || 0);
+                        const hi = Number(doc.estHigh || 0);
+                        priorScoutMid =
+                            lo > 0 && hi > 0 ? (lo + hi) / 2 : lo || hi || Number(doc.resalePrice || 0);
+                    }
+
+                    benchmarkResolvedItem = {
+                        id: doc.$id,
+                        upc: doc.upc || '',
+                        title: titleStr,
+                        quantity: qtyNum,
+                        cost: docCost,
+                        resalePrice: Number(doc.resalePrice || doc.price || 0),
+                        soldPrice: Number(doc.soldPrice || 0),
+                        priorScoutMid,
+                        photoCount: preferredRemoteUrls.length,
+                    };
+                } else {
+                    if (json.notes) {
+                        userNotes = String(json.notes);
+                    }
+                    if (typeof json.url === 'string' && json.url.trim()) {
+                        explicitUrl = json.url.trim();
+                    }
+                    if (json.mode === 'deep') {
+                        requestMode = 'deep';
+                    }
+                    if (json.itemId) {
+                        requestItemId = String(json.itemId).slice(0, 64);
+                    }
+                    if (json.zipCode) {
+                        zipCode = String(json.zipCode).trim();
+                    }
+                    if (json.clientDomListing && typeof json.clientDomListing === 'object') {
+                        clientDomListing = json.clientDomListing as ClientDomListingPayload;
+                    }
                 }
 
                 const processDataUrl = (url: string) => {
@@ -713,7 +1055,9 @@ export const ALL: APIRoute = async ({ request }) => {
                 }
 
                 // Prioritize explicit photo selection from #rc-scout-tray / ScoutView (up to 40 gallery URLs)
-                if (Array.isArray(json.selectedRemoteImageUrls) && json.selectedRemoteImageUrls.length > 0) {
+                if (preferredRemoteUrls.length > 0) {
+                    // Already hydrated from stateless benchmarkLookup
+                } else if (Array.isArray(json.selectedRemoteImageUrls) && json.selectedRemoteImageUrls.length > 0) {
                     preferredRemoteUrls = json.selectedRemoteImageUrls
                         .map((u: any) => String(u || '').trim())
                         .filter(Boolean)
@@ -899,8 +1243,15 @@ export const ALL: APIRoute = async ({ request }) => {
             resolvedScanDomainKey
         );
         const listingTitleHint =
-            outerResolvedEnvelope?.title || parsedListingData?.title || parsedListingData?.itemName || '';
-        const declaredUnitCount = extractDeclaredUnitCount(`${listingTitleHint} ${userNotes}`);
+            outerResolvedEnvelope?.title ||
+            parsedListingData?.title ||
+            parsedListingData?.itemName ||
+            benchmarkResolvedItem?.title ||
+            '';
+        const declaredUnitCount = Math.max(
+            extractDeclaredUnitCount(`${listingTitleHint} ${userNotes}`),
+            benchmarkResolvedUnitCount || 0
+        );
 
         const dynamicBoothChannels = getAllLocationSettingMetas(outerTargetLocations)
             .filter((m) => m.commissionRate > 0)
@@ -943,17 +1294,24 @@ export const ALL: APIRoute = async ({ request }) => {
 
         const contentParts: any[] = [{ text: promptText }];
         if (imageParts.length > 0) {
-            // Up to 12 selected gallery photos for Speed Scout (16 for Deep Scan; 2 for Guest Preview)
+            // Up to 12 evenly strided gallery photos for Speed Scout (16 for Deep Scan; 2 for Guest Preview)
             contentParts.push(...imageParts.slice(0, maxVisionPhotos));
         }
+
+        const scoutThinkingLevel: 'LOW' | 'MEDIUM' =
+            requestMode === 'deep' && declaredUnitCount <= 10 ? 'MEDIUM' : 'LOW';
+        const scoutCallStartedAt = Date.now();
 
         const result = await generateContentWithBackoff(
             {
                 systemInstruction: SPEED_SCOUT_SYSTEM_INSTRUCTION,
                 contents: [{ role: 'user', parts: contentParts }],
+                thinkingLevel: scoutThinkingLevel,
+                attemptTimeoutMs: 22_000,
                 generationConfig: {
                     responseMimeType: 'application/json',
                     responseSchema: speedScoutResponseSchema,
+                    maxOutputTokens: 6144,
                 },
                 telemetryContext: {
                     surface: detectedSurface,
@@ -961,10 +1319,11 @@ export const ALL: APIRoute = async ({ request }) => {
                     rulesVersion: appraisalRules.version,
                 },
             },
-            3,
-            2000
+            2,
+            1000
         );
 
+        let activeModelResult = result;
         const response = await result.response;
 
         let taskResponse = '';
@@ -1018,7 +1377,7 @@ export const ALL: APIRoute = async ({ request }) => {
                     );
                     const retryPrompt =
                         promptText +
-                        `\n\n[CORRECTIVE RETRY — LOT_ITEMS REQUIRED]: Your previous response returned fewer than 2 entries in 'lot_items' for a ${declaredUnitCount}-unit lot. You MUST return >= 2 entries in 'lot_items' (standout singles with quantity: 1 from visible spine/cover OCR + grouped series/author/format lines with quantity: N and '(xN)' + a remainder pack line with quantity: N and '(xN)') whose 'quantity' values sum to ${declaredUnitCount}. Price fields on each line are the LINE TOTAL for all units on that line.`;
+                        `\n\n[CORRECTIVE RETRY — LOT_ITEMS & ANTI-TIER-INFLATION REQUIRED]: Your previous response returned fewer than 2 entries in 'lot_items' for a ${declaredUnitCount}-unit lot. You MUST return ${declaredUnitCount > 10 ? '2 to 12' : '>= 2'} entries in 'lot_items' (standout singles with quantity: 1 using true cleared-comp tier: 'showcase' ONLY if >= $35 + grouped series/author/format lines with quantity: N and '(xN)' + a remainder pack line with quantity: N and '(xN)') whose 'quantity' values sum to EXACTLY ${declaredUnitCount}. Price fields on each line are the LINE TOTAL for all units on that line.`;
                     const retryParts: any[] = [{ text: retryPrompt }];
                     if (imageParts.length > 0) {
                         retryParts.push(...imageParts.slice(0, maxVisionPhotos));
@@ -1027,9 +1386,12 @@ export const ALL: APIRoute = async ({ request }) => {
                         {
                             systemInstruction: SPEED_SCOUT_SYSTEM_INSTRUCTION,
                             contents: [{ role: 'user', parts: retryParts }],
+                            thinkingLevel: scoutThinkingLevel,
+                            attemptTimeoutMs: 22_000,
                             generationConfig: {
                                 responseMimeType: 'application/json',
                                 responseSchema: speedScoutResponseSchema,
+                                maxOutputTokens: 6144,
                             },
                             telemetryContext: {
                                 surface: detectedSurface,
@@ -1038,7 +1400,7 @@ export const ALL: APIRoute = async ({ request }) => {
                             },
                         },
                         2,
-                        1500
+                        1000
                     );
                     const retryText = (await retryResult.response).text().replace(/```json|```/g, '').trim();
                     if (retryText) {
@@ -1046,6 +1408,7 @@ export const ALL: APIRoute = async ({ request }) => {
                         const retryFirst = Array.isArray(retryParsed?.items) ? retryParsed.items[0] : retryParsed;
                         if (retryFirst && Array.isArray(retryFirst.lot_items) && retryFirst.lot_items.length >= 2) {
                             cleanedResponse = retryText;
+                            activeModelResult = retryResult;
                         }
                     }
                 }
@@ -1368,6 +1731,17 @@ export const ALL: APIRoute = async ({ request }) => {
             if (jsonObj.items && jsonObj.items.length > 0) {
                 jsonObj.items.forEach((item: any, idx: number) => {
                     if (item.lot_items && Array.isArray(item.lot_items)) {
+                        if (item.lot_items.length > 12) {
+                            item.lot_items = collapseExcessLotItems(
+                                item.lot_items,
+                                idx === 0 && declaredUnitCount >= 2 ? declaredUnitCount : undefined,
+                                12
+                            );
+                        }
+                        if (idx === 0 && declaredUnitCount >= 2) {
+                            item.lot_items = reconcileLotItemQuantities(item.lot_items, declaredUnitCount, 12);
+                        }
+                        item.lot_items = applyAntiTierInflationGuard(item.lot_items);
                         const targetCost =
                             item.purchase_strategy?.max_landed_cost ||
                             item.purchase_strategy?.max_bid ||
@@ -1425,6 +1799,17 @@ export const ALL: APIRoute = async ({ request }) => {
             }
 
             if (jsonObj.lot_items && Array.isArray(jsonObj.lot_items)) {
+                if (jsonObj.lot_items.length > 12) {
+                    jsonObj.lot_items = collapseExcessLotItems(
+                        jsonObj.lot_items,
+                        declaredUnitCount >= 2 ? declaredUnitCount : undefined,
+                        12
+                    );
+                }
+                if (declaredUnitCount >= 2) {
+                    jsonObj.lot_items = reconcileLotItemQuantities(jsonObj.lot_items, declaredUnitCount, 12);
+                }
+                jsonObj.lot_items = applyAntiTierInflationGuard(jsonObj.lot_items);
                 jsonObj.lot_items = normalizeBundleComponents(jsonObj.lot_items);
             }
 
@@ -1436,6 +1821,66 @@ export const ALL: APIRoute = async ({ request }) => {
                 jsonObj.items[0].scanKind = requestMode;
                 jsonObj.items[0].scannedAt = scannedAtIso;
                 jsonObj.items[0].rulesVersion = appraisalRules.version;
+            }
+
+            if (includeBenchmarkMeta) {
+                const primaryTarget =
+                    Array.isArray(jsonObj.items) && jsonObj.items[0] ? jsonObj.items[0] : jsonObj;
+                const usageMeta: any = activeModelResult?.response?.usageMetadata || {};
+                const promptTokens = Number(usageMeta.promptTokenCount) || 0;
+                const candTokens = Number(usageMeta.candidatesTokenCount) || 0;
+                const thoughtTokens = Number(usageMeta.thoughtsTokenCount) || 0;
+                const totalTokens =
+                    Number(usageMeta.totalTokenCount) || promptTokens + candTokens + thoughtTokens;
+                const resolvedModelName = String(
+                    activeModelResult?.response?.modelVersion || DEFAULT_GEMINI_MODEL
+                );
+                const estMicros = estimateGeminiCallUsdMicros(
+                    resolvedModelName,
+                    promptTokens,
+                    candTokens,
+                    thoughtTokens
+                );
+                const lotArr = Array.isArray(primaryTarget?.lot_items) ? primaryTarget.lot_items : [];
+                const lotUnitSum = lotArr.reduce(
+                    (sum: number, row: any) => sum + Math.max(1, extractSubItemQuantity(row)),
+                    0
+                );
+                const diagnostics = evaluateScoutBiasDiagnostics({
+                    item: primaryTarget,
+                    declaredUnitCount:
+                        declaredUnitCount >= 2 ? declaredUnitCount : benchmarkResolvedItem?.quantity,
+                    visionPhotosScanned: imageParts.length,
+                    totalAvailablePhotos: Math.max(totalAvailablePhotos, imageParts.length),
+                    maxVisionPhotos,
+                    stridedSamplingUsed,
+                    explicitMsrp: explicitMsrpHint > 0 ? explicitMsrpHint : undefined,
+                    shippingTotal: Number(scrapedShipping?.total ?? 0),
+                    venueMetas: getAllLocationSettingMetas(outerTargetLocations),
+                });
+
+                const benchmarkMeta = {
+                    latencyMs: Math.max(0, Date.now() - scoutCallStartedAt),
+                    model: resolvedModelName,
+                    thinkingLevel: scoutThinkingLevel,
+                    promptTokens,
+                    candTokens,
+                    thoughtTokens,
+                    totalTokens,
+                    estimatedUsd: Number((estMicros / 1_000_000).toFixed(6)),
+                    visionPhotosScanned: imageParts.length,
+                    totalAvailablePhotos: Math.max(totalAvailablePhotos, imageParts.length),
+                    stridedSamplingUsed,
+                    lotRowCount: lotArr.length,
+                    lotUnitSum,
+                    resolvedItem: benchmarkResolvedItem,
+                    bias_diagnostics: diagnostics,
+                    readOnly: true,
+                };
+                jsonObj.benchmark_meta = benchmarkMeta;
+                if (Array.isArray(jsonObj.items) && jsonObj.items[0] && typeof jsonObj.items[0] === 'object') {
+                    jsonObj.items[0].benchmark_meta = benchmarkMeta;
+                }
             }
             cleanedResponse = JSON.stringify(jsonObj);
         } catch (e) {

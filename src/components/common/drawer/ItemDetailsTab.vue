@@ -1401,17 +1401,29 @@
                   </span>
                 </div>
               </div>
-              <button
-                type="button"
-                @click="$emit('open-lot-tab')"
-                class="btn btn-xs btn-secondary text-secondary-content gap-1 shrink-0 font-bold shadow-2xs">
-                <span>{{
-                  parsedComponents && parsedComponents.length > 1
-                    ? "Open Playbook & Split Lot"
-                    : "View Playbook"
-                }}</span>
-                <Icon icon="solar:arrow-right-linear" class="w-3.5 h-3.5" />
-              </button>
+              <div class="flex items-center gap-1.5 shrink-0">
+                <button
+                  v-if="canAnalyze && canEditFull"
+                  type="button"
+                  :disabled="analyzing"
+                  @click="$emit('analyze')"
+                  class="btn btn-xs btn-outline btn-secondary gap-1 font-bold"
+                  title="Re-run Deep Scan across strided gallery photos">
+                  <span v-if="analyzing" class="loading loading-spinner loading-2xs"></span>
+                  <span>{{ analyzing ? 'Scanning...' : '🔍 Re-Scan' }}</span>
+                </button>
+                <button
+                  type="button"
+                  @click="$emit('open-lot-tab')"
+                  class="btn btn-xs btn-secondary text-secondary-content gap-1 shrink-0 font-bold shadow-2xs">
+                  <span>{{
+                    parsedComponents && parsedComponents.length > 1
+                      ? "Open Playbook & Split Lot"
+                      : "View Playbook"
+                  }}</span>
+                  <Icon icon="solar:arrow-right-linear" class="w-3.5 h-3.5" />
+                </button>
+              </div>
             </div>
             <p class="text-xs opacity-90 leading-relaxed font-medium">
               {{ exitPlaybook.summary }}
@@ -1846,13 +1858,27 @@
             class="bg-base-200/90 border border-base-300 rounded-2xl p-3.5 shadow-sm">
             <div
               class="font-extrabold text-sm mb-3 flex items-center justify-between gap-2 flex-wrap text-primary">
-              <div class="flex items-center gap-2 min-w-0">
+              <div class="flex items-center gap-2 min-w-0 flex-wrap">
                 <Icon
                   icon="solar:box-bold"
                   class="w-5 h-5 text-primary shrink-0" />
                 <span class="truncate"
-                  >Bundle Components ({{ parsedComponents.length }} Items)</span
+                  >Bundle Components ({{
+                    totalComponentUnits !== parsedComponents.length
+                      ? `${parsedComponents.length} Groups • ${totalComponentUnits} Units`
+                      : `${parsedComponents.length} Items`
+                  }})</span
                 >
+                <button
+                  v-if="canAnalyze && canEditFull"
+                  type="button"
+                  :disabled="analyzing"
+                  @click="$emit('analyze')"
+                  class="btn btn-xs btn-outline btn-secondary gap-1 font-bold"
+                  title="Re-run Deep Scan on this lot">
+                  <span v-if="analyzing" class="loading loading-spinner loading-2xs"></span>
+                  <span>{{ analyzing ? 'Scanning...' : '🔍 Re-Scan' }}</span>
+                </button>
               </div>
               <span
                 v-if="lotSplitRec"
@@ -1892,15 +1918,23 @@
                       {{ subIdx + 1 }}
                     </span>
                     <div class="flex flex-col min-w-0">
-                      <span
-                        class="text-base-content font-bold leading-snug text-left break-words">
-                        {{
-                          subItem.name ||
-                          subItem.title ||
-                          subItem.identity ||
-                          subItem.item
-                        }}
-                      </span>
+                      <div class="flex items-center gap-1.5 flex-wrap">
+                        <span
+                          class="text-base-content font-bold leading-snug text-left break-words">
+                          {{
+                            subItem.name ||
+                            subItem.title ||
+                            subItem.identity ||
+                            subItem.item
+                          }}
+                        </span>
+                        <span
+                          v-if="Number(subItem.quantity || 1) > 1"
+                          class="badge badge-xs badge-secondary text-secondary-content font-mono font-bold shrink-0"
+                        >
+                          ×{{ subItem.quantity }}
+                        </span>
+                      </div>
                       <span
                         v-if="isHeroAnchor(subItem, parsedComponents)"
                         class="text-[10px] font-black text-warning flex items-center gap-1 mt-0.5">
@@ -2199,6 +2233,10 @@ const props = defineProps({
         type: Boolean,
         default: false
     },
+    canAnalyze: {
+        type: Boolean,
+        default: true
+    },
     analysisStatus: {
         type: String,
         default: ''
@@ -2270,6 +2308,7 @@ const emit = defineEmits([
     'update:showOnStorefront',
     'update:saveIndividually',
     'update:descTab',
+    'analyze',
     'open-lot-tab',
     'open-splitter',
     'copy-title',
@@ -2511,6 +2550,11 @@ const exitPlaybook = computed(() => {
         ? { ...base, components: props.parsedComponents }
         : base;
     return deriveLotExitPlaybook(strategyItem, props.scoutResult);
+});
+
+const totalComponentUnits = computed(() => {
+    const list = props.parsedComponents || [];
+    return list.reduce((sum, c) => sum + Math.max(1, Number(c?.quantity) || 1), 0);
 });
 
 const scoutAuctionMeta = computed(() => {
