@@ -2134,39 +2134,50 @@ const analyzeExistingItem = async () => {
         let base64Images = [];
         let remoteUrls = [];
 
-        // 1. Gather all image sources available in the gallery at the time of the run
-        const candidateImageSources = new Set();
+        // 1. Gather canonical gallery sources in exact UI gallery order (deduplicating storage File IDs
+        //    so 220x220 thumbnail /preview URLs never duplicate or displace full-aspect /view URLs)
+        const candidateImageSources = [];
+        const seenCandidateKeys = new Set();
 
-        // 1a. Direct DOM extraction: grab all rendered <img> src attributes from the photo gallery UI
-        if (typeof document !== 'undefined') {
-            const galleryImgs = document.querySelectorAll('.photo-gallery-manager img');
-            galleryImgs.forEach((img) => {
-                if (img?.src && !img.src.includes('data:image/svg')) {
-                    candidateImageSources.add(img.src);
+        const pushUniqueCandidate = (src) => {
+            if (!src) return;
+            if (typeof src !== 'string') {
+                if (!candidateImageSources.includes(src)) {
+                    candidateImageSources.push(src);
                 }
-            });
+                return;
+            }
+            const trimmed = src.trim();
+            if (!trimmed || trimmed.includes('data:image/svg')) return;
+
+            const bucketMatch = /\/storage\/buckets\/([^/]+)\/files\/([^/?#]+)/i.exec(trimmed);
+            if (bucketMatch) {
+                const fileKey = `file:${bucketMatch[1]}:${bucketMatch[2]}`;
+                if (seenCandidateKeys.has(fileKey)) return;
+                seenCandidateKeys.add(fileKey);
+                const canonicalViewUrl = getAssetUrl(bucketMatch[2], { bucket: bucketMatch[1], preview: false });
+                candidateImageSources.push(canonicalViewUrl || trimmed);
+                return;
+            }
+
+            if (seenCandidateKeys.has(trimmed)) return;
+            seenCandidateKeys.add(trimmed);
+            candidateImageSources.push(trimmed);
+        };
+
+        // 1a. Canonical main photo first
+        if (actualMainPhoto.value?.file) {
+            pushUniqueCandidate(actualMainPhoto.value.file);
+        } else if (actualMainPhoto.value?.url) {
+            pushUniqueCandidate(actualMainPhoto.value.url);
         }
 
-        // 1b. Add local files in editGalleryBuffer
-        if (editGalleryBuffer.value && editGalleryBuffer.value.length > 0) {
-            editGalleryBuffer.value.forEach(f => {
-                if (f) candidateImageSources.add(f);
-            });
-        }
-
-        // 1c. Add URLs from computed gallery state
+        // 1b. Canonical ordered gallery URLs
         if (allAvailableGalleryUrls.value && allAvailableGalleryUrls.value.length > 0) {
-            allAvailableGalleryUrls.value.forEach(u => {
-                if (u) candidateImageSources.add(u);
-            });
+            allAvailableGalleryUrls.value.forEach(u => pushUniqueCandidate(u));
         }
 
-        // 1d. Add main photo URL
-        if (actualMainPhoto.value?.url) {
-            candidateImageSources.add(actualMainPhoto.value.url);
-        }
-
-        // 1e. Add existing gallery IDs & item image ID converted via getAssetUrl
+        // 1c. Existing gallery IDs & item imageId converted via getAssetUrl
         const allIds = [
             ...(Array.isArray(editForm.existingGalleryIds) ? editForm.existingGalleryIds : []),
             ...(Array.isArray(props.item?.galleryImageIds) ? props.item.galleryImageIds : []),
@@ -2174,12 +2185,25 @@ const analyzeExistingItem = async () => {
         ];
         allIds.forEach(id => {
             const u = getAssetUrl(id);
-            if (u) candidateImageSources.add(u);
+            if (u) pushUniqueCandidate(u);
         });
+
+        // 1d. Local unsaved files in editGalleryBuffer
+        if (editGalleryBuffer.value && editGalleryBuffer.value.length > 0) {
+            editGalleryBuffer.value.forEach(f => pushUniqueCandidate(f));
+        }
+
+        // 1e. Fallback ONLY when reactive state had zero photos: inspect rendered gallery <img> elements
+        if (candidateImageSources.length === 0 && typeof document !== 'undefined') {
+            const galleryImgs = document.querySelectorAll('.photo-gallery-manager img');
+            galleryImgs.forEach((img) => {
+                if (img?.src) pushUniqueCandidate(img.src);
+            });
+        }
 
         // 2. Safely categorize candidate sources into remote URLs vs local base64
         // Passing remote URLs directly avoids sending >4.5MB base64 payloads to Vercel
-        const fetchPromises = Array.from(candidateImageSources).slice(0, 40).map(async (source) => {
+        const fetchPromises = candidateImageSources.slice(0, 24).map(async (source) => {
             if (!source) return;
 
             // Check if string URL
@@ -2233,7 +2257,14 @@ const analyzeExistingItem = async () => {
             notesParts.push("LINEAGE NOTE: This item is a single individual unit deconstructed from a previous collection. Identify and appraise strictly this individual unit. Do NOT appraise or synthesize a lot.");
         }
         if (editForm.description && editForm.description.trim()) {
-            notesParts.push("Listing Description:\n" + editForm.description.trim());
+            const strippedDesc = editForm.description
+                .replace(/---\s*📦\s*MAIN LOT APPRAISAL[\s\S]*$/i, '')
+                .replace(/\*\*🔍\s*Cataloged Items & Pricing Tiers:\*\*[\s\S]*$/i, '')
+                .replace(/\*\*📦\s*MULTI-ITEM LOT BREAKDOWN[\s\S]*$/i, '')
+                .trim();
+            if (strippedDesc) {
+                notesParts.push("Listing Description:\n" + strippedDesc);
+            }
         }
         if (editForm.sourcingLocation) {
             notesParts.push("Sourcing URL: " + editForm.sourcingLocation);
@@ -2247,12 +2278,11 @@ const analyzeExistingItem = async () => {
                 upc: c.upc,
                 title: c.title,
                 price: c.resalePrice || c.price,
-                condition: c.condition_notes || c.condition,
-                description: c.description
+                condition: c.condition_notes || c.condition
             }))
             : [];
 
-        if (!isChildItem && existingChildComponents.length > 0) {
+        if (!isChildItem && existingChildComponents.length > 0 && existingChildComponents.length <= 12) {
             contextNotes += `\n\n=== VERIFIED CONSTITUENT ITEMS IN THIS MAIN LOT (${existingChildComponents.length} Listings) ===\n` +
                 existingChildComponents.map(c => `- [${c.upc || 'ITEM'}] ${c.title}${c.price ? ` ($${c.price})` : ''}`).join('\n') +
                 `\nNOTE: These items are ALREADY verified and cataloged. Appraise and synthesize the Main Lot based on these known items.`;

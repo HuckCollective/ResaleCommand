@@ -64,7 +64,7 @@ export const DEFAULT_GEMINI_MODEL =
     "gemini-flash-latest";
 
 /** Per-attempt timeout (ms) before failing over cleanly to the next valid API model. */
-export const PER_ATTEMPT_TIMEOUT_MS = 45_000;
+export const PER_ATTEMPT_TIMEOUT_MS = 25_000;
 
 /** Ordered World-1 API fallback roster (strictly valid Google GenAI API model IDs). */
 export const GEMINI_FALLBACK_MODELS = [
@@ -270,6 +270,14 @@ export const generateContentWithBackoff = async (
         );
     }
 
+    const effectiveAttemptTimeoutMs =
+        requestPayload &&
+        typeof requestPayload === "object" &&
+        typeof requestPayload.attemptTimeoutMs === "number" &&
+        requestPayload.attemptTimeoutMs > 0
+            ? requestPayload.attemptTimeoutMs
+            : PER_ATTEMPT_TIMEOUT_MS;
+
     const candidateModels = Array.from(new Set(GEMINI_FALLBACK_MODELS));
     let modelIdx = 0;
     let omitThinkingOnCurrent = false;
@@ -278,6 +286,23 @@ export const generateContentWithBackoff = async (
     let delayMs = baseDelayMs;
     const ai = getGenAiClient();
     const callStartedAt = Date.now();
+
+    const recordFailureTelemetry = async (modelName: string, verdictLabel: string) => {
+        if (!effectiveTelemetry?.surface) return;
+        await deliverAiTelemetry({
+            surface: effectiveTelemetry.surface,
+            model: String(modelName || DEFAULT_GEMINI_MODEL),
+            verdict: verdictLabel,
+            promptTokens: 0,
+            candTokens: 0,
+            thoughtTokens: 0,
+            totalTokens: 0,
+            latencyMs: Math.max(0, Date.now() - callStartedAt),
+            fallback: true,
+            rulesVersion: effectiveTelemetry.rulesVersion ?? null,
+            itemId: effectiveTelemetry.itemId ?? null,
+        });
+    };
 
     while (retries > 0) {
         const currentModelName = candidateModels[modelIdx] || DEFAULT_GEMINI_MODEL;
@@ -291,12 +316,14 @@ export const generateContentWithBackoff = async (
             );
             callerAbortSignal = config.abortSignal;
             callerSuppliedAbort = Boolean(callerAbortSignal);
-            if (
-                !callerSuppliedAbort &&
-                typeof AbortSignal !== "undefined" &&
-                typeof AbortSignal.timeout === "function"
-            ) {
-                config.abortSignal = AbortSignal.timeout(PER_ATTEMPT_TIMEOUT_MS);
+            if (!callerSuppliedAbort) {
+                if (typeof AbortSignal !== "undefined" && typeof AbortSignal.timeout === "function") {
+                    config.abortSignal = AbortSignal.timeout(effectiveAttemptTimeoutMs);
+                }
+                config.httpOptions = {
+                    ...(config.httpOptions || {}),
+                    timeout: effectiveAttemptTimeoutMs,
+                };
             }
 
             const rawRes = await ai.models.generateContent({
@@ -381,8 +408,9 @@ export const generateContentWithBackoff = async (
                     msg.includes("aborted"));
 
             if (isAttemptTimeout) {
+                const timeoutSec = Math.round(effectiveAttemptTimeoutMs / 1000);
                 console.warn(
-                    `[Gemini] ${PER_ATTEMPT_TIMEOUT_MS / 1000}s per-attempt timeout on ${currentModelName} (${errName || "TimeoutError"}). Advancing to next fallback model immediately...`
+                    `[Gemini] ${timeoutSec}s per-attempt timeout on ${currentModelName} (${errName || "TimeoutError"}). Advancing to next fallback model immediately...`
                 );
                 if (retries > 1 && modelIdx < candidateModels.length - 1) {
                     modelIdx++;
@@ -390,8 +418,9 @@ export const generateContentWithBackoff = async (
                     retries--;
                     continue;
                 }
+                await recordFailureTelemetry(currentModelName, "TIMEOUT");
                 throw new Error(
-                    "AI appraisal timed out after 45 seconds per attempt. Please try again or reduce the number of photos."
+                    `AI appraisal timed out after ${timeoutSec} seconds per attempt. Please try again or reduce the number of photos.`
                 );
             }
 
@@ -456,10 +485,12 @@ export const generateContentWithBackoff = async (
                 omitThinkingOnCurrent = false;
                 retries--;
             } else {
+                await recordFailureTelemetry(currentModelName, "ERROR");
                 throw err;
             }
         }
     }
+    await recordFailureTelemetry(candidateModels[modelIdx] || DEFAULT_GEMINI_MODEL, "ERROR");
     throw new Error("Failed to receive a valid response from the AI model after retries.");
 };
 

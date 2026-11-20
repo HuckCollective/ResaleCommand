@@ -1,6 +1,7 @@
 import type { APIRoute } from 'astro';
-import { inspectPhotoGallery, type InspectionImage } from '../../lib/ai-inspection';
+import { inspectPhotoGallery, dedupeInspectionImages, type InspectionImage } from '../../lib/ai-inspection';
 import { getAssetUrl } from '../../lib/inventory';
+import { toUserMessage } from '../../lib/userFacingErrors';
 
 export const prerender = false;
 export const maxDuration = 300;
@@ -8,7 +9,7 @@ export const maxDuration = 300;
 export const POST: APIRoute = async ({ request }) => {
     try {
         const body = await request.json();
-        const { images, remoteImageUrls, base64Images, title, notes, cost, quantity, sourcingLocation, locations, existingItems } = body;
+        const { images, remoteImageUrls, base64Images, title, notes, cost, quantity, sourcingLocation, locations, existingItems, itemId } = body;
 
         const preparedImages: InspectionImage[] = [];
         let imgIdx = 0;
@@ -56,14 +57,17 @@ export const POST: APIRoute = async ({ request }) => {
             });
         }
 
-        if (preparedImages.length === 0) {
+        const dedupedImages = dedupeInspectionImages(preparedImages);
+        if (dedupedImages.length === 0) {
             return new Response(JSON.stringify({ error: "No images provided" }), {
                 status: 400,
                 headers: { 'Content-Type': 'application/json' }
             });
         }
 
-        const result = await inspectPhotoGallery(preparedImages, {
+        const result = await inspectPhotoGallery(dedupedImages, {
+            itemId: typeof itemId === 'string' && itemId.trim() ? itemId.trim() : undefined,
+            surface: 'lot_inspector',
             title,
             notes,
             cost: typeof cost === 'number' ? cost : parseFloat(cost) || undefined,
@@ -79,7 +83,7 @@ export const POST: APIRoute = async ({ request }) => {
         });
     } catch (e: any) {
         console.error("[api/inspect-lot] Error:", e);
-        return new Response(JSON.stringify({ error: e.message || "Failed to inspect lot" }), {
+        return new Response(JSON.stringify({ error: toUserMessage(e, "Could not complete deep lot scan. Please try again.") }), {
             status: 500,
             headers: { 'Content-Type': 'application/json' }
         });

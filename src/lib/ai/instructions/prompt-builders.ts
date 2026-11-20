@@ -28,6 +28,21 @@ export function buildSpeedScoutUserPrompt(params: {
   return sections.join('\n\n').trim();
 }
 
+/**
+ * Strips circular AI appraisal dumps, cataloged item essays, or verified-item echoes
+ * so only genuine human operator notes reach [2. AUTHORITATIVE RESELLER NOTES].
+ */
+export function sanitizeLotInspectionNotes(rawNotes?: string): string {
+  if (!rawNotes || typeof rawNotes !== 'string') return '';
+  return rawNotes
+    .replace(/---\s*📦\s*MAIN LOT APPRAISAL[\s\S]*$/i, '')
+    .replace(/\*\*🔍\s*Cataloged Items & Pricing Tiers:\*\*[\s\S]*$/i, '')
+    .replace(/\*\*📦\s*MULTI-ITEM LOT BREAKDOWN[\s\S]*$/i, '')
+    .replace(/===\s*VERIFIED CONSTITUENT ITEMS IN THIS MAIN LOT[\s\S]*$/i, '')
+    .replace(/Listing Description:\s*---\s*📦[\s\S]*$/i, '')
+    .trim();
+}
+
 export function buildLotInspectionUserPrompt(params: {
   authoritativeUserNotes?: string;
   lotTitle?: string;
@@ -38,34 +53,76 @@ export function buildLotInspectionUserPrompt(params: {
   locationsSummary?: string;
   imageCount: number;
 }): string {
-  const hasVerifiedExisting = Boolean(params.verifiedExistingItems?.length);
+  const existingCount = params.verifiedExistingItems?.length || 0;
+  // Enforce 1-to-1 verified matching ONLY when <= 12 items (e.g. LotSplitterWizard crop pass);
+  // > 12 items must still group into <= 12 rows so output never blows past token/latency caps.
+  const hasVerifiedExisting = existingCount > 0 && existingCount <= 12;
   const isLargeUnverifiedLot =
-    !hasVerifiedExisting && Boolean(params.targetQuantity && params.targetQuantity > 10);
+    !hasVerifiedExisting &&
+    Boolean((params.targetQuantity && params.targetQuantity > 10) || existingCount > 12);
+
+  const compactExistingSummary =
+    existingCount > 12
+      ? `\n[REFERENCE TITLES PREVIOUSLY NOTED IN LOT (${existingCount} units — DO NOT OUTPUT 1-TO-1; GROUP INTO <= 12 ROWS PER SECTION 5)]:\n` +
+        params
+          .verifiedExistingItems!.slice(0, 30)
+          .map((it: any, idx: number) => `${idx + 1}. ${it?.title || it?.name || 'Unit'}`)
+          .join('\n') +
+        '\n'
+      : '';
 
   const verifiedExistingContext = hasVerifiedExisting
-    ? `\n[VERIFIED CONSTITUENT ITEMS IN THIS LOT (${params.verifiedExistingItems!.length} verified items)]:\n` +
-      JSON.stringify(params.verifiedExistingItems, null, 2) +
+    ? `\n[VERIFIED CONSTITUENT ITEMS IN THIS LOT (${existingCount} verified items)]:\n` +
+      JSON.stringify(
+        params.verifiedExistingItems!.map((it: any) => ({
+          upc: it?.upc,
+          title: it?.title || it?.name,
+          price: it?.price || it?.estimated_value,
+          condition: it?.condition,
+        })),
+        null,
+        2
+      ) +
       `\nCRITICAL CONSTITUENT INSTRUCTION:\nThe seller has ALREADY split, cataloged, and verified these items! Use these verified items as the definitive catalog for this lot. Do NOT invent new items or hallucinate different categories.\n`
-    : '';
+    : compactExistingSummary;
+
+  const effectiveTargetQty =
+    params.targetQuantity && params.targetQuantity > 1
+      ? params.targetQuantity
+      : existingCount > 12
+        ? existingCount
+        : undefined;
 
   const countInstruction = hasVerifiedExisting
-    ? `Match and inspect the ${params.verifiedExistingItems!.length} verified constituent items listed below 1-to-1. Do NOT merge or regroup verified items.`
+    ? `Match and inspect the ${existingCount} verified constituent items listed below 1-to-1. Do NOT merge or regroup verified items.`
     : isLargeUnverifiedLot
-      ? `The reseller states this bulk lot contains ${params.targetQuantity} physical units (> 10 units). Decompose it into AT MOST 12 structured 'lot_items' rows whose 'quantity' values sum to EXACTLY ${params.targetQuantity}: extract the top 6-8 standout/hero titles legible via verbatim cover/spine OCR as individual 'showcase' singles (quantity: 1), roll matching author/series/format runs into grouped 'core' lines with 'quantity: N' and '(xN)' in 'name', and roll remaining common/unreadable units into a 'quick_turn' remainder floor pack with 'quantity: N' and '(xN)' in 'name'.`
-      : params.targetQuantity && params.targetQuantity > 1
-        ? `The reseller states this lot contains EXACTLY ${params.targetQuantity} items (<= 10 units). You MUST reconcile all photos to identify and extract all ${params.targetQuantity} distinct pieces 1-to-1 (quantity: 1 each, unless identical duplicate copies).`
+      ? `The reseller states this bulk lot contains ${effectiveTargetQty} physical units (> 10 units). Decompose it into AT MOST 12 structured 'lot_items' rows whose 'quantity' values sum to EXACTLY ${effectiveTargetQty}: extract the top 6-8 standout/hero titles legible via verbatim cover/spine OCR as individual 'showcase' singles (quantity: 1), roll matching author/series/format runs into grouped 'core' lines with 'quantity: N' and '(xN)' in 'name', and roll remaining common/unreadable units into a 'quick_turn' remainder floor pack with 'quantity: N' and '(xN)' in 'name'.`
+      : effectiveTargetQty && effectiveTargetQty > 1
+        ? `The reseller states this lot contains EXACTLY ${effectiveTargetQty} items (<= 10 units). You MUST reconcile all photos to identify and extract all ${effectiveTargetQty} distinct pieces 1-to-1 (quantity: 1 each, unless identical duplicate copies).`
         : `If <= 10 distinct physical pieces are visible in the gallery photos, identify and extract every piece 1-to-1 (quantity: 1). If > 10 physical pieces are visible in an uncounted bulk lot, extract the top 6-8 standout 'showcase' singles (quantity: 1) and roll remaining units into grouped 'core' and 'quick_turn' '(xN)' lines so total 'lot_items' stays <= 12 rows and 'quantity' values sum to the total visible unit count.`;
 
+  const viewsInstruction = isLargeUnverifiedLot
+    ? `- Photo #N in this prompt = image_index N-1 (0-based). Valid image_index range: 0 to ${Math.max(0, params.imageCount - 1)}.
+- For every single-unit row (quantity: 1), return top-level "image_index" (best primary photo) and "bounding_box": [ymin, xmin, ymax, xmax] as integers 0-1000 tightly enclosing ONLY that item. For grouped multi-unit rows (quantity > 1 in >10-unit bulk lots), return "bounding_box" and "views" enclosing the visible shelf row, stack, or cluster containing those grouped units.
+- FAST LARGE-LOT VIEW RULE: Because this bulk lot has > 10 units, return ONLY ONE primary "front" entry in "views" per row ([{ "role": "front", "image_index": 0, "bounding_box": [ymin, xmin, ymax, xmax] }]) rather than listing every angle across all gallery photos.`
+    : `- Photo #N in this prompt = image_index N-1 (0-based). Valid image_index range: 0 to ${Math.max(0, params.imageCount - 1)}.
+- For every single-unit row (quantity: 1), return top-level "image_index": 0 (primary/front photo) and "bounding_box": [ymin, xmin, ymax, xmax] as integers 0-1000 (fraction of that photo's height/width) tightly enclosing ONLY that item. For grouped multi-unit rows (quantity > 1 in >10-unit bulk lots), return "bounding_box" and "views" enclosing the visible shelf row, stack, or cluster containing those grouped units.
+- Also return "views": one entry for EVERY photo where this specific item appears: [{ "role": "front", "image_index": 0, "bounding_box": [ymin, xmin, ymax, xmax] }]. The first entry should be the primary front view.
+- Cross-reference group overview shots: if Photo #1 shows fronts and Photo #2 shows the same items turned over, match each item to its back. Turning items over MIRRORS the left-to-right order (leftmost front = rightmost back) when flipped horizontally, so correlate by size, color, shape, and visible text rather than position alone.
+- Cross-reference individual closeups (interior maps, inked/signed pages, copyright pages, flaw closeups, tags) and attach them to the matching item with role 'detail' or 'tag'. Never invent a view for a photo where the item is not visible.`;
+
   const largeLotGroupingSection =
-    !hasVerifiedExisting && (!params.targetQuantity || params.targetQuantity <= 1 || isLargeUnverifiedLot)
+    !hasVerifiedExisting && (!effectiveTargetQty || effectiveTargetQty <= 1 || isLargeUnverifiedLot)
       ? `\n\n[5. LARGE LOT GROUPED DECOMPOSITION & LINE-TOTAL PRICING LAW]
-- Threshold Rule: Use 1-to-1 per-piece extraction ONLY when the lot has <= 10 physical units. Whenever the lot has > 10 physical units (${params.targetQuantity ? `here: ${params.targetQuantity} units` : 'uncounted bulk lot'}), NEVER output > 12 rows in "lot_items".
-- Required Bucket Structure (<= 12 total rows, sum(quantity) === ${params.targetQuantity && params.targetQuantity > 10 ? params.targetQuantity : 'total visible units'}):
+- Threshold Rule: Use 1-to-1 per-piece extraction ONLY when the lot has <= 10 physical units. Whenever the lot has > 10 physical units (${effectiveTargetQty ? `here: ${effectiveTargetQty} units` : 'uncounted bulk lot'}), NEVER output > 12 rows in "lot_items".
+- Required Bucket Structure (<= 12 total rows, sum(quantity) === ${effectiveTargetQty && effectiveTargetQty > 10 ? effectiveTargetQty : 'total visible units'}):
   1. "showcase" (top 6-8 standout/hero titles legible from spine or cover OCR): output each as its own single row with "quantity": 1 and a tight per-item bounding_box + views[].
   2. "core" (remaining identifiable series, author, or format runs): roll into grouped rows with "quantity": N and "(xN)" at the end of "name", using a cluster/shelf bounding_box.
   3. "quick_turn" (remaining common, budget, or unreadable filler units): roll into 1-2 remainder pack rows with "quantity": N and "(xN)" at the end of "name", using a cluster/shelf bounding_box, so 100% of physical units are accounted for without duplicating any item.
 - LINE TOTAL PRICING LAW: Every price field on a "lot_items" entry ("estimated_value", "pricing_potential", "price_breakdown", "buy_range") MUST equal the LINE TOTAL across all "quantity" units on that row (never per-unit when quantity > 1), and top-level "price_breakdown" must equal the sum of all "lot_items" line totals.`
       : '';
+
+  const cleanedNotes = sanitizeLotInspectionNotes(params.authoritativeUserNotes);
 
   return `
 [1. GALLERY PHOTOS CONTEXT]
@@ -73,11 +130,7 @@ ALL ${params.imageCount} GALLERY PHOTOS ARE ATTACHED DIRECTLY TO THIS REQUEST:
 Photo #1 through Photo #${params.imageCount}. Inspect every image carefully. Cross-reference group/overview shots with individual item closeups and spines.
 
 [1b. MULTI-ANGLE VIEWS & BOUNDING BOXES (REQUIRED FOR EVERY lot_items ENTRY)]
-- Photo #N in this prompt = image_index N-1 (0-based). Valid image_index range: 0 to ${Math.max(0, params.imageCount - 1)}.
-- For every single-unit row (quantity: 1), return top-level "image_index": 0 (primary/front photo) and "bounding_box": [ymin, xmin, ymax, xmax] as integers 0-1000 (fraction of that photo's height/width) tightly enclosing ONLY that item. For grouped multi-unit rows (quantity > 1 in >10-unit bulk lots), return "bounding_box" and "views" enclosing the visible shelf row, stack, or cluster containing those grouped units.
-- Also return "views": one entry for EVERY photo where this specific item appears: [{ "role": "front", "image_index": 0, "bounding_box": [ymin, xmin, ymax, xmax] }]. The first entry should be the primary front view.
-- Cross-reference group overview shots: if Photo #1 shows fronts and Photo #2 shows the same items turned over, match each item to its back. Turning items over MIRRORS the left-to-right order (leftmost front = rightmost back) when flipped horizontally, so correlate by size, color, shape, and visible text rather than position alone.
-- Cross-reference individual closeups (interior maps, inked/signed pages, copyright pages, flaw closeups, tags) and attach them to the matching item with role 'detail' or 'tag'. Never invent a view for a photo where the item is not visible.
+${viewsInstruction}
 - Every single entry in "lot_items" MUST explicitly follow this JSON pattern:
   {
     "name": "Example Item Title",
@@ -90,7 +143,7 @@ Photo #1 through Photo #${params.imageCount}. Inspect every image carefully. Cro
   }
 
 [2. AUTHORITATIVE RESELLER NOTES (100% GROUND TRUTH OVERRIDE)]
-${params.authoritativeUserNotes ? params.authoritativeUserNotes.trim() : 'None provided.'}
+${cleanedNotes || 'None provided.'}
 
 [3. LOT DETAILS & PURCHASE CONTEXT]
 - Listing Title: "${params.lotTitle || 'Multi-Item Lot'}"
