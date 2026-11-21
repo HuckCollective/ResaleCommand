@@ -129,7 +129,7 @@ Whenever you encounter recurring UI patterns or structural containers (e.g. bott
    - The primitive handles viewport anchoring, `<Teleport>`, responsive media queries, backdrop blur, border tokens, and transition physics.
    - Use semantic Vue slots (`#top`, `#left`, `#center`, `#right`, `#default`) so any view (Inventory, Sales, Social, Scout, Purchases) can project its own domain state without polluting the primitive.
 2. **Built-in Root Teleportation**:
-   - Fixed floating elements (like [`BottomActionDock.vue`](file:///c:/Users/15034/Projects/ResaleCommand/src/components/common/BottomActionDock.vue) or full-screen dialogs) MUST encapsulate `<Teleport to="body">` by default.
+   - Fixed floating elements (like [`BottomActionDock.vue`](src/components/common/BottomActionDock.vue) or full-screen dialogs) MUST encapsulate `<Teleport to="body">` by default.
    - This guarantees immunity against ancestor layout constraints, flex wrappers, nested scroll contexts, CSS `transform` / `filter` containing block resets, and margin collapse.
 3. **Hardware-Level Mobile Clearances**:
    - Primitives positioned along viewport edges MUST automatically include `env(safe-area-inset-bottom)` or `env(safe-area-inset-top)` so hardware indicators (e.g. iPhone home bar) never collide with action targets.

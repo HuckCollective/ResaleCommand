@@ -71,7 +71,7 @@ Legacy documents in Appwrite may contain legacy status synonyms (`'in-stock'`, `
 - `/scout` must **never** split multi-item lots into multiple database records during scouting or intake.
 - In `/scout`, the interface displays the read-only **Bundle Components** list and the **`⚡ Recommended Play`** badge (`Split vs. Bundle`).
 - The intake item is saved strictly as **1 Master Lot document** with child `components` safely persisted in metadata (`bundle_components` / `lot_items`).
-- All physical deconstruction and database splitting (`⚡ Deconstruct Lot`) is strictly delegated to [`ItemDrawer.vue`](file:///c:/Users/15034/Projects/ResaleCommand/src/components/common/ItemDrawer.vue) once the inventory has been physically acquired, unboxed, and received.
+- All physical deconstruction and database splitting (`⚡ Deconstruct Lot`) is strictly delegated to [`ItemDrawer.vue`](src/components/common/ItemDrawer.vue) once the inventory has been physically acquired, unboxed, and received.
 
 ---
 

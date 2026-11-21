@@ -18,7 +18,7 @@
 *The average person can hold roughly `7 (±2)` items in immediate working focus; summary strips should stay even leaner (`2–4`).*
 
 ### Concrete Checks
-- **Canonical `<KpiStatGrid>`:** Render top KPI summary strips via [`KpiStatGrid.vue`](file:///c:/Users/15034/Projects/ResaleCommand/src/components/common/KpiStatGrid.vue) (`:columns="2 | 3 | 4"`) rather than sprawling 6–8 stat boxes across the top of a page.
+- **Canonical `<KpiStatGrid>`:** Render top KPI summary strips via [`KpiStatGrid.vue`](src/components/common/KpiStatGrid.vue) (`:columns="2 | 3 | 4"`) rather than sprawling 6–8 stat boxes across the top of a page.
 - **5-Pillar Navigation:** Keep primary top-bar navigation bounded to `<= 5` pillars (`Navbar.vue`) and drawer tab bars to `<= 4` tabs.
 
 ---

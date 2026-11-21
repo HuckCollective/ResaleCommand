@@ -41,3 +41,17 @@ Run ONLY the workflow below that matches what the user asked for:
 
 1. Read `DEV_AI_ROSTER_LAST_REVIEWED` and `DEV_AI_REVIEW_INTERVAL_DAYS` in [`src/lib/devAiRouting.ts`](src/lib/devAiRouting.ts).
 2. If more than `30` days old, prompt the user to check the Antigravity Model Picker for newer Gemini / partner models and update `DEV_AI_ROSTER_LAST_REVIEWED`.
+
+---
+
+## Workflow D — Full Domain Skill Audit & Modernization Prompt (`ResaleCommand` ➔ `thehc-platform`)
+
+**Trigger phrases:** *"Audit and migrate all skills to thehc-platform"*, *"Consolidate skills for thehc-platform"*
+
+Use Workflow A for small 1–2 file inline deltas, and **Workflow D** when migrating the full domain knowledge base into a co-located `thehc-platform` clone without pasting ~343 KB inline:
+
+1. **Read-Only Sibling Boundary:** Never mutate `../ResaleCommand` from `thehc-platform`. The target IDE prompt must instruct the user/IDE to attach or approve read-only access to `../ResaleCommand/.agents`, and halt immediately rather than guessing if unreachable.
+2. **Two-Tier Consolidation (Zero Duplicate Skill Names):**
+   - **Tier 1 (`tools/plugins/huckleberry-agent-kit/`):** Keep the global plugin lean with 4 upgraded universal stack skills (`huckleberry-design-system`, `gemini-genai-patterns`, `appwrite-schema-ops`, `fast-local-verify`) + 3 `hc-*` subagents (`hc-appwrite-architect`, `hc-ui-steward`, `hc-migration-auditor`), folding in Vue 3.5 Fragment/Teleport, DaisyUI v5, Two-World `@google/genai`, Appwrite pagination/schema limits, and ledger/contract audit checklists.
+   - **Tier 2 (`.agents/skills/` & `.agents/rules/`):** Place the slimmed/modernized domain skills (`SKILL.md <= 6–8 KB` + bulky catalogs in `references/*.md`) and monorepo glob rules (`apps/*`, `packages/*`) inside `thehc-platform`, retiring legacy single-repo glue (`hucks-resale-core`, `ai-context-sync`).
+3. **Cross-IDE & Cross-OS Wiring:** Register `tools/plugins/huckleberry-agent-kit/skills` in `.agents/skills.json`, configure `.vscode/settings.json` (`files.eol: "\n"`, `chat.useAgentsMdFile`, `chat.useAgentSkills`, `chat.skillsLocations`, `chat.instructionsFilesLocations`), run `node tools/scripts/link-global-plugin.mjs` (refreshes Windows NTFS hardlinks / macOS symlinks), modularize `tools/scripts/export-gemini-web.mjs` (`pnpm agent:export-web`), and verify with `pnpm.cmd verify` (`win32`) / `pnpm verify` (`darwin`/`linux`).

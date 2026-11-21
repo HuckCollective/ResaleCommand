@@ -15,19 +15,19 @@ Whenever you are about to create or modify UI, consult this decision matrix:
 
 | If You Need To... | Reusable UI Pattern Primitive | Implementation / Component | Key Capability |
 | :--- | :--- | :--- | :--- |
-| **Pin action buttons or telemetry** to page, modal, drawer, or tray | **Contextual Command Dock** | [`BottomActionDock.vue`](file:///c:/Users/15034/Projects/ResaleCommand/src/components/common/BottomActionDock.vue) | Glassmorphic surface, iOS safe-area, auto-teleport or sticky placement (`placement="viewport"` vs `"container"`). |
-| **Inspect or edit full item details** without leaving the view | **Slide-Over Item Drawer** | [`ItemDrawer.vue`](file:///c:/Users/15034/Projects/ResaleCommand/src/components/common/ItemDrawer.vue) | Standard 400px side panel, photos, pricing, venue sync, Rollo barcode printing. |
-| **Create or edit a short focused form** (Connect With Us, Edit My Application) while keeping page context | **Generic Slide-Over Drawer** | [`SlideOverDrawer.vue`](file:///c:/Users/15034/Projects/ResaleCommand/src/components/common/SlideOverDrawer.vue) | `v-model` open state, Teleport, Esc / backdrop close, focus moves into panel, full-width on mobile / 480px desktop, sticky header + optional `#footer` slot. Use this instead of a centered `<dialog>` modal for forms. |
-| **Capture photos via live webcam / mobile camera** | **Camera Viewfinder HUD** | [`ScannerWidget.vue`](file:///c:/Users/15034/Projects/ResaleCommand/src/components/common/ScannerWidget.vue) | Zero-blackout WebRTC lifecycle, camera flip, multi-shot gallery buffering. |
-| **Upload, reorder, preview, and delete photos** | **Photo Gallery Manager** | [`PhotoGalleryManager.vue`](file:///c:/Users/15034/Projects/ResaleCommand/src/components/common/PhotoGalleryManager.vue) | Drag-drop upload, thumbnail strip, primary photo selection. |
-| **Display an inventory SKU card in grids or lists** | **Item Card / Thumbnail** | [`ItemCard.vue`](file:///c:/Users/15034/Projects/ResaleCommand/src/components/common/ItemCard.vue) / [`ItemThumbnail.vue`](file:///c:/Users/15034/Projects/ResaleCommand/src/components/common/ItemThumbnail.vue) | Standard resale badges, status color coding, venue location badge. |
-| **Select single or multiple categories/bins** | **Filter Dropdowns** | [`SingleSelectDropdown.vue`](file:///c:/Users/15034/Projects/ResaleCommand/src/components/common/SingleSelectDropdown.vue) / [`MultiSelectDropdown.vue`](file:///c:/Users/15034/Projects/ResaleCommand/src/components/common/MultiSelectDropdown.vue) | DaisyUI dropdown shell, search filter inside dropdown, keyboard accessible. |
-| **Add and remove tags or keywords** | **Tag Input Pill Group** | [`TagInput.vue`](file:///c:/Users/15034/Projects/ResaleCommand/src/components/common/TagInput.vue) | Chip tags with auto-suggest, Enter/Comma creation, delete chip buttons. |
-| **Paginate through large database tables** | **Pagination Dock** | [`PaginationDock.vue`](file:///c:/Users/15034/Projects/ResaleCommand/src/components/common/PaginationDock.vue) | Numeric jump pill, First/Prev/Next/Last controls, rows-per-page selector. |
-| **Slide up deep filters, manifest lists, or PO item batch operations** | **Interactive Bottom Sheet / Detent Tray** | [`LocationManifestTray.vue`](file:///c:/Users/15034/Projects/ResaleCommand/src/components/inventory/LocationManifestTray.vue), [`ScoutPurchaseTray.vue`](file:///c:/Users/15034/Projects/ResaleCommand/src/components/scout/ScoutPurchaseTray.vue), [`PurchaseItemsTray.vue`](file:///c:/Users/15034/Projects/ResaleCommand/src/components/purchases/PurchaseItemsTray.vue) | Slides **UP from the bottom** (`rounded-t-3xl max-w-5xl mx-auto w-full max-h-[82dvh]`), drag pill, 4-card KPI strip, wide horizontal item table, sticky bottom action bar. |
+| **Pin action buttons or telemetry** to page, modal, drawer, or tray | **Contextual Command Dock** | [`BottomActionDock.vue`](src/components/common/BottomActionDock.vue) | Glassmorphic surface, iOS safe-area, auto-teleport or sticky placement (`placement="viewport"` vs `"container"`). |
+| **Inspect or edit full item details** without leaving the view | **Slide-Over Item Drawer** | [`ItemDrawer.vue`](src/components/common/ItemDrawer.vue) | Standard 400px side panel, photos, pricing, venue sync, Rollo barcode printing. |
+| **Create or edit a short focused form** (Connect With Us, Edit My Application) while keeping page context | **Generic Slide-Over Drawer** | [`SlideOverDrawer.vue`](src/components/common/SlideOverDrawer.vue) | `v-model` open state, Teleport, Esc / backdrop close, focus moves into panel, full-width on mobile / 480px desktop, sticky header + optional `#footer` slot. Use this instead of a centered `<dialog>` modal for forms. |
+| **Capture photos via live webcam / mobile camera** | **Camera Viewfinder HUD** | [`ScannerWidget.vue`](src/components/common/ScannerWidget.vue) | Zero-blackout WebRTC lifecycle, camera flip, multi-shot gallery buffering. |
+| **Upload, reorder, preview, and delete photos** | **Photo Gallery Manager** | [`PhotoGalleryManager.vue`](src/components/common/PhotoGalleryManager.vue) | Drag-drop upload, thumbnail strip, primary photo selection. |
+| **Display an inventory SKU card in grids or lists** | **Item Card / Thumbnail** | [`ItemCard.vue`](src/components/common/ItemCard.vue) / [`ItemThumbnail.vue`](src/components/common/ItemThumbnail.vue) | Standard resale badges, status color coding, venue location badge. |
+| **Select single or multiple categories/bins** | **Filter Dropdowns** | [`SingleSelectDropdown.vue`](src/components/common/SingleSelectDropdown.vue) / [`MultiSelectDropdown.vue`](src/components/common/MultiSelectDropdown.vue) | DaisyUI dropdown shell, search filter inside dropdown, keyboard accessible. |
+| **Add and remove tags or keywords** | **Tag Input Pill Group** | [`TagInput.vue`](src/components/common/TagInput.vue) | Chip tags with auto-suggest, Enter/Comma creation, delete chip buttons. |
+| **Paginate through large database tables** | **Pagination Dock** | [`PaginationDock.vue`](src/components/common/PaginationDock.vue) | Numeric jump pill, First/Prev/Next/Last controls, rows-per-page selector. |
+| **Slide up deep filters, manifest lists, or PO item batch operations** | **Interactive Bottom Sheet / Detent Tray** | [`LocationManifestTray.vue`](src/components/inventory/LocationManifestTray.vue), [`ScoutPurchaseTray.vue`](src/components/scout/ScoutPurchaseTray.vue), [`PurchaseItemsTray.vue`](src/components/purchases/PurchaseItemsTray.vue) | Slides **UP from the bottom** (`rounded-t-3xl max-w-5xl mx-auto w-full max-h-[82dvh]`), drag pill, 4-card KPI strip, wide horizontal item table, sticky bottom action bar. |
 | **Full-bleed visual editing or media previews** | **Fullscreen Studio Workspace** | `SlideImageEditorModal.vue` pattern | Header filmstrip toolbar, centered preview canvas, sticky `BottomActionDock`. |
-| **Match CSV / POS rows to existing inventory items** | **Slide-Over Inventory Match Drawer** | [`LocationSyncView.vue`](file:///c:/Users/15034/Projects/ResaleCommand/src/components/warehouses/LocationSyncView.vue) & [`SalesImporter.vue`](file:///c:/Users/15034/Projects/ResaleCommand/src/components/sales/SalesImporter.vue) + [`getUnclaimedMatchCandidatesForRow`](file:///c:/Users/15034/Projects/ResaleCommand/src/lib/salesBucketing.ts) | Pinned target row banner, strict exclusion of items with other `0EJ` SKUs, top 5–8 suggested unclaimed matches before typing, photo thumbnails, full untruncated titles, and 1-click `🔗 Link & Save to MD`. |
-| **Deep-link to any page tab & smooth-scroll past KPIs/headers** | **Hash-Synced Tab Strip (`useUrlTab`)** | [`useUrlTab.ts`](file:///c:/Users/15034/Projects/ResaleCommand/src/composables/useUrlTab.ts) | Clean `/page#tab` URLs, auto-upgrades legacy `?tab=`/`?view=`/`?section=` links, waits for auth gates/skeletons before smooth-scrolling (`scroll-mt-20`), preserves `#hash` across login redirects, and stays pure-Vue (§14D safe). |
+| **Match CSV / POS rows to existing inventory items** | **Slide-Over Inventory Match Drawer** | [`LocationSyncView.vue`](src/components/warehouses/LocationSyncView.vue) & [`SalesImporter.vue`](src/components/sales/SalesImporter.vue) + [`getUnclaimedMatchCandidatesForRow`](src/lib/salesBucketing.ts) | Pinned target row banner, strict exclusion of items with other `0EJ` SKUs, top 5–8 suggested unclaimed matches before typing, photo thumbnails, full untruncated titles, and 1-click `🔗 Link & Save to MD`. |
+| **Deep-link to any page tab & smooth-scroll past KPIs/headers** | **Hash-Synced Tab Strip (`useUrlTab`)** | [`useUrlTab.ts`](src/composables/useUrlTab.ts) | Clean `/page#tab` URLs, auto-upgrades legacy `?tab=`/`?view=`/`?section=` links, waits for auth gates/skeletons before smooth-scrolling (`scroll-mt-20`), preserves `#hash` across login redirects, and stays pure-Vue (§14D safe). |
 
 ### ⚠️ Opportunity Radar (Code Smell Detection):
 Watch out for these red flags in existing or new code, and refactor them to use the catalog:
@@ -52,14 +52,14 @@ Watch out for these red flags in existing or new code, and refactor them to use 
    - Component `<style>` blocks using `@apply` MUST declare `@reference "../../styles/global.css";` at line 1. Never apply `p-0` or `px-0` to `.badge` elements.
 8. **Red Flag: Hand-rolling custom inline `‹ Prev | Page X of Y | Next ›` pagination bars or rendering primary item tables without `<PaginationDock>` and `<ItemThumbnail>`**
    👉 *STRICT TABLE & LEDGER ARCHETYPE INVARIANT*:
-   - Every primary table/ledger page (`/inventory`, `/purchases`, `/sales`, `/studios/appraisal`) MUST mount [`PaginationDock.vue`](file:///c:/Users/15034/Projects/ResaleCommand/src/components/common/PaginationDock.vue) (`v-model:currentPage`, `v-model:pageSize`, `:totalItems`, `:totalPages`) paired with `hideFooter={true}` on `<Layout>`.
-   - Every item table row MUST render [`ItemThumbnail.vue`](file:///c:/Users/15034/Projects/ResaleCommand/src/components/common/ItemThumbnail.vue) (`size="sm" rounded="lg"`) beside the item title and clickable category/venue filter badges. Never invent a one-off `‹ Prev / Next ›` pager div!
+   - Every primary table/ledger page (`/inventory`, `/purchases`, `/sales`, `/studios/appraisal`) MUST mount [`PaginationDock.vue`](src/components/common/PaginationDock.vue) (`v-model:currentPage`, `v-model:pageSize`, `:totalItems`, `:totalPages`) paired with `hideFooter={true}` on `<Layout>`.
+   - Every item table row MUST render [`ItemThumbnail.vue`](src/components/common/ItemThumbnail.vue) (`size="sm" rounded="lg"`) beside the item title and clickable category/venue filter badges. Never invent a one-off `‹ Prev / Next ›` pager div!
 9. **Red Flag: Stacking a second right-edge `<SlideOverDrawer>` over `ItemDrawer.vue` or another `<SlideOverDrawer>` (`z-class="z-500"`)**
    👉 *STRICT OVERLAY HIERARCHY INVARIANT (`validate-templates.mjs` §16)*:
    - **Never stack right-edge on right-edge** (causes double scrims, double `Esc` traps, and body scroll-unlock races). Inside `ItemDrawer.vue`, mount focused workflows as a lazy `v-if` tab (`ItemOnlineTab.vue`, `ItemVerifyTab.vue`, `ItemLotTab.vue`); across sibling right-edge drawers, enforce mutual exclusivity (`openDrawerA` closes `drawerB`).
-   - **Bottom-Sheet Tray (`z-400`) under Right-Edge `ItemDrawer` (`z-450`) IS sanctioned** (Red Flag #6), and all overlays (`SlideOverDrawer`, `ItemDrawer`, Bottom-Sheet Trays) MUST share the ref-counted [`useBodyScrollLock.ts`](file:///c:/Users/15034/Projects/ResaleCommand/src/composables/useBodyScrollLock.ts) composable so closing `ItemDrawer` never prematurely unlocks `document.body` scroll while a Bottom-Sheet Tray remains open underneath.
+   - **Bottom-Sheet Tray (`z-400`) under Right-Edge `ItemDrawer` (`z-450`) IS sanctioned** (Red Flag #6), and all overlays (`SlideOverDrawer`, `ItemDrawer`, Bottom-Sheet Trays) MUST share the ref-counted [`useBodyScrollLock.ts`](src/composables/useBodyScrollLock.ts) composable so closing `ItemDrawer` never prematurely unlocks `document.body` scroll while a Bottom-Sheet Tray remains open underneath.
 10. **Red Flag: Hand-rolling `?tab=foo` / `?view=bar` / `?section=baz` URL listeners or calling `window.history.replaceState` directly for page-level tabs**
-   👉 *Refactor To*: [`useUrlTab()`](file:///c:/Users/15034/Projects/ResaleCommand/src/composables/useUrlTab.ts) + `ref="tabSectionRef"` + `scroll-mt-20` on the tab container (canonical `/page#tab` links). Legacy query parameters should only be listed in `legacyQueryParams` for transparent upgrade—never linked in new templates.
+   👉 *Refactor To*: [`useUrlTab()`](src/composables/useUrlTab.ts) + `ref="tabSectionRef"` + `scroll-mt-20` on the tab container (canonical `/page#tab` links). Legacy query parameters should only be listed in `legacyQueryParams` for transparent upgrade—never linked in new templates.
 
 ---
 
@@ -142,7 +142,7 @@ Tapping any tab triggers a smooth upward expansion:
 - **Spacious Content Body**: Full-width inputs ($\ge 44\text{px}$ touch targets), zero horizontal clipping on 375px–412px viewports.
 ### C. Reusable Implementation Primitive: `BottomActionDock.vue`
 To ensure all pages implement this pattern identically with zero layout collisions or ancestor overflow traps:
-- **Canonical Component**: [`BottomActionDock.vue`](file:///c:/Users/15034/Projects/ResaleCommand/src/components/common/BottomActionDock.vue) (`src/components/common/BottomActionDock.vue`)
+- **Canonical Component**: [`BottomActionDock.vue`](src/components/common/BottomActionDock.vue) (`src/components/common/BottomActionDock.vue`)
 - **Built-in Capabilities**:
   1. **Direct Root Teleportation**: Wraps in `<Teleport to="body">` (immune to nested page margins, transforms, or overflow constraints).
   2. **Canonical Styling**: `fixed bottom-0 inset-x-0 z-40 bg-base-100/95 dark:bg-base-200/95 backdrop-blur-2xl border-t border-base-300 shadow-[0_-4px_25px_rgba(0,0,0,0.18)] select-none pointer-events-auto flex flex-col pb-[env(safe-area-inset-bottom,0px)]`.
@@ -306,7 +306,7 @@ Activating a selection tray dynamically tunes the main inventory catalog grid to
 
 ### D. Hardware Calibration & Label Studio Pattern (`/labels/test`)
 Thermal label printing involves physical hardware tolerances, continuous feed calibration, and macOS/Windows browser driver nuances. To prevent failed labels or wasted stock:
-* **Isolated Workbench**: Hardware calibration is isolated into an independent, non-destructive test suite: [`src/components/labels/RolloLabelTestWorkbench.vue`](file:///c:/Users/15034/Projects/ResaleCommand/src/components/labels/RolloLabelTestWorkbench.vue) hosted at `/labels/test`.
+* **Isolated Workbench**: Hardware calibration is isolated into an independent, non-destructive test suite: [`src/components/labels/RolloLabelTestWorkbench.vue`](src/components/labels/RolloLabelTestWorkbench.vue) hosted at `/labels/test`.
 * **Zero-DPI Blur Vector Barcodes**: Renders pure vector SVG Code 128 barcodes directly in the DOM.
 * **Exact Label Media Switcher**: Supports instant toggling between `2"x1"`, `2.25"x1.25"`, `3"x2"`, and `4"x6"` label sizes.
 * **Live Constraint Enforcement**: 38-character tag title limit enforced with real-time character counter and warning pills.
@@ -354,7 +354,7 @@ Thermal label printing involves physical hardware tolerances, continuous feed ca
 ## 9. Ledger Queue Pattern: Summary Cards ➔ Bottom Sheet Tray ➔ SlideOverDrawer
 
 For any queue of people/decisions (Join Requests, Waitlist, Approved Invites, Governance Proposals) never stack full inline cards with button rows on the page. Use three tiers:
-1. **Summary Cards** (count + 2–3 preview names) that open the tray; for Join Requests: `📬 Join Requests`, `⏳ Priority Waitlist`, `✅ Approved Invites` ([`JoinRequestsPanel.vue`](file:///c:/Users/15034/Projects/ResaleCommand/src/components/coop/JoinRequestsPanel.vue)); for governance the KPI cards open the proposals tray ([`CoopGovernanceView.vue`](file:///c:/Users/15034/Projects/ResaleCommand/src/components/coop/CoopGovernanceView.vue)).
+1. **Summary Cards** (count + 2–3 preview names) that open the tray; for Join Requests: `📬 Join Requests`, `⏳ Priority Waitlist`, `✅ Approved Invites` ([`JoinRequestsPanel.vue`](src/components/coop/JoinRequestsPanel.vue)); for governance the KPI cards open the proposals tray ([`CoopGovernanceView.vue`](src/components/coop/CoopGovernanceView.vue)).
 2. **Bottom Sheet Tray** (`rounded-t-3xl`, drag pill, bucket tabs, scannable rows, `z-[390]`).
 3. **`SlideOverDrawer.vue`** for details, edit, voting, and decision buttons (sticky `#footer`). Create/edit forms use the drawer, not a centered `<dialog>`. Destructive or emailing decisions still go through a confirmation modal with an email preview.
 Approved invites leave the queue automatically when the applicant creates their account (`accept` ➔ `join_request_joined`).
@@ -382,21 +382,21 @@ Approved invites leave the queue automatically when the applicant creates their 
 
 ## 11. Canonical Tab Deep-Link & Smooth-Scroll Pattern (`useUrlTab` — `/page#tab`)
 
-Whenever a top-level page contains multiple tabs or switchable workspace sections beneath a header/KPI strip, link directly with **`/page#tab`** and manage state through [`src/composables/useUrlTab.ts`](file:///c:/Users/15034/Projects/ResaleCommand/src/composables/useUrlTab.ts):
+Whenever a top-level page contains multiple tabs or switchable workspace sections beneath a header/KPI strip, link directly with **`/page#tab`** and manage state through [`src/composables/useUrlTab.ts`](src/composables/useUrlTab.ts):
 - **Behavior:** Reads `#hash` first (falling back to optional `legacyQueryParams` like `['tab']` and auto-upgrading them to `#hash` via `replaceState`), stays at top of page on default visits without a hash, and **smooth-scrolls straight to `ref="tabSectionRef"` (`scroll-mt-20` = `80px` sticky navbar clearance)** when landing on a deep link—even after `<CollectiveAccessGate>` or loading skeletons finish mounting.
-- **Auth Preservation:** [`buildLoginRedirect`](file:///c:/Users/15034/Projects/ResaleCommand/src/lib/publicRoutes.ts), [`redirectGuestToLogin`](file:///c:/Users/15034/Projects/ResaleCommand/src/lib/store.ts), and [`LoginView.vue`](file:///c:/Users/15034/Projects/ResaleCommand/src/components/auth/LoginView.vue) preserve `#hash` through the `/login?redirect=...` round-trip.
+- **Auth Preservation:** [`buildLoginRedirect`](src/lib/publicRoutes.ts), [`redirectGuestToLogin`](src/lib/store.ts), and [`LoginView.vue`](src/components/auth/LoginView.vue) preserve `#hash` through the `/login?redirect=...` round-trip.
 
 ### Where to Use (`10` Adopted Page-Level Tabbed Views)
-- `/coop/governance` ➔ `#rules`, `#roster`, `#docs` ([`CoopGovernanceView.vue`](file:///c:/Users/15034/Projects/ResaleCommand/src/components/coop/CoopGovernanceView.vue) + `/coop/governance/[id].astro` slug redirects)
-- `/settings` ➔ `#locations`, `#team`, `#hardware` ([`SettingsManager.vue`](file:///c:/Users/15034/Projects/ResaleCommand/src/components/settings/SettingsManager.vue))
-- `/coop/vault` ➔ `#prompt`, `#idea`, `#spec`, `#report` / `#reports`, `#pending_review`, `#done` ([`FounderVaultView.vue`](file:///c:/Users/15034/Projects/ResaleCommand/src/components/coop/FounderVaultView.vue))
-- `/coop/labor` ➔ `#ledger` ([`CoopLaborView.vue`](file:///c:/Users/15034/Projects/ResaleCommand/src/components/coop/CoopLaborView.vue))
-- `/coop` & `/coop/charter` ➔ `#monthly`, `#expenses`, `#governance`, `#legal` ([`CoopCharterView.vue`](file:///c:/Users/15034/Projects/ResaleCommand/src/components/coop/CoopCharterView.vue))
-- `/dashboard` & `/demo` ➔ `#booths`, `#promote`, `#steward` ([`TaskHubDashboard.vue`](file:///c:/Users/15034/Projects/ResaleCommand/src/components/dashboard/TaskHubDashboard.vue))
-- `/coop/cms` ➔ `#spotlight`, `#channels` ([`CoopFlagshipCmsView.vue`](file:///c:/Users/15034/Projects/ResaleCommand/src/components/coop/CoopFlagshipCmsView.vue))
-- `/warehouse/[id]` ➔ `#catalog`, `#expenses`, `#settings` ([`LocationDetailView.vue`](file:///c:/Users/15034/Projects/ResaleCommand/src/components/warehouses/LocationDetailView.vue))
-- `/social` ➔ `#needs_post`, `#complete`, `#events` ([`SocialCrossPostView.vue`](file:///c:/Users/15034/Projects/ResaleCommand/src/components/social/SocialCrossPostView.vue))
-- `/studios/appraisal` ➔ `#rules`, `#telemetry`, `#bookmarklets` ([`AppraisalPricingLabView.vue`](file:///c:/Users/15034/Projects/ResaleCommand/src/components/studios/AppraisalPricingLabView.vue))
+- `/coop/governance` ➔ `#rules`, `#roster`, `#docs` ([`CoopGovernanceView.vue`](src/components/coop/CoopGovernanceView.vue) + `/coop/governance/[id].astro` slug redirects)
+- `/settings` ➔ `#locations`, `#team`, `#hardware` ([`SettingsManager.vue`](src/components/settings/SettingsManager.vue))
+- `/coop/vault` ➔ `#prompt`, `#idea`, `#spec`, `#report` / `#reports`, `#pending_review`, `#done` ([`FounderVaultView.vue`](src/components/coop/FounderVaultView.vue))
+- `/coop/labor` ➔ `#ledger` ([`CoopLaborView.vue`](src/components/coop/CoopLaborView.vue))
+- `/coop` & `/coop/charter` ➔ `#monthly`, `#expenses`, `#governance`, `#legal` ([`CoopCharterView.vue`](src/components/coop/CoopCharterView.vue))
+- `/dashboard` & `/demo` ➔ `#booths`, `#promote`, `#steward` ([`TaskHubDashboard.vue`](src/components/dashboard/TaskHubDashboard.vue))
+- `/coop/cms` ➔ `#spotlight`, `#channels` ([`CoopFlagshipCmsView.vue`](src/components/coop/CoopFlagshipCmsView.vue))
+- `/warehouse/[id]` ➔ `#catalog`, `#expenses`, `#settings` ([`LocationDetailView.vue`](src/components/warehouses/LocationDetailView.vue))
+- `/social` ➔ `#needs_post`, `#complete`, `#events` ([`SocialCrossPostView.vue`](src/components/social/SocialCrossPostView.vue))
+- `/studios/appraisal` ➔ `#rules`, `#telemetry`, `#bookmarklets` ([`AppraisalPricingLabView.vue`](src/components/studios/AppraisalPricingLabView.vue))
 
 ### Where NOT to Use (Intentional Exclusions)
 - **Transient Modals, Drawers & Trays** (`ItemDrawer.vue`, `VaultNoteDrawer.vue`, `InventoryPaginationDock.vue`, `InventoryQueuesTray.vue`, `LotSplitterWizard.vue`, `SlideImageEditorModal.vue`): internal overlay steps should stay local component state and must not pollute browser history/anchors.

@@ -10,7 +10,7 @@
 ### Concrete Tailwind v4, DaisyUI v5 & Astro Checks
 - **29-Token Theme Integrity (`validate-templates.mjs` §12A):** Custom themes in `src/styles/theme.css` MUST define `--border: 1px`, `--size-selector: 0.25rem`, `--size-field: 0.25rem`, `--depth: 1`, `--noise: 0`, all 3 `--radius-*` tokens, and all 20 semantic color tokens so badge/button `calc()` padding never collapses.
 - **Unbroken Badge & Button Contrast:** Always pair semantic backgrounds with explicit `*-content` tokens (`badge-primary text-primary-content`, `btn-success text-success-content font-black`), enforce `whitespace-nowrap shrink-0` on badges, and **never** apply `p-0` or `px-0` to `.badge` (§12F).
-- **Zero Broken Thumbnails:** Every item table row mounts [`ItemThumbnail.vue`](file:///c:/Users/15034/Projects/ResaleCommand/src/components/common/ItemThumbnail.vue) (`src/components/common/ItemThumbnail.vue`), and every Appwrite `<img :src="getAssetUrl(id, ...)">` attaches an `@error` handler retrying raw `/view` (`getAssetUrl(id, { preview: false })`) before advancing through `galleryImageIds`.
+- **Zero Broken Thumbnails:** Every item table row mounts [`ItemThumbnail.vue`](src/components/common/ItemThumbnail.vue) (`src/components/common/ItemThumbnail.vue`), and every Appwrite `<img :src="getAssetUrl(id, ...)">` attaches an `@error` handler retrying raw `/view` (`getAssetUrl(id, { preview: false })`) before advancing through `galleryImageIds`.
 - **Zero Frame-0 Flash:** Preserve synchronous `<head>` `data-theme` restoration (`Layout.astro`) and `initialAuthenticated={hasSessionHint}` (`SessionRouter.astro` + `Navbar.vue`) so signed-in members never see a guest-to-member layout jump.
 
 ---

@@ -7,7 +7,7 @@ description: Cooperative economics, Worker Self-Directed Enterprise (WSDE) surpl
 
 This skill defines the cooperative economic engine, Multi-Founder LLC governance, Universal Curator foundation, 4-Gate multi-channel financial waterfall, Dual-Option Co-Curation (`35/35` & `Transfer Price`), Shared Online Storefront rules, Personal Schedule C vs. Co-op Commons expense separation, Mondragon `10/45/45` capital account rules, and Loomio consent governance for **The Huckleberry Collective** (`HUCK-`), **PDX Game Library** (`PDXGL-`), **Promoters, Enablers & Builders** (`SWEAT-`), and consignors (`BB-`) on **Works@TheHC** / **Resale Command** (`works.thehc.llc` / `works.thehc.coop` / `resalecmd.com`).
 
-> **Deep Reference:** See [`.agents/skills/democracy-at-work-cooperative/references/WSDE_MONDRAGON_SELC_REFERENCE.md`](file:///c:/Users/15034/Projects/ResaleCommand/.agents/skills/democracy-at-work-cooperative/references/WSDE_MONDRAGON_SELC_REFERENCE.md), [`src/content/coop/shared-online-storefronts.md`](file:///c:/Users/15034/Projects/ResaleCommand/src/content/coop/shared-online-storefronts.md), and [`docs/coop/WSDE_OPERATING_CHARTER.md`](file:///c:/Users/15034/Projects/ResaleCommand/docs/coop/WSDE_OPERATING_CHARTER.md).
+> **Deep Reference:** See [`.agents/skills/democracy-at-work-cooperative/references/WSDE_MONDRAGON_SELC_REFERENCE.md`](.agents/skills/democracy-at-work-cooperative/references/WSDE_MONDRAGON_SELC_REFERENCE.md), [`src/content/coop/shared-online-storefronts.md`](src/content/coop/shared-online-storefronts.md), and [`docs/coop/WSDE_OPERATING_CHARTER.md`](docs/coop/WSDE_OPERATING_CHARTER.md).
 > **UI Wording Rule:** Always use institutional WSDE/Mondragon/cooperative terminology (`Worker Self-Directed Enterprise`, `Producers & Enablers of Surplus`, `Mondragon 10/45/45`, `Indivisible Commons Reserve`) in UI components—never cite individual economists by personal name in user-facing UI text.
 
 ---
@@ -64,9 +64,9 @@ Every expense in `src/lib/coopExpenses.ts` (`/expenses`) has an explicit `scope`
 
 ## 5. Canonical `/coop/*` Routes & Cloud Persistence
 
-- `/coop/settlements` ([`src/pages/coop/settlements.astro`](file:///c:/Users/15034/Projects/ResaleCommand/src/pages/coop/settlements.astro)) — 4-Gate Monthly Settlement Workbench (`CoopSettlementView.vue`)
-- `/coop/governance` ([`src/pages/coop/governance.astro`](file:///c:/Users/15034/Projects/ResaleCommand/src/pages/coop/governance.astro)) — 3-Tab Loomio Proposals, 6 Democratic Dials & Sliders, and Voter Roster (`CoopGovernanceView.vue`)
-- `/coop/labor` ([`src/pages/coop/labor.astro`](file:///c:/Users/15034/Projects/ResaleCommand/src/pages/coop/labor.astro)) — Cloud-Synced Sweat-Equity & Enabling Labor Ledger (`CoopLaborView.vue`)
-- `/coop/cms` ([`src/pages/coop/cms.astro`](file:///c:/Users/15034/Projects/ResaleCommand/src/pages/coop/cms.astro)) — Headless Flagship Copy (`thehc.llc/#works`), Storefront Directory & Multi-Channel Events Studio (`CoopFlagshipCmsView.vue` ➔ `GET /api/public/flagship-content` + 1-tap `RecordSaleDrawer.vue` Event Chips)
-- `/expenses` ([`src/pages/expenses.astro`](file:///c:/Users/15034/Projects/ResaleCommand/src/pages/expenses.astro)) — Co-op Shared Commons vs. Personal Schedule C Write-Off Ledger (`CoopExpensesLedger.vue`)
-- `/coop` ([`src/pages/coop.astro`](file:///c:/Users/15034/Projects/ResaleCommand/src/pages/coop.astro)) — Interactive WSDE Operating Charter & Multi-Channel Simulator (`CoopCharterView.vue`)
+- `/coop/settlements` ([`src/pages/coop/settlements.astro`](src/pages/coop/settlements.astro)) — 4-Gate Monthly Settlement Workbench (`CoopSettlementView.vue`)
+- `/coop/governance` ([`src/pages/coop/governance.astro`](src/pages/coop/governance.astro)) — 3-Tab Loomio Proposals, 6 Democratic Dials & Sliders, and Voter Roster (`CoopGovernanceView.vue`)
+- `/coop/labor` ([`src/pages/coop/labor.astro`](src/pages/coop/labor.astro)) — Cloud-Synced Sweat-Equity & Enabling Labor Ledger (`CoopLaborView.vue`)
+- `/coop/cms` ([`src/pages/coop/cms.astro`](src/pages/coop/cms.astro)) — Headless Flagship Copy (`thehc.llc/#works`), Storefront Directory & Multi-Channel Events Studio (`CoopFlagshipCmsView.vue` ➔ `GET /api/public/flagship-content` + 1-tap `RecordSaleDrawer.vue` Event Chips)
+- `/expenses` ([`src/pages/expenses.astro`](src/pages/expenses.astro)) — Co-op Shared Commons vs. Personal Schedule C Write-Off Ledger (`CoopExpensesLedger.vue`)
+- `/coop` ([`src/pages/coop.astro`](src/pages/coop.astro)) — Interactive WSDE Operating Charter & Multi-Channel Simulator (`CoopCharterView.vue`)

@@ -126,12 +126,12 @@ The Rollo macOS CUPS driver contains `*LandscapeOrientation: Plus90`. Because a 
 
 ## 6. Software Architecture & Verification Workbench
 
-- **Print Generation Service**: [`src/lib/rolloLabelPrint.ts`](file:///c:/Users/15034/Projects/ResaleCommand/src/lib/rolloLabelPrint.ts)
-- **Vector Code128 Engine**: [`src/lib/barcode128.ts`](file:///c:/Users/15034/Projects/ResaleCommand/src/lib/barcode128.ts)
-- **Vector QR Code Engine**: [`src/lib/qrCodeHelper.ts`](file:///c:/Users/15034/Projects/ResaleCommand/src/lib/qrCodeHelper.ts) (zero-dependency `uqr`)
-- **Immutable PDF Generator**: [`src/lib/pdfLabelGenerator.ts`](file:///c:/Users/15034/Projects/ResaleCommand/src/lib/pdfLabelGenerator.ts)
-- **UPC Authority Manager**: [`src/lib/upcAuthority.ts`](file:///c:/Users/15034/Projects/ResaleCommand/src/lib/upcAuthority.ts)
-- **Isolated Hardware Test Workbench**: Hosted at `/labels/test` ([`src/components/labels/RolloLabelTestWorkbench.vue`](file:///c:/Users/15034/Projects/ResaleCommand/src/components/labels/RolloLabelTestWorkbench.vue)). Provides:
+- **Print Generation Service**: [`src/lib/rolloLabelPrint.ts`](src/lib/rolloLabelPrint.ts)
+- **Vector Code128 Engine**: [`src/lib/barcode128.ts`](src/lib/barcode128.ts)
+- **Vector QR Code Engine**: [`src/lib/qrCodeHelper.ts`](src/lib/qrCodeHelper.ts) (zero-dependency `uqr`)
+- **Immutable PDF Generator**: [`src/lib/pdfLabelGenerator.ts`](src/lib/pdfLabelGenerator.ts)
+- **UPC Authority Manager**: [`src/lib/upcAuthority.ts`](src/lib/upcAuthority.ts)
+- **Isolated Hardware Test Workbench**: Hosted at `/labels/test` ([`src/components/labels/RolloLabelTestWorkbench.vue`](src/components/labels/RolloLabelTestWorkbench.vue)). Provides:
   - **Location Test Profiles Dropdown**: Rapid profile testing across `Memory Den (MD)`, `Dusty Tiger (DT)`, `Portland Gaming Lib (PDX)`, `Garage Backstock (HG)`, `Online E-Commerce (ONLINE)`, and `Custom`.
   - **Barcode Format Toggle**: Instant switching between 1D Linear (Code 128) and 2D Matrix (Mini QR Code).
   - **QR Data Format Toggle**: Switch between hardware-scannable Raw SKU (`0EJ0J1`) and customer smartphone Web URL (`https://works.thehc.llc/item/<id>`).

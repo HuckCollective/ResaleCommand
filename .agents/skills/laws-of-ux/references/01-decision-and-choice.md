@@ -38,7 +38,7 @@
 *Users become overwhelmed and abandon or mis-select when presented with too many peer options in an unfiltered list.*
 
 ### Concrete Vue 3.5 & DaisyUI v5 Checks
-- **Inline Pill/Chip Ceiling (`<= 7`):** Keep visible inline radio/filter/hat/niche pill sets to `<= 7` options. When options exceed `7`, switch to [`SingleSelectDropdown.vue`](file:///c:/Users/15034/Projects/ResaleCommand/src/components/common/SingleSelectDropdown.vue) or [`MultiSelectDropdown.vue`](file:///c:/Users/15034/Projects/ResaleCommand/src/components/common/MultiSelectDropdown.vue) with an internal search input, or collapse extras behind a `+N More` toggle / Bottom Sheet Tray.
+- **Inline Pill/Chip Ceiling (`<= 7`):** Keep visible inline radio/filter/hat/niche pill sets to `<= 7` options. When options exceed `7`, switch to [`SingleSelectDropdown.vue`](src/components/common/SingleSelectDropdown.vue) or [`MultiSelectDropdown.vue`](src/components/common/MultiSelectDropdown.vue) with an internal search input, or collapse extras behind a `+N More` toggle / Bottom Sheet Tray.
 - **Pre-Ranked Candidate Caps:** Inventory Match Drawers surface the **Top 5–8** unclaimed candidates before typing (`getUnclaimedMatchCandidatesForRow`), and Dashboard Operations Radar caps on-canvas alert rows at **Top 6** (`OperationsRadarGrid.vue`), delegating full queues to a tray.
 
 ---
@@ -47,12 +47,12 @@
 *The time to acquire a target is a function of the distance to and size of the target.*
 
 ### Exact DaisyUI v5 Sizing Facts & Mobile Floor
-In DaisyUI v5 (`--size-field: 0.25rem` in [`src/styles/theme.css`](file:///c:/Users/15034/Projects/ResaleCommand/src/styles/theme.css)):
+In DaisyUI v5 (`--size-field: 0.25rem` in [`src/styles/theme.css`](src/styles/theme.css)):
 - `btn-lg` = `48px` (`3rem`) — **Mobile Touch Compliant**
 - `btn-md` (default) ≈ `40px` (`2.5rem`) — *`4px` short of `44px` floor!*
 - `btn-sm` = `32px` (`2rem`)
 - `btn-xs` = `24px` (`1.5rem`)
-- `.btn-2xs` = `22px` (`1.375rem` in [`src/styles/global.css`](file:///c:/Users/15034/Projects/ResaleCommand/src/styles/global.css))
+- `.btn-2xs` = `22px` (`1.375rem` in [`src/styles/global.css`](src/styles/global.css))
 
 > **CSS Pitfall:** Because DaisyUI v5 sets explicit `height: var(--size)` on `.btn`, adding `min-h-11` alone may not grow a `btn-xs`/`btn-sm` consistently across browsers. Use `btn-lg`, explicit `h-11` (`2.75rem` = `44px`), or `h-11 md:h-auto` (deferring to [`mobile-ux-standards`](../../mobile-ux-standards/SKILL.md) §4 for the `md:` `>=768px` desktop dense-table carve-out).
 
@@ -67,7 +67,7 @@ In DaisyUI v5 (`--size-field: 0.25rem` in [`src/styles/theme.css`](file:///c:/Us
 *Users spend most of their time on other apps and expect controls, drawers, and keyboard shortcuts to work the standard way.*
 
 ### Concrete Vue 3.5 & DaisyUI v5 Checks
-- **Forms Use `<SlideOverDrawer>`:** Short/medium create & edit forms open inside [`SlideOverDrawer.vue`](file:///c:/Users/15034/Projects/ResaleCommand/src/components/common/SlideOverDrawer.vue) (`Esc` key close, backdrop scrim click close, `document.body.style.overflow = 'hidden'`, auto-focus into panel, sticky `#footer`) rather than centered `<dialog>` modals.
+- **Forms Use `<SlideOverDrawer>`:** Short/medium create & edit forms open inside [`SlideOverDrawer.vue`](src/components/common/SlideOverDrawer.vue) (`Esc` key close, backdrop scrim click close, `document.body.style.overflow = 'hidden'`, auto-focus into panel, sticky `#footer`) rather than centered `<dialog>` modals.
 - **Sanctioned Carve-Outs:**
   1. **Destructive / Emailing Confirmations:** Use `askConfirm()` (`src/stores/confirm.ts` ➔ `ConfirmContainer.vue`) or confirmation modals with email previews (`ux-design-system-taxonomy` §9).
   2. **`SalesImportTray.vue` Exception:** Sanctioned by `AGENTS.md` Law 5 and `validate-templates.mjs` §11 as a right-edge intake tray — flag as `WARN`-only if missing focus lock, and **never rename** the component file.

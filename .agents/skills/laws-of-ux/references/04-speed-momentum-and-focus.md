@@ -1,6 +1,6 @@
 # Bucket 4: Speed, Momentum & Focus (`6 Laws`)
 
-> **Parent Skill:** [`.agents/skills/laws-of-ux/SKILL.md`](../SKILL.md) • **Sibling Authorities:** [`src/composables/useLoader.ts`](file:///c:/Users/15034/Projects/ResaleCommand/src/composables/useLoader.ts) & [`AGENTS.md`](file:///c:/Users/15034/Projects/ResaleCommand/AGENTS.md) Law 6
+> **Parent Skill:** [`.agents/skills/laws-of-ux/SKILL.md`](../SKILL.md) • **Sibling Authorities:** [`src/composables/useLoader.ts`](src/composables/useLoader.ts) & [`AGENTS.md`](AGENTS.md) Law 6
 
 ---
 

@@ -7,7 +7,7 @@ description: Canonical brand architecture, nomenclature ('The Works' / 'Works@Th
 
 ## 1. Brand Hierarchy & Nomenclature
 
-All brand strings resolve from [`src/site-config.ts`](file:///c:/Users/15034/Projects/ResaleCommand/src/site-config.ts)—never hardcode legacy `"Resale Command"` in UI templates, emails, or metadata.
+All brand strings resolve from [`src/site-config.ts`](src/site-config.ts)—never hardcode legacy `"Resale Command"` in UI templates, emails, or metadata.
 
 | Role | Value | Usage |
 | :--- | :--- | :--- |
@@ -29,9 +29,9 @@ Our cooperative operates across a 3-tier domain lifecycle:
 3. **Legacy Fallback Domain (`.com`):** `https://resalecmd.com` (`https://www.resalecmd.com`)
 
 ### The Multi-Domain Bookmarklet & Userscript Law
-- Every bookmarklet (`bookmarkletHref` in [`LocationSyncView.vue`](file:///c:/Users/15034/Projects/ResaleCommand/src/components/warehouses/LocationSyncView.vue)) and userscript ([`public/ricochet-upc-sync.user.js`](file:///c:/Users/15034/Projects/ResaleCommand/public/ricochet-upc-sync.user.js)) MUST use an ordered multi-origin failover list:
+- Every bookmarklet (`bookmarkletHref` in [`LocationSyncView.vue`](src/components/warehouses/LocationSyncView.vue)) and userscript ([`public/ricochet-upc-sync.user.js`](public/ricochet-upc-sync.user.js)) MUST use an ordered multi-origin failover list:
   `[window.__RC_ORIGIN__, 'https://works.thehc.llc', 'https://works.thehc.coop', 'https://www.resalecmd.com', 'https://resalecmd.com']`
-- [`src/pages/scripts/rico-bookmarklet.js.ts`](file:///c:/Users/15034/Projects/ResaleCommand/src/pages/scripts/rico-bookmarklet.js.ts) dynamically injects `window.__RC_ORIGIN__ = url.origin` on every request so whichever domain served the bookmarklet is always tried first, and if a domain ever changes or redirects, `s.onerror` automatically loads from the next domain without any user ever needing to re-drag their bookmarklet.
+- [`src/pages/scripts/rico-bookmarklet.js.ts`](src/pages/scripts/rico-bookmarklet.js.ts) dynamically injects `window.__RC_ORIGIN__ = url.origin` on every request so whichever domain served the bookmarklet is always tried first, and if a domain ever changes or redirects, `s.onerror` automatically loads from the next domain without any user ever needing to re-drag their bookmarklet.
 
 ---
 
@@ -48,5 +48,5 @@ Our cooperative operates across a 3-tier domain lifecycle:
    - Generate a 16-character App Password at `https://myaccount.google.com/apppasswords` under your `@thehc.llc` Google Workspace account.
    - Configure in **BOTH**:
      - **Appwrite Settings ➔ SMTP** (System Auth, password recovery, invites): Host `smtp.gmail.com`, Port `465` (`SSL`), Username `you@thehc.llc`, Password `<16-char App Password>`, Sender Name `The Works @ TheHC`.
-     - **Appwrite Messaging ➔ Providers ➔ SMTP** (Powers [`/api/join-request.ts`](file:///c:/Users/15034/Projects/ResaleCommand/src/pages/api/join-request.ts) applicant & `coop-founders` topic emails).
+     - **Appwrite Messaging ➔ Providers ➔ SMTP** (Powers [`/api/join-request.ts`](src/pages/api/join-request.ts) applicant & `coop-founders` topic emails).
 

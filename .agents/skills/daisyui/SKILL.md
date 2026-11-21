@@ -103,7 +103,7 @@ description: Expert guidelines and best practices for building modern, responsiv
 ```
 
 ### Bottom Navigation & Button Docks (`<BottomActionDock>` & `<PaginationDock>`)
-daisyUI v5 replaces `btm-nav` with the semantic `.dock` component. In Resale Command, **never hand-roll raw `<div class="fixed bottom-0...">` dock wrappers**—always consume the canonical [`BottomActionDock.vue`](file:///c:/Users/15034/Projects/ResaleCommand/src/components/common/BottomActionDock.vue) and [`PaginationDock.vue`](file:///c:/Users/15034/Projects/ResaleCommand/src/components/common/PaginationDock.vue) primitives (`#top`, `#left`, `#center`, `#right` slots), which encapsulate `<Teleport to="body">`, safe-area insets, and automatic `ResizeObserver` `.rc-dock-spacer` clearance (`src/composables/useDockClearance.ts`):
+daisyUI v5 replaces `btm-nav` with the semantic `.dock` component. In Resale Command, **never hand-roll raw `<div class="fixed bottom-0...">` dock wrappers**—always consume the canonical [`BottomActionDock.vue`](src/components/common/BottomActionDock.vue) and [`PaginationDock.vue`](src/components/common/PaginationDock.vue) primitives (`#top`, `#left`, `#center`, `#right` slots), which encapsulate `<Teleport to="body">`, safe-area insets, and automatic `ResizeObserver` `.rc-dock-spacer` clearance (`src/composables/useDockClearance.ts`):
 
 ```vue
 <BottomActionDock>

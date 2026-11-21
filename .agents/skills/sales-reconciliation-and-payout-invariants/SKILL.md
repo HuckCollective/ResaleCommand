@@ -5,7 +5,7 @@ description: READ FIRST before touching the Ricochet Sales Sync, the Commit butt
 
 # Sales Sync - READ FIRST (pointer skill)
 
-**The full rules live in ONE place: [`.agents/rules/sales-reconciliation-and-payout-invariants.md`](file:///c:/Users/15034/Projects/ResaleCommand/.agents/rules/sales-reconciliation-and-payout-invariants.md).**
+**The full rules live in ONE place: [`.agents/rules/sales-reconciliation-and-payout-invariants.md`](.agents/rules/sales-reconciliation-and-payout-invariants.md).**
 Read it before editing anything below. Do not copy its rules into this file (copies drift).
 
 ## 30-second checklist

@@ -11,7 +11,7 @@ This skill serves as the canonical system reference for all artificial intellige
 
 ## 1. Core Architectural Foundation: Single Source of Truth & Two-World Boundary
 
-All live app runtime AI services in Resale Command MUST route through [`src/lib/gemini.ts`](file:///c:/Users/15034/Projects/ResaleCommand/src/lib/gemini.ts) (**World 1: Reseller Runtime AI** on the $40/mo Google Cloud credit pool). Developer/IDE model routing (**World 2: Dev & Architecture AI** on Google AI Ultra) lives strictly separately in [`src/lib/devAiRouting.ts`](file:///c:/Users/15034/Projects/ResaleCommand/src/lib/devAiRouting.ts).
+All live app runtime AI services in Resale Command MUST route through [`src/lib/gemini.ts`](src/lib/gemini.ts) (**World 1: Reseller Runtime AI** on the $40/mo Google Cloud credit pool). Developer/IDE model routing (**World 2: Dev & Architecture AI** on Google AI Ultra) lives strictly separately in [`src/lib/devAiRouting.ts`](src/lib/devAiRouting.ts).
 
 ### Invariants:
 1. **Official Unified `@google/genai` SDK (`GoogleGenAI`) + Drop-In Adapter**:
