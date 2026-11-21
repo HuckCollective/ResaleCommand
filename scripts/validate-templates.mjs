@@ -353,6 +353,22 @@ if (fs.existsSync(scriptsDir)) {
     }
 }
 
+const FORBIDDEN_ROOT_ARTIFACTS = new Set(['implementation_plan.md', 'walkthrough.md', 'task.md']);
+for (const entry of fs.readdirSync(process.cwd(), { withFileTypes: true })) {
+    if (!entry.isFile()) continue;
+    if (/^scratch[_.-]/i.test(entry.name)) {
+        console.error(
+            `❌ Forbidden root scratch file (${entry.name}): Put temporary scripts inside git-ignored scratch/ and delete before committing!`
+        );
+        hasErrors = true;
+    } else if (FORBIDDEN_ROOT_ARTIFACTS.has(entry.name)) {
+        console.error(
+            `❌ Forbidden root brain artifact (${entry.name}): Keep planning/walkthrough artifacts in the IDE brain directory, not the repository root!`
+        );
+        hasErrors = true;
+    }
+}
+
 // =========================================================================
 // 5b. SALES-SYNC INTEGRITY RULES (Laws 2, 4 and 7) - these fail `npm run verify` so a regression can never reach production
 // =========================================================================

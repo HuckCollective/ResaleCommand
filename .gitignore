@@ -7,9 +7,12 @@ dist-gemini-skills
 # Local Netlify folder
 .netlify
 .env
-
 .vercel
 scratch/
+scratch_*
+/implementation_plan.md
+/walkthrough.md
+/task.md
 *.csv
 *.log
 .cache-*.json
