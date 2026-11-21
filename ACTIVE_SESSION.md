@@ -2,6 +2,10 @@
 
 > **Historical Sprint Archive:** Completed milestones prior to the latest production release (including Phases 1–4 details, Co-op Roles & Co-Curation Phases 1–2, Waves 1–3 Krug & Laws of UX Overhaul, `Headless Flagship CMS`, `Universal Curator & Builder Onboarding`, `SWEAT-` Gate 4B Waterfall, and `Auction Sweep v4.5`) are preserved in [`docs/SESSION_ARCHIVE.md`](docs/SESSION_ARCHIVE.md).
 
+## ✅ ONLINE STOREFRONT & CHANNEL BLUEPRINT (`alpha-1` — Nov 21, 2026)
+- **Cloud-Function-First Blueprint ([`ONLINE_STOREFRONT_AND_CHANNEL_ARCHITECTURE.md`](docs/ONLINE_STOREFRONT_AND_CHANNEL_ARCHITECTURE.md))**: Documented the 3 automation lanes (API channels via Cloud Functions, Gemini listing prep, browser-outbox for Poshmark/Mercari/Depop/FBMP), mandatory event-loop guards (`syncHash`, own-output early return, narrow event subscriptions), the sharded zero-PII public catalog, outbox race rules, auto-sale invariants, and function security. No app code changed.
+- **Saved Parked Prompts ([`docs/prompts/`](docs/prompts/README.md))**: Skills migration, storefront Cloud Functions, and flagship storefront UI prompts for the `thehc-platform` IDE window.
+
 ## ✅ CROSS-OS SKILL PORTABILITY & `thehc-platform` MIGRATION AUDIT (`alpha-1` — Nov 21, 2026)
 - **Removed Hardcoded Local File URIs Across `.agents/skills/` (16 Skill & Reference Files)**: Replaced all hardcoded `file:///c:/Users/15034/Projects/ResaleCommand/...` links across `.agents/skills/` and `laws-of-ux/references/` with portable repo-relative paths (`AGENTS.md`, `ACTIVE_SESSION.md`, `src/...`, `.agents/...`).
 - **Two-Tier `thehc-platform` Skill Migration Standard ([`ai-context-sync`](.agents/skills/ai-context-sync/SKILL.md))**: Documented **Workflow D** for consolidating `ResaleCommand/.agents` (23 skills, 4 rules, 2 auditor agents) into `thehc-platform` (`tools/plugins/huckleberry-agent-kit/` universal Tier 1 + `.agents/skills/` & `.agents/rules/` Tier 2 with `<= 6–8 KB` `SKILL.md` routers, `references/*`, `.agents/skills.json`, and cross-OS `.vscode/settings.json` discovery).
