@@ -291,8 +291,8 @@
               <h3 class="font-black text-sm text-base-content">
                 {{ activeCanonicalLocationMeta.shortName }} Barcode Verification Report
               </h3>
-              <span class="badge badge-xs badge-success text-success-content font-mono font-bold">
-                {{ mdVerifyReport.summary.totalCatalog }} Booth Items Audited
+              <span class="badge badge-xs badge-success text-success-content font-mono font-bold tabular-nums transition-all duration-300">
+                {{ liveVerifySummary.totalCatalog }} Booth Items Audited
               </span>
               <span
                 v-if="verifyStatusFilter !== 'ALL'"
@@ -309,19 +309,19 @@
 
         <div class="flex items-center gap-2 flex-wrap">
           <button
-            v-if="mdVerifyReport.summary.unlinkedInRc > 0"
+            v-if="liveVerifySummary.unlinkedInRc > 0"
             type="button"
             class="btn btn-xs btn-primary font-bold gap-1"
             @click="applyVerificationPillFilter('UNLINKED_IN_RC')"
           >
-            <span>🔍 Match {{ mdVerifyReport.summary.unlinkedInRc }} Unlinked Items</span>
+            <span>🔍 Match {{ liveVerifySummary.unlinkedInRc }} Unlinked Items</span>
           </button>
           <button
             type="button"
             class="btn btn-xs btn-outline border-base-300 font-bold gap-1"
             @click="applyVerificationPillFilter('ALL')"
           >
-            <span>📋 Load All {{ mdVerifyReport.summary.totalCatalog }} Items</span>
+            <span>📋 Load All {{ liveVerifySummary.totalCatalog }} Items</span>
           </button>
           <button
             type="button"
@@ -344,7 +344,7 @@
           :title="'Click to filter table to Verified items in ' + activeCanonicalLocationMeta.shortName"
         >
           <span class="text-xs font-bold text-success">🟢 Verified in {{ activeCanonicalLocationMeta.code }}</span>
-          <span class="font-mono font-black text-sm text-success">{{ mdVerifyReport.summary.verifiedMatch }}</span>
+          <span class="font-mono font-black text-sm text-success tabular-nums transition-all duration-300">{{ liveVerifySummary.verifiedMatch }}</span>
         </button>
 
         <button
@@ -355,7 +355,7 @@
           :title="'Click to inspect the items still missing a UPC in ' + activeCanonicalLocationMeta.shortName"
         >
           <span class="text-xs font-bold text-warning">🟡 Missing UPC in {{ activeCanonicalLocationMeta.code }}</span>
-          <span class="font-mono font-black text-sm text-warning">{{ mdVerifyReport.summary.missingInMd }}</span>
+          <span class="font-mono font-black text-sm text-warning tabular-nums transition-all duration-300">{{ liveVerifySummary.missingInMd }}</span>
         </button>
 
         <button
@@ -366,7 +366,7 @@
           :title="'Click to inspect items whose ' + activeCanonicalLocationMeta.shortName + ' UPC differs from Resale Command'"
         >
           <span class="text-xs font-bold text-orange-500">🟠 Mismatched UPC</span>
-          <span class="font-mono font-black text-sm text-orange-500">{{ mdVerifyReport.summary.mismatchUpc }}</span>
+          <span class="font-mono font-black text-sm text-orange-500 tabular-nums transition-all duration-300">{{ liveVerifySummary.mismatchUpc }}</span>
         </button>
 
         <button
@@ -377,7 +377,7 @@
           :title="'Click to load & match unlinked ' + activeCanonicalLocationMeta.shortName + ' items (shows In-Stock first)'"
         >
           <span class="text-xs font-bold opacity-80">⚪ Unlinked in RC</span>
-          <span class="font-mono font-black text-sm text-base-content">{{ mdVerifyReport.summary.unlinkedInRc }}</span>
+          <span class="font-mono font-black text-sm text-base-content tabular-nums transition-all duration-300">{{ liveVerifySummary.unlinkedInRc }}</span>
         </button>
       </div>
 
@@ -1905,7 +1905,7 @@
                     </h4>
                     <p class="text-[11px] opacity-70">
                       <span v-if="mdVerifyReport">
-                        Last verified {{ formatDate(mdVerifyReport.timestamp) }} • {{ mdVerifyReport.summary.totalCatalog }} live {{ activeCanonicalLocationMeta.shortName }} items audited
+                        Last verified {{ formatDate(mdVerifyReport.timestamp) }} • {{ liveVerifySummary.totalCatalog }} live {{ activeCanonicalLocationMeta.shortName }} items audited
                       </span>
                       <span v-else>
                         Click <strong>📡 Send Report to RC</strong> or <strong>📥 Download CSV</strong> inside the {{ activeCanonicalLocationMeta.shortName }} widget to verify all ~808 booth items.
@@ -1941,8 +1941,8 @@
                   <div class="text-[11px] font-bold text-success flex items-center gap-1">
                     <span>🟢 Verified in {{ activeCanonicalLocationMeta.code }}</span>
                   </div>
-                  <div class="text-lg font-black font-mono text-success mt-0.5">
-                    {{ mdVerifyReport.summary.verifiedMatch }}
+                  <div class="text-lg font-black font-mono text-success mt-0.5 tabular-nums transition-all duration-300">
+                    {{ liveVerifySummary.verifiedMatch }}
                   </div>
                   <div class="text-[10px] opacity-70">Click to View</div>
                 </button>
@@ -1955,8 +1955,8 @@
                   <div class="text-[11px] font-bold text-warning flex items-center gap-1">
                     <span>🟡 Missing UPC in {{ activeCanonicalLocationMeta.code }}</span>
                   </div>
-                  <div class="text-lg font-black font-mono text-warning mt-0.5">
-                    {{ mdVerifyReport.summary.missingInMd }}
+                  <div class="text-lg font-black font-mono text-warning mt-0.5 tabular-nums transition-all duration-300">
+                    {{ liveVerifySummary.missingInMd }}
                   </div>
                   <div class="text-[10px] opacity-70">Click to Inspect &amp; Fix</div>
                 </button>
@@ -1969,8 +1969,8 @@
                   <div class="text-[11px] font-bold text-orange-500 flex items-center gap-1">
                     <span>🟠 Mismatched UPC</span>
                   </div>
-                  <div class="text-lg font-black font-mono text-orange-500 mt-0.5">
-                    {{ mdVerifyReport.summary.mismatchUpc }}
+                  <div class="text-lg font-black font-mono text-orange-500 mt-0.5 tabular-nums transition-all duration-300">
+                    {{ liveVerifySummary.mismatchUpc }}
                   </div>
                   <div class="text-[10px] opacity-70">Click to View</div>
                 </button>
@@ -1983,33 +1983,33 @@
                   <div class="text-[11px] font-bold opacity-80 flex items-center gap-1">
                     <span>⚪ Unlinked in RC</span>
                   </div>
-                  <div class="text-lg font-black font-mono text-base-content mt-0.5">
-                    {{ mdVerifyReport.summary.unlinkedInRc }}
+                  <div class="text-lg font-black font-mono text-base-content mt-0.5 tabular-nums transition-all duration-300">
+                    {{ liveVerifySummary.unlinkedInRc }}
                   </div>
                   <div class="text-[10px] opacity-70">Click to Match In-Stock</div>
                 </button>
               </div>
 
               <!-- 1-Click Action to Load Unlinked Items into Slide-Over Match Drawer Table -->
-              <div v-if="mdVerifyReport && (mdVerifyReport.summary.unlinkedInRc > 0 || mdVerifyReport.rows?.length > 0)" class="flex items-center justify-between gap-2 flex-wrap pt-1 border-t border-base-300/70">
+              <div v-if="mdVerifyReport && (liveVerifySummary.unlinkedInRc > 0 || mdVerifyReport.rows?.length > 0)" class="flex items-center justify-between gap-2 flex-wrap pt-1 border-t border-base-300/70">
                 <span class="text-[11px] opacity-75">
-                  Want to link the <strong>{{ mdVerifyReport.summary.unlinkedInRc }}</strong> unlinked {{ activeCanonicalLocationMeta.shortName }} items in the Slide-Over Match Drawer?
+                  Want to link the <strong>{{ liveVerifySummary.unlinkedInRc }}</strong> unlinked {{ activeCanonicalLocationMeta.shortName }} items in the Slide-Over Match Drawer?
                 </span>
                 <div class="flex items-center gap-2 flex-wrap">
                   <button
-                    v-if="mdVerifyReport.summary.unlinkedInRc > 0"
+                    v-if="liveVerifySummary.unlinkedInRc > 0"
                     type="button"
                     class="btn btn-xs btn-primary font-bold gap-1"
                     @click="applyVerificationPillFilter('UNLINKED_IN_RC')"
                   >
-                    <span>🔍 Match {{ mdVerifyReport.summary.unlinkedInRc }} Unlinked Items</span>
+                    <span>🔍 Match {{ liveVerifySummary.unlinkedInRc }} Unlinked Items</span>
                   </button>
                   <button
                     type="button"
                     class="btn btn-xs btn-ghost border border-base-300 font-bold gap-1"
                     @click="applyVerificationPillFilter('ALL')"
                   >
-                    <span>📋 View All {{ mdVerifyReport.summary.totalCatalog }} Report Rows</span>
+                    <span>📋 View All {{ liveVerifySummary.totalCatalog }} Report Rows</span>
                   </button>
                 </div>
               </div>
@@ -2069,6 +2069,17 @@ import { useAuth } from '../../composables/useAuth';
 import { useBodyScrollLock } from '../../composables/useBodyScrollLock';
 import { useDockClearance } from '../../composables/useDockClearance';
 import { useInventory } from '../../composables/useInventory';
+import {
+  deriveActualMdUpc,
+  computeRowLiveVerifyStatus,
+  computeLiveVerifySummary,
+  patchSyncRowsFromReport,
+} from '../../lib/locationSyncScorecard';
+import {
+  matchesTokenizedFields,
+  beginInventoryWrite,
+  notifyInventoryPreMutation,
+} from '../../lib/searchEngine';
 import BookmarkletHeroBar from '../bml/BookmarkletHeroBar.vue';
 import LocationChannelOutboxPanel from './LocationChannelOutboxPanel.vue';
 
@@ -2145,7 +2156,7 @@ const props = defineProps<{
 }>();
 
 const { user, currentTeam: team } = useAuth();
-const { inventoryItems, fetchInventory, getNextUpc } = useInventory();
+const { inventoryItems, fetchInventory, getNextUpc, upsertLocalItems, patchLocalItems } = useInventory();
 const { showLoader, hideLoader } = useLoader();
 
 const showBrowserSyncModal = ref(false);
@@ -2367,6 +2378,14 @@ const activeLocationManifestIds = computed(() => {
   return getLocationManifestDocIds(activeLocationCode.value, locations.value);
 });
 
+const liveVerifySummary = computed(() =>
+  computeLiveVerifySummary({
+    syncRows: syncRows.value,
+    report: mdVerifyReport.value,
+    inventoryItems: inventoryItems.value,
+  })
+);
+
 const locationHistory = computed(() => {
   if (!selectedLocationId.value && !currentLocation.value) return [];
   const locName = (currentLocation.value?.name || '').toLowerCase();
@@ -2540,14 +2559,21 @@ const displayedRows = computed(() => {
   else if (filterTab.value === 'sold') rows = rows.filter((r) => r.status === 'sold' || r.status === 'paid');
 
   if (searchQuery.value.trim()) {
-    const q = searchQuery.value.toLowerCase();
     rows = rows.filter((r) =>
-      (r.itemName || '').toLowerCase().includes(q) ||
-      (r.extractedSku && r.extractedSku.toLowerCase().includes(q)) ||
-      (r.listedPrice && r.listedPrice.toString().includes(q)) ||
-      (r.netSoldPrice && r.netSoldPrice.toString().includes(q)) ||
-      (r.mappedItem && r.mappedItem.title && r.mappedItem.title.toLowerCase().includes(q)) ||
-      (r.mappedItem && r.mappedItem.upc && r.mappedItem.upc.toLowerCase().includes(q))
+      matchesTokenizedFields(searchQuery.value, [
+        r.itemName,
+        r.extractedSku,
+        r.mdUpc,
+        r.extractedUpc,
+        r.expectedRcUpc,
+        r.verifyStatus,
+        r.orgBucket,
+        r.listedPrice ? String(r.listedPrice) : '',
+        r.netSoldPrice ? String(r.netSoldPrice) : '',
+        r.mappedItem?.title,
+        r.mappedItem?.upc,
+        r.mappedItem?.locationSku,
+      ])
     );
   }
 
@@ -2763,6 +2789,26 @@ const bookmarkletBarLabel = computed(() =>
 // =========================================================================
 // 4. METHODS, WATCHERS & LIFECYCLE (All refs & computeds are now initialized)
 // =========================================================================
+const refreshRowLiveStatus = (row: any) => {
+  if (!row) return;
+  const isSold = row.status === 'sold' || row.status === 'paid';
+  const expected = cleanCatalogSku(row.mappedItem?.upc || row.expectedRcUpc || '').toUpperCase();
+  row.verifyStatus = computeRowLiveVerifyStatus({
+    hasLinkedItem: Boolean(row.mappedItem),
+    isSoldOrPaid: isSold,
+    mdUpc: row.mdUpc,
+    expectedRcUpc: expected,
+  });
+  syncRows.value = [...syncRows.value];
+};
+
+const applyIncomingVerifyReport = (report: any) => {
+  mdVerifyReport.value = report;
+  if (patchSyncRowsFromReport(syncRows.value, report)) {
+    syncRows.value = [...syncRows.value];
+  }
+};
+
 const syncLivePayloadToCloudEndpoint = async () => {
   const map = ricochetBarcodePayloadMap.value;
   if (!map || Object.keys(map).length === 0) return;
@@ -2820,7 +2866,7 @@ const fetchMdVerifyReport = async (showManualToast = false) => {
     if (loadedReport) {
       const hadPriorReport = Boolean(mdVerifyReport.value?.timestamp);
       const isNewer = hadPriorReport && mdVerifyReport.value.timestamp !== loadedReport.timestamp;
-      mdVerifyReport.value = loadedReport;
+      applyIncomingVerifyReport(loadedReport);
       if (showManualToast) {
         addToast({
           type: 'success',
@@ -2871,18 +2917,20 @@ const loadVerifyReportIntoWorkspace = (mode: 'unlinked' | 'all' = 'all') => {
   }
 
   const esc = (val: any) => `"${String(val ?? '').replace(/"/g, '""').replace(/\r?\n/g, ' ')}"`;
-  const header = `"Product ID",SKU,UPC,Expected_RC_UPC,Verify_Status,Partner,Conflict_Reason,Name,"Agreed Price",Quantity,Inventory`;
+  const header = `"Product ID",SKU,UPC,MD_UPC,Expected_RC_UPC,Verify_Status,Partner,Conflict_Reason,Name,"Agreed Price",Quantity,Inventory`;
   const csvLines = [header];
   for (const r of sourceRows) {
     const rawQty = r.quantity !== undefined && r.quantity !== null ? Number(r.quantity) : 1;
     const invStr = r.inventory || (rawQty > 0 ? 'In Stock' : 'Sold');
-    const resolvedUpc = r.mdUpc || r.upc || r.expectedRcUpc || '';
-    const resolvedExpectedUpc = r.expectedRcUpc || r.mdUpc || r.upc || '';
+    const actualMdUpc = deriveActualMdUpc(r);
+    const resolvedExpectedUpc = cleanCatalogSku(r.expectedRcUpc || actualMdUpc || '');
+    const resolvedUpc = actualMdUpc || resolvedExpectedUpc;
     csvLines.push(
       [
         esc(r.productId),
         esc(r.sku),
         esc(resolvedUpc),
+        esc(actualMdUpc),
         esc(resolvedExpectedUpc),
         esc(r.verifyStatus),
         esc(r.partner || ''),
@@ -3011,6 +3059,7 @@ const assignUniqueUpcToRow = async (row: any) => {
   const prefix = getRowEffectivePrefix(row);
   const newUpc = getNextUpc ? getNextUpc(prefix) : `${prefix}${Math.floor(1000 + Math.random() * 9000)}`;
   const cleanSku = cleanCatalogSku(row.extractedSku).toUpperCase();
+  const endWrite = beginInventoryWrite();
 
   try {
     // 1. Clear conflicting locationSku from any OTHER item in inventoryItems that still claims cleanSku
@@ -3022,7 +3071,7 @@ const assignUniqueUpcToRow = async (row: any) => {
       for (const staleItem of staleSameSkuItems) {
         try {
           await updateInventoryItem(staleItem.$id, { locationSku: '' });
-          staleItem.locationSku = '';
+          patchLocalItems([staleItem.$id], { locationSku: '' });
         } catch (clearErr) {
           console.warn('Could not clear stale locationSku on', staleItem.$id, clearErr);
         }
@@ -3055,13 +3104,12 @@ const assignUniqueUpcToRow = async (row: any) => {
         warehouseId: MD_CANONICAL_WAREHOUSE_ID,
       };
       if (cleanSku) updatePayload.locationSku = cleanSku;
-      await updateInventoryItem(mapped.$id, updatePayload);
-      mapped.upc = newUpc;
-      mapped.storageLocation = 'MD';
-      mapped.warehouseId = MD_CANONICAL_WAREHOUSE_ID;
-      if (cleanSku) mapped.locationSku = cleanSku;
+      const updatedDoc = await updateInventoryItem(mapped.$id, updatePayload);
+      const nextDoc = updatedDoc && updatedDoc.$id ? updatedDoc : { ...mapped, ...updatePayload };
+      upsertLocalItems([nextDoc]);
+      row.mappedItem = nextDoc;
     } else {
-      // Mapped item is shared with another 0EJ SKU (e.g. 0EJ02D vs 0EJ05G on HUCK-9543): create a dedicated item for cleanSku
+      // Mapped item is shared with another 0EJ SKU: create a dedicated item for cleanSku
       const isSold = row.status === 'sold' || row.status === 'paid';
       const locName = currentLocation.value?.name || 'Memory Den';
       const listedPrice = Number(row.listedPrice || mapped?.resalePrice || row.netSoldPrice || 0);
@@ -3086,15 +3134,17 @@ const assignUniqueUpcToRow = async (row: any) => {
         team.value?.$id || user.value?.$id || '',
         team.value?.$id ? 'team' : 'user'
       );
-      inventoryItems.value.unshift(doc);
+      if (doc) upsertLocalItems([doc]);
       row.mappedItem = doc;
     }
 
+    row.mdUpc = row.mdUpc ? row.mdUpc : '';
     row.extractedUpc = newUpc;
     row.expectedRcUpc = newUpc;
     row.conflictReason = '';
     row.uniqueBarcodeAssigned = true;
     row.isSavedToMd = true;
+    refreshRowLiveStatus(row);
     void syncLivePayloadToCloudEndpoint();
     addToast({
       type: 'success',
@@ -3106,6 +3156,7 @@ const assignUniqueUpcToRow = async (row: any) => {
       message: `Failed to assign unique barcode: ${err?.message || 'Unknown error'}`,
     });
   } finally {
+    endWrite();
     row.isAssigningUniqueUpc = false;
   }
 };
@@ -3113,13 +3164,14 @@ const assignUniqueUpcToRow = async (row: any) => {
 const adoptBoothTagForRow = async (row: any) => {
   if (!row || row.isAdoptingBoothUpc) return;
   const cleanSku = cleanCatalogSku(row.extractedSku || row.mappedItem?.locationSku || '').toUpperCase();
-  const boothUpc = cleanCatalogSku(row.extractedUpc || '').toUpperCase();
+  const boothUpc = cleanCatalogSku(row.mdUpc || row.extractedUpc || '').toUpperCase();
   if (!cleanSku || !boothUpc) {
     addToast({ type: 'warning', message: 'Missing 0EJ SKU or Ricochet Booth Tag UPC.' });
     return;
   }
 
   row.isAdoptingBoothUpc = true;
+  const endWrite = beginInventoryWrite();
   try {
     // Check if another active 0EJ item in inventory already claims boothUpc
     const conflictingDoc = (inventoryItems.value || []).find((i: any) => {
@@ -3136,15 +3188,16 @@ const adoptBoothTagForRow = async (row: any) => {
     }
 
     if (row.mappedItem?.$id && !String(row.mappedItem.$id).startsWith('subclient_')) {
-      await updateInventoryItem(row.mappedItem.$id, {
+      const patch = {
         upc: boothUpc,
         locationSku: cleanSku,
         storageLocation: 'MD',
         warehouseId: MD_CANONICAL_WAREHOUSE_ID,
-      });
-      row.mappedItem.upc = boothUpc;
-      row.mappedItem.locationSku = cleanSku;
-      row.mappedItem.storageLocation = 'MD';
+      };
+      const updatedDoc = await updateInventoryItem(row.mappedItem.$id, patch);
+      const nextDoc = updatedDoc && updatedDoc.$id ? updatedDoc : { ...row.mappedItem, ...patch };
+      upsertLocalItems([nextDoc]);
+      row.mappedItem = nextDoc;
     }
 
     const res = await fetch(`/api/md-verify-report?location=${encodeURIComponent(activeLocationCode.value)}`, {
@@ -3162,9 +3215,12 @@ const adoptBoothTagForRow = async (row: any) => {
       throw new Error(data?.error || 'Could not update cloud verification report');
     }
 
+    row.mdUpc = boothUpc;
+    row.extractedUpc = boothUpc;
     row.expectedRcUpc = boothUpc;
     row.verifyStatus = 'VERIFIED_MATCH';
     row.isSavedToMd = true;
+    syncRows.value = [...syncRows.value];
     broadcastBarcodesUpdated();
     void fetchMdVerifyReport(false);
     addToast({
@@ -3177,6 +3233,7 @@ const adoptBoothTagForRow = async (row: any) => {
       message: `Could not adopt booth tag: ${err?.message || 'Unknown error'}`,
     });
   } finally {
+    endWrite();
     row.isAdoptingBoothUpc = false;
   }
 };
@@ -3627,6 +3684,7 @@ const linkAndSaveItemToSpecificRow = async (row: any, item: any, closeDrawerOnSu
 
   isSavingDrawerLink.value = item.$id;
   row.isConfirmingInline = true;
+  const endWrite = beginInventoryWrite();
   try {
     const cleanSku = cleanCatalogSku(row.extractedSku);
     const isRowSold = row.status === 'sold' || row.status === 'paid';
@@ -3662,26 +3720,23 @@ const linkAndSaveItemToSpecificRow = async (row: any, item: any, closeDrawerOnSu
       updatePayload.locationSku = cleanSku;
     }
 
-    await updateInventoryItem(item.$id, updatePayload);
+    const updatedDoc = await updateInventoryItem(item.$id, updatePayload);
+    const nextDoc = updatedDoc && updatedDoc.$id ? updatedDoc : { ...item, ...updatePayload };
+    upsertLocalItems([nextDoc]);
 
-    item.status = targetStatus;
-    item.storageLocation = targetStorageCode;
-    item.warehouseId = targetWarehouseId;
-    item.quantity = targetQty;
-    if (cleanSku) item.locationSku = cleanSku;
-
-    row.mappedItem = item;
-    row.extractedUpc = item.upc || row.extractedUpc;
-    row.expectedRcUpc = item.upc || row.expectedRcUpc;
+    row.mappedItem = nextDoc;
+    row.extractedUpc = nextDoc.upc || row.extractedUpc;
+    row.expectedRcUpc = nextDoc.upc || row.expectedRcUpc;
     row.isSavedToMd = true;
     row.selectedForApproval = false;
+    refreshRowLiveStatus(row);
 
     void syncLivePayloadToCloudEndpoint();
     broadcastBarcodesUpdated();
 
     addToast({
       type: 'success',
-      message: `✅ Linked & Saved ${item.upc || item.title} ➔ ${cleanSku || targetStorageCode} (${targetStatus} @ ${targetStorageCode})`,
+      message: `✅ Linked & Saved ${nextDoc.upc || nextDoc.title} ➔ ${cleanSku || targetStorageCode} (${targetStatus} @ ${targetStorageCode})`,
     });
 
     if (closeDrawerOnSuccess) {
@@ -3694,6 +3749,7 @@ const linkAndSaveItemToSpecificRow = async (row: any, item: any, closeDrawerOnSu
       message: toUserMessage(err, "Couldn't save item link — please try again."),
     });
   } finally {
+    endWrite();
     isSavingDrawerLink.value = null;
     row.isConfirmingInline = false;
   }
@@ -3722,6 +3778,8 @@ const splitLotPieceAndLinkToMd = async (
   if (!row || !parentLot || !team.value) return;
   row.isConfirmingInline = true;
   isSavingDrawerLink.value = parentLot.$id;
+  notifyInventoryPreMutation([parentLot.$id]);
+  const endWrite = beginInventoryWrite();
 
   try {
     const cleanSku = cleanCatalogSku(row.extractedSku).toUpperCase();
@@ -3771,28 +3829,37 @@ const splitLotPieceAndLinkToMd = async (
       )
     );
 
+    const docsToUpsert: any[] = [];
+    if (childDoc) docsToUpsert.push(childDoc);
+
     // Decrement parent lot quantity if > 1 (never write quantity: 0!)
     const currentParentQty = Number(parentLot.quantity ?? 1);
     if (currentParentQty > 1) {
       const nextParentQty = Math.max(1, currentParentQty - 1);
       const nextParentCost = Math.max(0, Number((lotCost - unitCostShare).toFixed(2)));
       try {
-        await updateInventoryItem(parentLot.$id, {
+        const updatedParent = await updateInventoryItem(parentLot.$id, {
           quantity: nextParentQty,
           cost: nextParentCost,
         });
-        parentLot.quantity = nextParentQty;
-        parentLot.cost = nextParentCost;
+        if (updatedParent && updatedParent.$id) {
+          docsToUpsert.push(updatedParent);
+        } else {
+          patchLocalItems([parentLot.$id], { quantity: nextParentQty, cost: nextParentCost });
+        }
       } catch {}
     }
 
-    inventoryItems.value.unshift(childDoc);
+    if (docsToUpsert.length > 0) {
+      upsertLocalItems(docsToUpsert);
+    }
     row.mappedItem = childDoc;
     row.extractedUpc = newUpc;
     row.expectedRcUpc = newUpc;
     row.isSavedToMd = true;
     row.selectedForApproval = false;
     newItemsCreatedInSession.value++;
+    refreshRowLiveStatus(row);
 
     void syncLivePayloadToCloudEndpoint();
     broadcastBarcodesUpdated();
@@ -3809,9 +3876,10 @@ const splitLotPieceAndLinkToMd = async (
     console.error('[LocationSyncView] Lot split failed:', err);
     addToast({
       type: 'error',
-      message: `Failed to split piece from lot: ${err?.message || 'Unknown error'}`,
+      message: toUserMessage(err, 'Could not split piece from lot — please try again.'),
     });
   } finally {
+    endWrite();
     row.isConfirmingInline = false;
     isSavingDrawerLink.value = null;
   }
@@ -4005,6 +4073,7 @@ const parseCsvData = (rawText: string, fileName: string) => {
       // NOTE: a Products-*.csv "In stock" column is the date the item was added to stock - never a quantity
       const qtyIdx = qtyIdxExact !== -1 ? qtyIdxExact : headerCols.findIndex(h => h.includes('quantity') || h.includes('qty'));
       const expectedRcUpcIdx = headerCols.findIndex(h => h === 'expected_rc_upc' || h === 'expected rc upc' || h.includes('expected_rc_upc'));
+      const mdUpcIdx = headerCols.findIndex(h => h === 'md_upc' || h === 'md upc');
       const verifyStatusIdx = headerCols.findIndex(h => h === 'verify_status' || h === 'verify status' || h.includes('verify_status'));
       const conflictReasonIdx = headerCols.findIndex(h => h === 'conflict_reason' || h === 'conflict reason' || h.includes('conflict_reason'));
       const isVerifyReportCsv = expectedRcUpcIdx !== -1 || verifyStatusIdx !== -1;
@@ -4016,10 +4085,15 @@ const parseCsvData = (rawText: string, fileName: string) => {
           const c = parsedMatrix[rIdx];
           if (!c || c.length === 0) continue;
           const vStatus = verifyStatusIdx !== -1 ? (c[verifyStatusIdx] || '').trim().toUpperCase() : 'UNLINKED_IN_RC';
+          const upcCell = upcIdx !== -1 ? cleanCatalogSku(c[upcIdx]).toUpperCase() : '';
+          const mdUpcCell = mdUpcIdx !== -1
+            ? cleanCatalogSku(c[mdUpcIdx]).toUpperCase()
+            : (vStatus === 'MISSING_IN_MD' ? '' : upcCell);
           verifyRows.push({
             productId: prodIdIdx !== -1 ? (c[prodIdIdx] || '').trim() : '',
             sku: skuIdx !== -1 ? cleanCatalogSku(c[skuIdx]).toUpperCase() : '',
-            upc: upcIdx !== -1 ? cleanCatalogSku(c[upcIdx]).toUpperCase() : '',
+            upc: upcCell,
+            mdUpc: mdUpcCell,
             expectedRcUpc: expectedRcUpcIdx !== -1 ? cleanCatalogSku(c[expectedRcUpcIdx]).toUpperCase() : '',
             verifyStatus: vStatus || 'UNLINKED_IN_RC',
             conflictReason: conflictReasonIdx !== -1 ? (c[conflictReasonIdx] || '').trim() : '',
@@ -4287,6 +4361,19 @@ const parseCsvData = (rawText: string, fileName: string) => {
             })[0] || null
           : null;
 
+        const rowMdUpc = mdUpcIdx !== -1
+          ? cleanCatalogSku(cols[mdUpcIdx]).toUpperCase()
+          : (rowVerifyStatus === 'MISSING_IN_MD' ? '' : cleanUpc.toUpperCase());
+        const resolvedExpectedRcUpc = rowExpectedRcUpc || (matched?.upc || '');
+        const resolvedLiveVerifyStatus = rowVerifyStatus
+          ? computeRowLiveVerifyStatus({
+              hasLinkedItem: Boolean(matched || rowVerifyStatus !== 'UNLINKED_IN_RC'),
+              isSoldOrPaid,
+              mdUpc: rowMdUpc,
+              expectedRcUpc: resolvedExpectedRcUpc,
+            })
+          : undefined;
+
         rows.push({
           originalLineIndex: i,
           orgBucket,
@@ -4296,9 +4383,10 @@ const parseCsvData = (rawText: string, fileName: string) => {
           conflictReason: conflictReasonIdx !== -1 ? (cols[conflictReasonIdx] || '').trim() : '',
           productId: prodIdIdx !== -1 ? (cols[prodIdIdx] || '').trim() : '',
           extractedSku: cleanSku,
+          mdUpc: rowMdUpc,
           extractedUpc: cleanUpc || (matched?.upc || '') || rowExpectedRcUpc,
-          expectedRcUpc: rowExpectedRcUpc || (matched?.upc || ''),
-          verifyStatus: rowVerifyStatus || undefined,
+          expectedRcUpc: resolvedExpectedRcUpc,
+          verifyStatus: resolvedLiveVerifyStatus,
           itemName: name,
           listedPrice: grossPrice,
           netSoldPrice: netSoldPrice,
@@ -4616,6 +4704,7 @@ const triggerAiMatching = async () => {
 const quickAddRow = async (row: any) => {
   if (!team.value) return;
   row.isQuickAdding = true;
+  const endWrite = beginInventoryWrite();
   try {
     const isSold = row.status === 'sold' || row.status === 'paid';
     const locName = currentLocation.value?.name || 'Memory Den';
@@ -4658,19 +4747,21 @@ const quickAddRow = async (row: any) => {
       team.value?.$id ? 'team' : 'user'
     ));
 
-    inventoryItems.value.unshift(doc);
+    if (doc) upsertLocalItems([doc]);
     row.mappedItem = doc;
     row.extractedUpc = upc;
     row.expectedRcUpc = upc;
     row.isSavedToMd = true;
     row.isSearching = false;
     row.searchQuery = '';
+    refreshRowLiveStatus(row);
 
     addToast({ type: 'success', message: `Added "${row.itemName}" with UPC ${upc}!` });
   } catch (err: any) {
     console.error('Quick add failed:', err);
-    addToast({ type: 'error', message: 'Failed to quick add item: ' + err.message });
+    addToast({ type: 'error', message: toUserMessage(err, 'Could not create item — please try again.') });
   } finally {
+    endWrite();
     row.isQuickAdding = false;
   }
 };
@@ -4683,13 +4774,17 @@ const cycleUpcPrefix = async (item: any) => {
   const nextIdx = (currentIdx + 1) % prefixList.length;
   const newPrefix = prefixList[nextIdx] || prefixList[0] || 'HUCK-';
   const newUpc = getNextUpc ? getNextUpc(newPrefix) : `${newPrefix}${Math.floor(1000 + Math.random() * 9000)}`;
-  item.upc = newUpc;
+  patchLocalItems([item.$id], { upc: newUpc });
   addToast({ type: 'info', message: `Updated "${item.title.substring(0, 25)}..." UPC to ${newUpc}` });
   if (item.$id) {
+    const endWrite = beginInventoryWrite();
     try {
-      await updateInventoryItem(item.$id, { upc: newUpc });
+      const updated = await updateInventoryItem(item.$id, { upc: newUpc });
+      if (updated) upsertLocalItems([updated]);
     } catch (e) {
       console.warn('Live UPC update error:', e);
+    } finally {
+      endWrite();
     }
   }
 };
@@ -4723,6 +4818,7 @@ const bulkQuickAddUnmatched = async (onlySold: boolean = false) => {
   let successCount = 0;
   const total = unmapped.length;
   let isCancelled = false;
+  const endWrite = beginInventoryWrite();
 
   showLoader(onlySold ? "Tracking Sold Items as Sales..." : "Creating Inventory Items...", {
     step: `Item 1 of ${total}: "${unmapped[0].itemName.substring(0, 32)}..."`,
@@ -4736,6 +4832,7 @@ const bulkQuickAddUnmatched = async (onlySold: boolean = false) => {
 
   try {
     const locName = currentLocation.value?.name || 'Memory Den';
+    const batchCreatedDocs: any[] = [];
 
     for (let idx = 0; idx < total; idx++) {
       if (isCancelled) break;
@@ -4789,13 +4886,19 @@ const bulkQuickAddUnmatched = async (onlySold: boolean = false) => {
           team.value?.$id ? 'team' : 'user'
         ));
 
-        inventoryItems.value.unshift(doc);
+        if (doc) batchCreatedDocs.push(doc);
         row.mappedItem = doc;
         row.extractedUpc = upc;
         row.expectedRcUpc = upc;
         row.isSavedToMd = true;
         row.isSearching = false;
         row.searchQuery = '';
+        row.verifyStatus = computeRowLiveVerifyStatus({
+          hasLinkedItem: Boolean(doc),
+          isSoldOrPaid: isSold,
+          mdUpc: row.mdUpc,
+          expectedRcUpc: upc,
+        });
         successCount++;
 
         // 350ms delay between items to respect API quotas
@@ -4805,13 +4908,19 @@ const bulkQuickAddUnmatched = async (onlySold: boolean = false) => {
       }
     }
 
+    if (batchCreatedDocs.length > 0) {
+      upsertLocalItems(batchCreatedDocs);
+    }
+    syncRows.value = [...syncRows.value];
+
     if (!isCancelled) {
       addToast({ type: 'success', message: `Successfully created and tracked ${successCount} items with "${prefix}" UPCs!` });
     }
   } catch (err: any) {
     console.error('Bulk quick add failed:', err);
-    addToast({ type: 'error', message: 'Bulk add encountered an issue: ' + err.message });
+    addToast({ type: 'error', message: toUserMessage(err, 'Bulk add encountered an issue — please try again.') });
   } finally {
+    endWrite();
     isBulkQuickAdding.value = false;
     hideLoader();
   }
@@ -4856,6 +4965,7 @@ const executeSync = async () => {
     }
   });
 
+  const endWrite = beginInventoryWrite();
   try {
     let count = 0;
     let skippedRecorded = 0;
@@ -4928,7 +5038,7 @@ const executeSync = async () => {
             resalePrice: Number(row.listedPrice || row.netSoldPrice || 0),
             tenantId: team.value?.$id || 'huck',
           }));
-          inventoryItems.value.unshift(createdBb);
+          upsertLocalItems([createdBb]);
           item = createdBb;
           row.mappedItem = createdBb;
           newItemsCreatedInSession.value++;
@@ -4945,7 +5055,6 @@ const executeSync = async () => {
           const effPrefix = getRowEffectivePrefix(row);
           const autoUpc = getNextUpc ? getNextUpc(effPrefix) : `${effPrefix}${Math.floor(1000 + Math.random() * 9000)}`;
           catalogUpdate.upc = autoUpc;
-          item.upc = autoUpc;
         }
         if (normSku && item.locationSku !== normSku) catalogUpdate.locationSku = normSku;
         if (item.storageLocation !== 'MD') catalogUpdate.storageLocation = 'MD';
@@ -4967,8 +5076,11 @@ const executeSync = async () => {
         delete catalogUpdate.isMultiQty;
         if (Object.keys(catalogUpdate).length > 0) {
           try {
-            await withRetry(() => updateInventoryItem(item.$id, catalogUpdate));
-            Object.assign(item, catalogUpdate);
+            const updatedCatalogDoc = await withRetry(() => updateInventoryItem(item.$id, catalogUpdate));
+            const nextDoc = updatedCatalogDoc && updatedCatalogDoc.$id ? updatedCatalogDoc : { ...item, ...catalogUpdate };
+            upsertLocalItems([nextDoc]);
+            item = nextDoc;
+            row.mappedItem = nextDoc;
             count++;
           } catch (itemErr: any) {
             console.warn(`Could not update catalog item "${row.itemName}":`, itemErr);
@@ -4990,7 +5102,6 @@ const executeSync = async () => {
         }
         const autoUpc = getNextUpc ? getNextUpc(prefix) : `${prefix}${Math.floor(1000 + Math.random() * 9000)}`;
         updateData.upc = autoUpc;
-        item.upc = autoUpc;
       }
 
       // Update location SKU
@@ -5091,13 +5202,15 @@ const executeSync = async () => {
 
       if (Object.keys(updateData).length > 0) {
         try {
-          await withRetry(() => updateInventoryItem(
-            item.$id,
-            updateData
-          ));
-
-          // Update local item reference
-          Object.assign(item, updateData);
+          const updatedSyncDoc = await withRetry(() =>
+            updateInventoryItem(item.$id, updateData)
+          );
+          const nextDoc =
+            updatedSyncDoc && updatedSyncDoc.$id
+              ? updatedSyncDoc
+              : { ...item, ...updateData };
+          upsertLocalItems([nextDoc]);
+          row.mappedItem = nextDoc;
           count++;
         } catch (itemErr: any) {
           console.warn(`Could not update document for "${row.itemName}":`, itemErr);
@@ -5182,8 +5295,9 @@ const executeSync = async () => {
     }
   } catch (err: any) {
     console.error('Sync commit error:', err);
-    addToast({ type: 'error', message: 'Sync encountered an issue: ' + err.message });
+    addToast({ type: 'error', message: toUserMessage(err, 'Could not complete sync — please try again.') });
   } finally {
+    endWrite();
     isCommitting.value = false;
     hideLoader();
   }
@@ -5314,26 +5428,95 @@ const loadData = async () => {
 
 let unsubscribeMdRealtime: (() => void) | null = null;
 
+const subscribeLocationReportRealtime = (reportDocId: string) => {
+  if (unsubscribeMdRealtime) {
+    try {
+      unsubscribeMdRealtime();
+    } catch {}
+    unsubscribeMdRealtime = null;
+  }
+  if (typeof window === 'undefined' || !reportDocId || !activeCanonicalLocationMeta.value.usesRicochet) {
+    return;
+  }
+  try {
+    unsubscribeMdRealtime = client.subscribe(
+      `databases.${DB_ID}.collections.manifests.documents.${reportDocId}`,
+      (response: any) => {
+        const doc = response?.payload;
+        const rawSnap = doc?.notes_raw || doc?.itemsSnapshot;
+        if (rawSnap) {
+          try {
+            const parsed = typeof rawSnap === 'string' ? JSON.parse(rawSnap) : rawSnap;
+            if (parsed && parsed.summary && Array.isArray(parsed.rows)) {
+              const hadPriorReport = Boolean(mdVerifyReport.value?.timestamp);
+              const isNewer = hadPriorReport && mdVerifyReport.value.timestamp !== parsed.timestamp;
+              applyIncomingVerifyReport(parsed);
+              if (isNewer) {
+                finishAmbientSync(`✅ ${activeCanonicalLocationMeta.value.shortName} report synced`);
+              }
+            }
+          } catch {}
+        } else {
+          void fetchMdVerifyReport(false);
+        }
+      }
+    );
+  } catch (rtErr) {
+    console.warn('[LocationSyncView] Appwrite Realtime subscription skipped:', rtErr);
+  }
+};
+
+watch(
+  () => [activeLocationManifestIds.value.reportDocId, activeCanonicalLocationMeta.value.usesRicochet] as const,
+  ([reportDocId, usesRicochet]) => {
+    if (!usesRicochet) {
+      if (unsubscribeMdRealtime) {
+        try {
+          unsubscribeMdRealtime();
+        } catch {}
+        unsubscribeMdRealtime = null;
+      }
+      return;
+    }
+    subscribeLocationReportRealtime(reportDocId);
+  },
+  { immediate: true }
+);
+
+const onWindowMessage = (ev: MessageEvent) => {
+  if (ev.data && ev.data.type === 'RC_MD_VERIFY_REPORT' && ev.data.report) {
+    applyIncomingVerifyReport(ev.data.report);
+    addToast({
+      type: 'success',
+      message: `📡 Received Live ${activeCanonicalLocationMeta.value.shortName} Verification Report (${ev.data.report.summary?.verifiedMatch || 0} Verified)!`,
+    });
+  }
+};
+
+const onWindowFocus = () => {
+  if (!isCommitting.value && !isBulkQuickAdding.value) {
+    void fetchMdVerifyReport(false);
+  }
+};
+
+const onVisibilityChange = () => {
+  if (typeof document !== 'undefined' && document.visibilityState === 'visible' && !isCommitting.value && !isBulkQuickAdding.value) {
+    void fetchMdVerifyReport(false);
+  }
+};
+
 onMounted(() => {
   loadData();
   void fetchMdVerifyReport(false);
   if (typeof window !== 'undefined') {
-    window.addEventListener('message', (ev) => {
-      if (ev.data && ev.data.type === 'RC_MD_VERIFY_REPORT' && ev.data.report) {
-        mdVerifyReport.value = ev.data.report;
-        addToast({
-          type: 'success',
-          message: `📡 Received Live ${activeCanonicalLocationMeta.value.shortName} Verification Report (${ev.data.report.summary?.verifiedMatch || 0} Verified)!`,
-        });
-      }
-    });
+    window.addEventListener('message', onWindowMessage);
 
     try {
       if (typeof BroadcastChannel !== 'undefined') {
         rcSyncChannel = new BroadcastChannel('resale_command_sync');
         rcSyncChannel.onmessage = (ev) => {
           if (ev?.data?.type === 'RC_MD_VERIFY_REPORT' && ev.data.report) {
-            mdVerifyReport.value = ev.data.report;
+            applyIncomingVerifyReport(ev.data.report);
             addToast({
               type: 'success',
               message: `📡 Auto-Refreshed Live ${activeCanonicalLocationMeta.value.shortName} Verification Report (${ev.data.report.summary?.verifiedMatch || 0} Verified)!`,
@@ -5343,44 +5526,8 @@ onMounted(() => {
       }
     } catch {}
 
-    try {
-      const reportDocId = activeLocationManifestIds.value.reportDocId;
-      unsubscribeMdRealtime = client.subscribe(
-        `databases.${DB_ID}.collections.manifests.documents.${reportDocId}`,
-        (response: any) => {
-          const doc = response?.payload;
-          const rawSnap = doc?.notes_raw || doc?.itemsSnapshot;
-          if (rawSnap) {
-            try {
-              const parsed = typeof rawSnap === 'string' ? JSON.parse(rawSnap) : rawSnap;
-              if (parsed && parsed.summary && Array.isArray(parsed.rows)) {
-                const hadPriorReport = Boolean(mdVerifyReport.value?.timestamp);
-                const isNewer = hadPriorReport && mdVerifyReport.value.timestamp !== parsed.timestamp;
-                mdVerifyReport.value = parsed;
-                if (isNewer) {
-                  finishAmbientSync(`✅ ${activeCanonicalLocationMeta.value.shortName} report synced`);
-                }
-              }
-            } catch {}
-          } else {
-            void fetchMdVerifyReport(false);
-          }
-        }
-      );
-    } catch (rtErr) {
-      console.warn('[LocationSyncView] Appwrite Realtime subscription skipped:', rtErr);
-    }
-
-    window.addEventListener('focus', () => {
-      if (!isCommitting.value && !isBulkQuickAdding.value) {
-        void fetchMdVerifyReport(false);
-      }
-    });
-    document.addEventListener('visibilitychange', () => {
-      if (document.visibilityState === 'visible' && !isCommitting.value && !isBulkQuickAdding.value) {
-        void fetchMdVerifyReport(false);
-      }
-    });
+    window.addEventListener('focus', onWindowFocus);
+    document.addEventListener('visibilitychange', onVisibilityChange);
     void loadBmlRegistryConfig().then((cfg) => {
       bmlRegistry.value = cfg;
     });
@@ -5388,8 +5535,16 @@ onMounted(() => {
 });
 
 onUnmounted(() => {
+  if (typeof window !== 'undefined') {
+    window.removeEventListener('message', onWindowMessage);
+    window.removeEventListener('focus', onWindowFocus);
+    document.removeEventListener('visibilitychange', onVisibilityChange);
+  }
   try {
-    if (unsubscribeMdRealtime) unsubscribeMdRealtime();
+    if (unsubscribeMdRealtime) {
+      unsubscribeMdRealtime();
+      unsubscribeMdRealtime = null;
+    }
   } catch {}
   try {
     if (rcSyncChannel) {

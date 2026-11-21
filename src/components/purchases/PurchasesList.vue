@@ -620,6 +620,7 @@
 import { ref, computed, defineAsyncComponent, watch, onMounted, onUnmounted } from 'vue';
 import { purchasesAPI, getPurchasesCollectionId, getItemPurchaseLinkKeys, getPurchaseIdentityKeys } from '../../lib/purchases';
 import { getCollectionId, normalizeInventoryStatus, DB_ID, BUCKET_ID } from '../../lib/inventory';
+import { matchesTokenizedFields } from '../../lib/searchEngine';
 import { isRefundedPurchaseOrder, parseTrackingNumbers } from '../../lib/shipmentTracking';
 import { useMemberCapabilities } from '../../lib/memberAccess';
 import { evaluatePurchaseAccess } from '../../lib/curatorOwnership';
@@ -959,17 +960,24 @@ const filteredPurchases = computed(() => {
         list = list.filter(p => getItemCount(p) > 0);
     }
 
-    // 3. Search query
+    // 3. Search query (multi-word, exact phrase, -exclude, comma SKU list + linked child item search)
     if (searchQuery.value && searchQuery.value.trim() !== '') {
-        const q = searchQuery.value.trim().toLowerCase();
-        list = list.filter(p => {
-            const poMatch = (p.poNumber || '').toLowerCase().includes(q);
-            const orderMatch = (p.orderId || '').toLowerCase().includes(q);
-            const vendorMatch = (p.vendor || '').toLowerCase().includes(q);
-            const idMatch = (p.$id || '').toLowerCase().includes(q);
-            const trackingMatch = (p.trackingNumber || '').toLowerCase().includes(q);
-            const statusMatch = (p.status || '').toLowerCase().includes(q);
-            return poMatch || orderMatch || vendorMatch || idMatch || trackingMatch || statusMatch;
+        list = list.filter((p) => {
+            const linkedFields = getLinkedItemsForPurchase(p).flatMap((i) => [
+                i?.title,
+                i?.upc,
+                i?.locationSku,
+            ]);
+            return matchesTokenizedFields(searchQuery.value, [
+                p.poNumber,
+                p.orderId,
+                p.vendor,
+                p.$id,
+                p.trackingNumber,
+                p.status,
+                p.notes,
+                linkedFields,
+            ]);
         });
     }
 

@@ -467,6 +467,7 @@
 
 <script setup>
 import { BUCKET_ID } from '../../lib/inventory';
+import { matchesTokenizedFields } from '../../lib/searchEngine';
 import { ref, computed, watch, onMounted, onUnmounted } from 'vue';
 import ItemThumbnail from '../common/ItemThumbnail.vue';
 import SlideOverDrawer from '../common/SlideOverDrawer.vue';
@@ -684,13 +685,20 @@ const filteredItems = computed(() => {
       return false;
     }
 
-    // 1. Search Query
-    if (searchQuery.value) {
-      const q = searchQuery.value.toLowerCase();
-      const matchesTitle = (item.title || '').toLowerCase().includes(q);
-      const matchesDesc = (item.conditionNotes || '').toLowerCase().includes(q);
-      const matchesKeywords = Array.isArray(item.keywords) && item.keywords.some(k => k.toLowerCase().includes(q));
-      if (!matchesTitle && !matchesDesc && !matchesKeywords) return false;
+    // 1. Search Query (multi-word, exact phrase, -exclude, comma SKU list)
+    if (searchQuery.value && searchQuery.value.trim() !== '') {
+      if (
+        !matchesTokenizedFields(searchQuery.value, [
+          item.title,
+          item.identity,
+          item.upc,
+          item.marketDescription,
+          item.conditionNotes,
+          item.keywords
+        ])
+      ) {
+        return false;
+      }
     }
 
     // 2. Price limit

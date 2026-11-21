@@ -1276,6 +1276,7 @@ import { confirmDialog } from '../../stores/confirm';
 import { useAuth } from '../../composables/useAuth';
 import { useLoader } from '../../composables/useLoader';
 import { pacificMonthKey, monthKeyToLabel } from '../../lib/salesBucketing';
+import { matchesTokenizedFields } from '../../lib/searchEngine';
 import { 
   coopExpensesApi, 
   inferDefaultScopeForCategory,
@@ -1559,12 +1560,16 @@ const filteredExpenses = computed(() => {
   }
 
   if (searchQuery.value.trim()) {
-    const q = searchQuery.value.toLowerCase().trim();
-    list = list.filter(e => 
-      e.description.toLowerCase().includes(q) ||
-      e.member.toLowerCase().includes(q) ||
-      e.category.toLowerCase().includes(q) ||
-      e.partner.toLowerCase().includes(q)
+    list = list.filter((e) =>
+      matchesTokenizedFields(searchQuery.value, [
+        e.description,
+        e.member,
+        e.category,
+        e.partner,
+        e.scope,
+        e.status,
+        e.date,
+      ])
     );
   }
 

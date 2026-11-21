@@ -1005,6 +1005,7 @@ import { resolveMultiQtyCost } from '../../composables/useItemDrawerForm';
 import { client } from '../../lib/appwrite';
 import { salesApi } from '../../lib/sales';
 import { updateInventoryItem } from '../../lib/inventory';
+import { matchesTokenizedFields } from '../../lib/searchEngine';
 import { toUserMessage } from '../../lib/userFacingErrors';
 import { addToast } from '../../stores/toast';
 import { isIntentionalNoSkuOrderId } from '../../lib/salesChannels';
@@ -1788,13 +1789,17 @@ const displayedSales = computed(() => {
   }
 
   if (searchQuery.value.trim()) {
-    const q = searchQuery.value.toLowerCase().trim();
-    list = list.filter(s => 
-      (s.title || '').toLowerCase().includes(q) ||
-      (s.soNumber || '').toLowerCase().includes(q) ||
-      (s.upc || '').toLowerCase().includes(q) ||
-      (s.sku || '').toLowerCase().includes(q) ||
-      (s.locationName || '').toLowerCase().includes(q)
+    list = list.filter((s) =>
+      matchesTokenizedFields(searchQuery.value, [
+        s.title,
+        s.soNumber,
+        s.orderId,
+        s.upc,
+        s.sku,
+        s.locationName,
+        s.partner,
+        s.status,
+      ])
     );
   }
 
