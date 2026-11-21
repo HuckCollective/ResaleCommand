@@ -3,13 +3,16 @@
   "homepage": "https://works.thehc.llc",
   "type": "module",
   "version": "0.3.0",
+  "engines": {
+    "node": ">=22.0.0"
+  },
   "scripts": {
     "dev": "astro dev",
     "inspect": "node scripts/inspect_schema.js",
     "audit:schema": "node scripts/audit_schema.mjs",
     "verify": "node scripts/validate-templates.mjs",
     "start": "astro dev",
-    "build": "node scripts/validate-templates.mjs && astro build",
+    "build": "node scripts/validate-templates.mjs --guard-build && astro build",
     "lint": "node scripts/validate-templates.mjs",
     "preview": "astro preview",
     "astro": "astro"

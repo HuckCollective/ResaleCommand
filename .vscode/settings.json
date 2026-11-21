@@ -1,7 +1,15 @@
 {
   "files.autoSave": "afterDelay",
   "files.autoSaveDelay": 1000,
+  "files.eol": "\n",
+  "chat.useAgentsMdFile": true,
   "files.readonlyInclude": {
     "dist-gemini-skills/**": true
+  },
+  "files.watcherExclude": {
+    "**/.astro/**": true,
+    "**/dist/**": true,
+    "**/.vercel/**": true,
+    "**/scratch/**": true
   }
 }

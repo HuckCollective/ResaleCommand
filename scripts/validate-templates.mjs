@@ -3,6 +3,30 @@ import path from 'path';
 import { parse, compileTemplate, compileScript } from 'vue/compiler-sfc';
 import ts from 'typescript';
 
+// 0. OS-AWARE LOCAL BUILD GUARD (--guard-build / --guard-only)
+// Blocks accidental `npm run build` / `vercel build` on local Windows (win32) to protect RAM/CPU,
+// while allowing native local builds on macOS (darwin), Linux (linux), and Vercel Cloud (VERCEL=1 / CI=1).
+if (process.argv.includes('--guard-build')) {
+    const targetPlatform = process.env.HC_TEST_PLATFORM || process.platform;
+    const isCloudOrAllowed = Boolean(
+        process.env.VERCEL || process.env.CI || process.env.ALLOW_CLOUD_BUILD
+    );
+    if (targetPlatform === 'win32' && !isCloudOrAllowed) {
+        console.error(
+            [
+                '❌ [guard-local-build] BLOCKED on local Windows (win32) to protect RAM/CPU.',
+                '   Never run local `astro build` or `vercel build` on this Windows PC.',
+                '   Run `npm run verify` locally (<10s), and let Vercel build in the cloud (or build natively on macOS/Linux).',
+            ].join('\n')
+        );
+        process.exit(1);
+    }
+    if (process.argv.includes('--guard-only')) {
+        console.log(`✅ [guard-local-build] Build allowed (platform=${targetPlatform}, cloud=${isCloudOrAllowed}).`);
+        process.exit(0);
+    }
+}
+
 function getFiles(dir, exts, files = []) {
     for (const item of fs.readdirSync(dir)) {
         const fullPath = path.join(dir, item);
