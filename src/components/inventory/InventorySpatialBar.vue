@@ -235,7 +235,7 @@
             {{ myScopeOptionLabel }} ({{ mySkuCount }})
           </option>
           <option value="all">
-            {{ isConsignor ? 'All Items' : '🌐 All Collective' }} ({{ activeItems.length }})
+            {{ isConsignor ? 'All Items' : '🌐 All Collective' }} ({{ ownerBaseItems.length }})
           </option>
           <option v-for="p in otherPartnerOptions" :key="p.id" :value="p.id">
             {{ p.label }} ({{ partnerCounts[p.id] || 0 }})
@@ -250,6 +250,7 @@
           class="select select-bordered select-xs w-auto min-w-0 max-w-full shrink-0 h-11 md:h-7 rounded-lg font-bold text-[11px] border-base-300 pl-2 pr-7 cursor-pointer"
           @change="onSortChange"
         >
+          <option v-if="hasActiveSearch" value="relevance:desc">🎯 Best Match</option>
           <option value="$createdAt:desc">🆕 Newest Added</option>
           <option value="$createdAt:asc">🌱 Oldest Added</option>
           <option value="upc:desc">🔢 Barcode (Hi → Lo)</option>
@@ -381,6 +382,8 @@ import {
 const props = withDefaults(
   defineProps<{
     inventoryItems: any[];
+    spatialItems?: any[];
+    ownerScopeItems?: any[];
     filterLocation: string;
     filterSmartQueue: string;
     filterBarcode: string;
@@ -392,10 +395,14 @@ const props = withDefaults(
     selectedCount?: number;
     sortColumn?: string;
     sortDirection?: 'asc' | 'desc';
+    hasActiveSearch?: boolean;
+    isRelevanceSort?: boolean;
     showSort?: boolean;
     showQuickAssign?: boolean;
   }>(),
   {
+    hasActiveSearch: false,
+    isRelevanceSort: false,
     showSort: true,
     showQuickAssign: true,
     isConsignor: false,
@@ -421,6 +428,10 @@ const activeItems = computed(() =>
   (props.inventoryItems || []).filter((item) => isWorkingStockItem(item))
 );
 
+const ownerBaseItems = computed(() =>
+  Array.isArray(props.ownerScopeItems) ? props.ownerScopeItems : activeItems.value
+);
+
 const effectiveOwnedPrefixes = computed<string[]>(() => {
   const out = new Set<string>();
   for (const p of props.ownedPrefixes || []) {
@@ -436,9 +447,9 @@ const effectiveOwnedPrefixes = computed<string[]>(() => {
 
 const mySkuCount = computed(() => {
   if (!props.currentUserId && effectiveOwnedPrefixes.value.length === 0) {
-    return activeItems.value.length;
+    return ownerBaseItems.value.length;
   }
-  return activeItems.value.filter((item) =>
+  return ownerBaseItems.value.filter((item) =>
     matchesMySkuFilter(item, effectiveOwnedPrefixes.value, props.currentUserId || '')
   ).length;
 });
@@ -475,6 +486,10 @@ const scopedActiveItems = computed(() => {
   return activeItems.value.filter((item) => matchesPartnerPrefix(item, bc));
 });
 
+const effectiveSpatialItems = computed(() =>
+  Array.isArray(props.spatialItems) ? props.spatialItems : scopedActiveItems.value
+);
+
 const otherPartnerOptions = computed<Array<{ id: string; label: string }>>(() => {
   const map = new Map<string, string>();
   const singleOwnedPrefix =
@@ -491,7 +506,7 @@ const otherPartnerOptions = computed<Array<{ id: string; label: string }>>(() =>
     if (singleOwnedPrefix && pfx === singleOwnedPrefix) continue;
     if (!map.has(pfx)) map.set(pfx, pfx);
   }
-  for (const item of activeItems.value) {
+  for (const item of ownerBaseItems.value) {
     const pfx = extractItemOwnerPrefix(item);
     if (!pfx) continue;
     if (singleOwnedPrefix && pfx === singleOwnedPrefix) continue;
@@ -518,10 +533,14 @@ const currentOwnerSelectValue = computed<string>(() => {
 });
 
 const currentSortValue = computed(() => {
+  if (props.hasActiveSearch && props.isRelevanceSort) {
+    return 'relevance:desc';
+  }
   const col = props.sortColumn || '$createdAt';
   const dir = props.sortDirection || 'desc';
   const candidate = `${col}:${dir}`;
   const validOptions = new Set([
+    'relevance:desc',
     '$createdAt:desc',
     '$createdAt:asc',
     'upc:desc',
@@ -605,19 +624,18 @@ const currentSellingSelectValue = computed<string>(() => {
 
 const locationCounts = computed<Record<string, number>>(() => {
   const counts: Record<string, number> = {
-    all: scopedActiveItems.value.length,
+    all: effectiveSpatialItems.value.length,
     __unassigned__: 0,
     __storage__: 0,
     __selling__: 0,
     __online__: 0,
     __events__: 0,
-    MD: 0,
-    DT: 0,
-    HG: 0,
-    HH: 0,
     HD: 0,
   };
-  for (const item of scopedActiveItems.value) {
+  for (const f of [...storageFacilities, ...sellingBoothFacilities]) {
+    counts[f.code] = 0;
+  }
+  for (const item of effectiveSpatialItems.value) {
     if (isBackstockStorageItem(item)) counts.__storage__++;
     if (isSellingChannelItem(item)) counts.__selling__++;
     if (isOnlineChannelItem(item)) counts.__online__++;
@@ -679,12 +697,12 @@ const sellingTriggerMeta = computed(() => {
 
 const partnerCounts = computed<Record<string, number>>(() => {
   const counts: Record<string, number> = {
-    all: activeItems.value.length,
+    all: ownerBaseItems.value.length,
   };
   for (const p of otherPartnerOptions.value) {
     counts[p.id] = 0;
   }
-  for (const item of activeItems.value) {
+  for (const item of ownerBaseItems.value) {
     for (const p of otherPartnerOptions.value) {
       if (matchesPartnerPrefix(item, p.id)) {
         counts[p.id] = (counts[p.id] || 0) + 1;

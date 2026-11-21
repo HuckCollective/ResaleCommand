@@ -661,6 +661,13 @@ import { generateNextUpc } from '../../lib/upcAuthority';
 import { getSubItemBoutique } from '../../lib/bundle-pricing';
 import { parsePriceValue } from '../../lib/lot-strategy';
 import { cropPhotoToJpeg, type NormBox } from '../../lib/photoSlicing';
+import {
+  beginInventoryWrite,
+  notifyInventoryPreMutation,
+  notifyInventoryUpsert,
+  notifyInventoryRemove,
+} from '../../lib/searchEngine';
+import { toUserMessage } from '../../lib/userFacingErrors';
 import { ID } from 'appwrite';
 
 const props = defineProps<{
@@ -1501,7 +1508,7 @@ function extractFileId(urlOrId?: string): string | null {
 async function executeSplit() {
   const orgId = currentTeam.value?.$id;
   if (!databases || !orgId) {
-    addToast({ type: 'error', message: 'Database not initialized or unauthenticated.' });
+    addToast({ type: 'error', message: 'Please sign in to split this lot.' });
     return;
   }
 
@@ -1515,10 +1522,13 @@ async function executeSplit() {
     return;
   }
 
+  const parentDocId = parent.$id || parent.id;
+  if (parentDocId) {
+    notifyInventoryPreMutation([parentDocId]);
+  }
   isSubmitting.value = true;
+  const endWrite = beginInventoryWrite();
   try {
-    const parentDocId = parent.$id || parent.id;
-
     // 0. Clean up any existing split children for this parent lot to prevent duplicates on re-split
     if (parentDocId) {
       try {
@@ -1526,8 +1536,13 @@ async function executeSplit() {
           Query.equal('parentLotId', parentDocId),
           Query.limit(100)
         ]);
+        const removedChildIds: string[] = [];
         for (const child of existingChildren.documents) {
           await databases.deleteDocument(DB_ID, getCollectionId(), child.$id);
+          removedChildIds.push(child.$id);
+        }
+        if (removedChildIds.length > 0) {
+          notifyInventoryRemove(removedChildIds);
         }
       } catch (cleanupErr) {
         console.warn('Old children cleanup check passed:', cleanupErr);
@@ -1689,25 +1704,32 @@ async function executeSplit() {
     }
 
     // 2. Mark parent lot as Deconstructed / Curated
+    let updatedParentDoc: any = null;
     if (parentDocId) {
       const existingNotes = parent.conditionNotes || parent.condition_notes || '';
-      await databases.updateDocument(DB_ID, getCollectionId(), parentDocId, {
+      updatedParentDoc = await databases.updateDocument(DB_ID, getCollectionId(), parentDocId, {
         status: 'deconstructed',
         conditionNotes: `${existingNotes}\n[Deconstructed into ${createdCount} curated tier listings]`.trim()
       });
     }
+
+    notifyInventoryUpsert([
+      ...createdDocs,
+      ...(updatedParentDoc ? [updatedParentDoc] : [])
+    ]);
 
     addToast({
       type: 'success',
       message: `🎉 Successfully generated ${createdCount} crated inventory listings ready for booth tagging!`
     });
 
-    emit('completed', { parentId: parentDocId, createdDocs });
+    emit('completed', { parentId: parentDocId, createdDocs, updatedParent: updatedParentDoc });
     closeWizard();
   } catch (err: any) {
     console.error('[LotSplitterWizard Error]:', err);
-    addToast({ type: 'error', message: 'Failed to split lot: ' + err.message });
+    addToast({ type: 'error', message: toUserMessage(err, 'Could not split lot — please try again.') });
   } finally {
+    endWrite();
     isSubmitting.value = false;
   }
 }

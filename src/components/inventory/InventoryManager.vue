@@ -38,120 +38,70 @@
         </div>
         <!-- MAIN INVENTORY SECTION -->
         <div class="flex flex-col pt-0 min-w-0 w-full">
-                <!-- CALM 2-ROW STICKY HEADER (Row 1: Title, Omnibox, ⚡ Queues & Lists, ⚙ Filters, View Switcher, + Add | Row 2: Storage vs Booths Bar) -->
-                <div class="sticky top-0 z-30 bg-base-100/95 backdrop-blur-md border-b border-base-200 py-2 mb-2 -mx-4 px-4 sm:mx-0 sm:px-0 shadow-2xs">
-                    <div class="flex flex-col gap-2">
-                        <!-- Row 1: Unified Reseller Toolbar -->
-                        <div class="flex flex-wrap lg:flex-nowrap items-center justify-between gap-2">
-                            <!-- Left: Clean Title & Live Item Count -->
-                            <div class="flex items-center gap-2 shrink-0">
-                                <h1 class="text-lg sm:text-xl font-black tracking-tight text-base-content leading-none">Inventory</h1>
-                                <span class="badge badge-sm badge-neutral text-neutral-content font-mono font-bold whitespace-nowrap shrink-0">{{ filteredInventory.length }}</span>
-                                <span v-if="loading" class="loading loading-spinner loading-xs text-primary"></span>
-                            </div>
-
-                            <!-- Center: Prominent Omnibox Search + Camera Scan -->
-                            <div class="relative order-3 lg:order-2 w-full lg:flex-1 lg:max-w-xl min-w-0">
-                                <Icon icon="solar:magnifer-linear" class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 opacity-45 pointer-events-none" />
-                                <input 
-                                    type="text" 
-                                    v-model="searchQuery" 
-                                    placeholder="Search title, barcode, booth SKU, PO, location…" 
-                                    aria-label="Search inventory"
-                                    class="input input-bordered input-sm h-11 md:h-8 w-full pl-9 pr-20 md:pr-16 bg-base-200/60 focus:bg-base-100 font-mono text-xs rounded-xl" 
-                                />
-                                <div class="absolute right-1 top-1/2 -translate-y-1/2 flex items-center gap-0.5">
-                                    <button 
-                                        v-if="searchQuery" 
-                                        type="button"
-                                        @click="searchQuery = ''" 
-                                        class="btn btn-ghost btn-circle btn-xs w-9 h-9 md:w-6 md:h-6 opacity-65 hover:opacity-100 font-bold text-xs" 
-                                        title="Clear search"
-                                        aria-label="Clear search"
-                                    >✕</button>
-                                    <button 
-                                        type="button"
-                                        @click="isScannerOpen = true" 
-                                        class="btn btn-ghost btn-circle btn-xs w-9 h-9 md:w-6 md:h-6 text-primary hover:bg-primary/10 transition-colors" 
-                                        title="Scan Barcode or Mini QR with Camera"
-                                        aria-label="Scan Barcode or Mini QR with Camera"
-                                    >
-                                        <Icon icon="solar:camera-linear" class="w-4 h-4 md:w-3.5 md:h-3.5" />
-                                    </button>
-                                </div>
-                            </div>
-
-                            <!-- Right: 🧹 Cleanup + ⚡ Queues & Lists + ⚙ Filters + Table|Cards + Add -->
-                            <div class="flex items-center gap-1.5 order-2 lg:order-3 shrink-0 ml-auto lg:ml-0">
-                                <button
-                                    v-if="healthTotalBadgeCount > 0 || isHealthAuditTrayOpen"
-                                    type="button"
-                                    @click="openHealthAuditTray"
-                                    class="btn btn-xs sm:btn-sm h-11 md:h-8 px-2.5 rounded-xl font-bold gap-1 shrink-0 transition-all"
-                                    :class="isHealthAuditTrayOpen ? 'btn-warning text-warning-content shadow-xs' : 'btn-outline border-warning/55 bg-warning/10 text-base-content hover:bg-warning/20'"
-                                    title="Review already-sold backstock twins, already-split parent lots, extra duplicate copies & stale POs"
-                                >
-                                    <span>🧹</span>
-                                    <span class="hidden sm:inline text-xs whitespace-nowrap">Cleanup</span>
-                                    <span v-if="healthTotalBadgeCount > 0" class="badge badge-2xs badge-warning text-warning-content font-mono font-black whitespace-nowrap shrink-0">{{ healthTotalBadgeCount }}</span>
-                                </button>
-
-                                <button
-                                    type="button"
-                                    @click="openQueuesTray"
-                                    class="btn btn-xs sm:btn-sm h-11 md:h-8 px-2.5 rounded-xl font-bold gap-1 shrink-0 transition-all"
-                                    :class="activeSmartQueueLabel ? 'btn-secondary text-secondary-content shadow-xs' : 'btn-outline border-base-300 bg-base-200/60 text-base-content hover:bg-base-200'"
-                                    title="Open Booth Restock Lists, Shared Online Ready Bin & Tag Health Queues"
-                                >
-                                    <span>⚡</span>
-                                    <span class="text-xs whitespace-nowrap">{{ activeSmartQueueLabel || 'Queues & Lists' }}</span>
-                                </button>
-
-                                <button 
-                                    type="button" 
-                                    @click="openFilterTray" 
-                                    class="inline-flex btn btn-xs sm:btn-sm rounded-xl gap-1 font-bold shrink-0 h-11 md:h-8 px-2.5 transition-all"
-                                    :class="activeFilterCount > 0 ? 'btn-outline btn-primary shadow-2xs' : 'btn-outline border-base-300 bg-base-200/60 text-base-content hover:bg-base-200'"
-                                    title="Open Filter Options"
-                                >
-                                    <Icon icon="solar:tuning-square-2-bold-duotone" class="w-3.5 h-3.5" />
-                                    <span class="hidden sm:inline text-xs">Filters</span>
-                                    <span v-if="activeFilterCount > 0" class="badge badge-2xs badge-primary text-primary-content font-mono font-bold whitespace-nowrap shrink-0">{{ activeFilterCount }}</span>
-                                </button>
-
-                                <div class="join bg-base-200/80 p-0.5 rounded-xl border border-base-300 shrink-0">
-                                    <button 
-                                        type="button"
-                                        class="join-item btn btn-xs h-11 md:h-7 gap-1 font-bold transition-all px-2.5 rounded-lg"
-                                        :class="viewMode === 'table' ? 'btn-neutral text-neutral-content shadow-xs' : 'btn-ghost opacity-70 hover:opacity-100'"
-                                        @click="$emit('update:viewMode', 'table')"
-                                        title="Spreadsheet Table View"
-                                    >
-                                        <Icon icon="solar:list-bold" class="w-3.5 h-3.5" />
-                                        <span class="hidden sm:inline text-[11px]">Table</span>
-                                    </button>
-                                    <button 
-                                        type="button"
-                                        class="join-item btn btn-xs h-11 md:h-7 gap-1 font-bold transition-all px-2.5 rounded-lg"
-                                        :class="viewMode === 'grid' ? 'btn-neutral text-neutral-content shadow-xs' : 'btn-ghost opacity-70 hover:opacity-100'"
-                                        @click="$emit('update:viewMode', 'grid')"
-                                        title="Visual Card Grid View"
-                                    >
-                                        <Icon icon="solar:gallery-wide-bold" class="w-3.5 h-3.5" />
-                                        <span class="hidden sm:inline text-[11px]">Cards</span>
-                                    </button>
-                                </div>
-
-                                <button class="hidden sm:inline-flex btn btn-xs sm:btn-sm h-11 md:h-8 px-3 btn-primary text-primary-content gap-1 font-black rounded-xl shadow-xs shrink-0" @click="openAdd">
-                                    <Icon icon="solar:add-circle-bold" class="w-4 h-4" />
-                                    <span class="text-xs">Add</span>
-                                </button>
-                            </div>
-                        </div>
-
-                        <!-- Row 2: Reseller Storage vs Selling Booths Bar -->
+                <!-- UNIFIED STICKY HEADER & SPATIAL BAR -->
+                <InventoryHeader
+                    title="Inventory"
+                    subtitle="Visual Card Grid"
+                    v-model:searchQuery="searchQuery"
+                    v-model:searchIncludeNotes="searchIncludeNotes"
+                    :proseOnlyMatchCount="proseOnlyMatchCount"
+                    v-model:filterStatus="filterStatus"
+                    v-model:filterLocation="filterBinLocation"
+                    v-model:filterChannel="filterChannel"
+                    :filterSmartQueue="filterSmartQueue"
+                    v-model:hideSold="hideSold"
+                    v-model:hideTracked="hideTracked"
+                    v-model:hideCombined="hideCombined"
+                    v-model:hideDeconstructed="hideDeconstructed"
+                    v-model:filterPlacedLocated="filterFlaggedLocated"
+                    v-model:filterInsight="insightFilter"
+                    v-model:filterBarcode="filterUpcPrefix"
+                    v-model:filterLotType="filterLotType"
+                    v-model:filterKeywords="filterKeywords"
+                    :filterParentLotId="filterParentLotId"
+                    :filterParentLotTitle="filterParentLotTitle"
+                    :filterPO="filterPO"
+                    :filterSO="filterSO"
+                    :locations="allAvailableLocations"
+                    :channels="allAvailableChannels"
+                    :prefixes="allAvailableUpcPrefixes"
+                    :activeFilterChips="activeFilterChips"
+                    :totalCount="inventoryItems.length"
+                    :countAll="countAll"
+                    :filteredCount="filteredInventory.length"
+                    :loading="loading"
+                    :statusCounts="{
+                        active: countByStatus('active'),
+                        acquired: countByStatus('acquired'),
+                        received: countByStatus('received'),
+                        placed: countByStatus('placed'),
+                        tracked: countByStatus('tracked'),
+                        sold: countByStatus('sold'),
+                        combined: countByStatus('combined'),
+                        deconstructed: countByStatus('deconstructed')
+                    }"
+                    :countByStatus="countByStatus"
+                    :readyToListCount="readyToListCount"
+                    :missingPhotosCount="missingPhotosCount"
+                    :missingPricingCount="missingPricingCount"
+                    :missingCostCount="missingCostCount"
+                    :viewMode="viewMode"
+                    :healthBadgeCount="healthTotalBadgeCount"
+                    :isHealthTrayOpen="isHealthAuditTrayOpen"
+                    @update:viewMode="$emit('update:viewMode', $event)"
+                    @open-queues="openQueuesTray"
+                    @open-health-audit="openHealthAuditTray"
+                    @open-filters="handleOpenFiltersFromHeader"
+                    @add="openAdd"
+                    @import="showImport = true"
+                    @clear-filters="clearAllFilters"
+                    @clear-lineage="clearLineageFilters"
+                >
+                    <template #spatial-bar>
                         <InventorySpatialBar
                             :inventoryItems="inventoryItems"
+                            :spatialItems="spatialScopedItems"
+                            :ownerScopeItems="ownerSwitchScopedItems"
                             v-model:filterLocation="filterBinLocation"
                             v-model:filterSmartQueue="filterSmartQueue"
                             v-model:filterBarcode="filterUpcPrefix"
@@ -163,43 +113,17 @@
                             :selectedCount="selectedItems.length"
                             :sortColumn="sortColumn"
                             :sortDirection="sortDirection"
+                            :hasActiveSearch="hasActiveSearch"
+                            :isRelevanceSort="isRelevanceSort"
                             @update-sort="handleUpdateSort"
                             @select-all="toggleAll"
                             @clear-selection="handleClearSelection"
                             @quick-assign-location="handleQuickAssignLocation"
                             @open-queues="openQueuesTray"
                         />
+                    </template>
 
-                        <!-- Row 3: Wrapping Active Filter Chips Bar (Conditional - takes ZERO space when no filters active) -->
-                        <div v-if="activeFilterChips && activeFilterChips.length > 0" class="flex flex-wrap items-center gap-1 pt-1 text-xs">
-                            <div 
-                                v-for="chip in activeFilterChips" 
-                                :key="chip.id" 
-                                class="badge badge-sm badge-outline gap-1 font-medium bg-base-100 border-base-300 pl-2 pr-1 h-6"
-                            >
-                                <span>{{ chip.label }}</span>
-                                <button 
-                                    type="button" 
-                                    @click="chip.onRemove ? chip.onRemove() : null" 
-                                    class="hover:text-error transition-colors p-0.5" 
-                                    title="Remove filter"
-                                >
-                                    <Icon icon="solar:close-circle-bold" class="w-3.5 h-3.5 opacity-60 hover:opacity-100" />
-                                </button>
-                            </div>
-
-                            <!-- Reset All Filters -->
-                            <button 
-                                type="button" 
-                                @click="clearAllFilters" 
-                                class="btn btn-ghost btn-xs text-error font-bold h-6 min-h-6 px-1.5 hover:bg-error/10"
-                                title="Reset all filters"
-                            >
-                                Reset All
-                            </button>
-                        </div>
-                </div>
-
+                    <template #sub-banners>
                         <!-- Admin Auto-Heal row (only when insight filter active AND items selected) -->
                         <div v-if="insightFilter && selectedItems.length > 0" class="pt-2 border-t border-primary/20">
                             <div class="text-[10px] uppercase font-bold opacity-60 text-warning mb-1.5 flex items-center gap-1">
@@ -233,44 +157,25 @@
                                 {{ isEstimating ? 'Generating ' + bulkProgress + '/' + bulkTotal : 'Auto-Generate Descriptions for ' + selectedItems.length + ' Items' }}
                             </button>
                         </div>
-                    </div>
+                    </template>
+                </InventoryHeader>
 
                     <!-- COLLAPSIBLE 1-LINE VALUATION & MARGIN SUMMARY STRIP -->
-                    <div class="mb-3">
+                    <div class="mb-3 mt-2">
                         <InventoryValuationStrip :stats="gridKpiStats" />
-                    </div>
-
-                    <!-- 🔗 ACTIVE LINEAGE & PO FILTER BANNER -->
-                    <div v-if="filterParentLotId || filterPO || filterSO" class="bg-base-200 border border-primary/30 rounded-2xl p-3.5 flex items-center justify-between shadow-xs mb-4">
-                        <div class="flex items-center gap-2.5 min-w-0">
-                            <div class="w-8 h-8 rounded-xl bg-primary/20 flex items-center justify-center text-primary shrink-0">
-                                <Icon icon="solar:filter-bold" class="w-4 h-4" />
-                            </div>
-                            <div class="min-w-0 text-xs">
-                                <span v-if="filterParentLotId" class="block font-bold truncate">
-                                    <span class="opacity-70">Filtered by Lot:</span> 
-                                    <span class="text-primary ml-1 font-mono">{{ filterParentLotTitle || filterParentLotId }}</span>
-                                    <span class="badge badge-xs badge-primary ml-2">{{ filteredInventory.length }} items</span>
-                                </span>
-                                <span v-else-if="filterPO" class="block font-bold truncate">
-                                    <span class="opacity-70">Filtered by Purchase Order:</span> 
-                                    <span class="text-secondary ml-1 font-mono">{{ filterPO }}</span>
-                                    <span class="badge badge-xs badge-secondary ml-2">{{ filteredInventory.length }} items</span>
-                                </span>
-                                <span v-else-if="filterSO" class="block font-bold truncate">
-                                    <span class="opacity-70">Filtered by Sales Order:</span> 
-                                    <span class="text-success ml-1 font-mono">{{ filterSO }}</span>
-                                    <span class="badge badge-xs badge-success ml-2">{{ filteredInventory.length }} items</span>
-                                </span>
-                                <span class="text-[10px] opacity-60">Showing only records linked to this lineage</span>
-                            </div>
-                        </div>
-                        <button class="btn btn-xs btn-ghost btn-circle shrink-0" @click="clearLineageFilters" title="Clear Filter">✕</button>
                     </div>
 
             <div v-if="filteredInventory.length === 0 && !loading && !error" class="text-center py-12 bg-base-200 rounded-xl border-dashed border-2 border-base-300">
                 <p class="text-lg opacity-60 mb-4">No items in inventory matching your filters.</p>
                 <div class="flex flex-wrap items-center justify-center gap-2">
+                    <button
+                        v-if="proseOnlyMatchCount > 0 && !searchIncludeNotes"
+                        type="button"
+                        class="btn btn-sm btn-info"
+                        @click="searchIncludeNotes = true"
+                    >
+                        📝 Show {{ proseOnlyMatchCount }} match{{ proseOnlyMatchCount === 1 ? '' : 'es' }} in notes &amp; descriptions
+                    </button>
                     <button
                         v-if="filterUpcPrefix === '__mine__' && inventoryItems.length > 0"
                         type="button"
@@ -296,6 +201,7 @@
                         :horizontal="isHorizontalCard"
                         :selected="selectedItems.includes(item.$id)"
                         :imageBroken="brokenImageIds.has(item.$id)"
+                        :matchOrigin="displayedMatchOrigins.get(item.$id) || null"
                         @image-error="onCardImageError(item.$id)"
                         @click-card="openEdit(item)"
                         @toggle-select="toggleItemSelection(item.$id)"
@@ -413,6 +319,7 @@
                             :readyToListCount="readyToListCount"
                             :missingPhotosCount="missingPhotosCount"
                             :missingPricingCount="missingPricingCount"
+                            :missingCostCount="missingCostCount"
                             :totalCount="inventoryItems.length"
                             :showKeywords="true"
                         />
@@ -487,8 +394,9 @@
             :health-warning="activeItem ? healthReport.byItemId.get(activeItem.$id) || null : null"
             @close="closeEditDrawer" 
             @save="saveEdit" 
-            @refresh="fetchInventory"
-            @uncombined="fetchInventory" 
+            @saved="onDrawerSavedDoc"
+            @refresh="handleRefreshInventory"
+            @uncombined="handleRefreshInventory" 
             @deconstruct="openDeconstructModal" 
             @selectItem="openEdit"
             @open-bundle="handleDrawerOpenBundle"
@@ -611,6 +519,7 @@
             @toggle-tray="isManifestTrayOpen = false" 
             @close="isManifestTrayOpen = false"
             @open-actions="openActionTray"
+            @drop-changed="handleRefreshInventory"
         />
 
         <!-- INTERACTIVE BOTTOM-SHEET QUEUES & LISTS TRAY -->
@@ -639,21 +548,13 @@
         <!-- DROPCAST STAGING TRAY -->
         <DropcastStagingTray v-if="isLegacyDropcastStudio" />
 
-        <!-- CAMERA BARCODE & MINI QR SCANNER -->
-        <BarcodeScannerModal 
-            :is-open="isScannerOpen"
-            title="Scan Tag to Filter Inventory"
-            subtitle="Point camera at barcode or Mini QR to instantly search"
-            @close="isScannerOpen = false"
-            @scan="handleScannedCode"
-        />
     </div>
 </template>
 
 <script setup>
 import { ref, computed, defineAsyncComponent, onMounted, onUnmounted, watch, nextTick } from 'vue';
 import { marked } from 'marked';
-import BarcodeScannerModal from '../common/BarcodeScannerModal.vue';
+import InventoryHeader from './InventoryHeader.vue';
 import InventoryValuationStrip from './InventoryValuationStrip.vue';
 import InventoryQueuesTray from './InventoryQueuesTray.vue';
 import StockHealthAuditTray from './StockHealthAuditTray.vue';
@@ -661,7 +562,9 @@ import { useInventoryHealthAudit } from '../../composables/useInventoryHealthAud
 import { SMART_QUEUES } from '../../lib/inventoryVibes';
 import { computeInventoryKpiStats } from '../../lib/inventoryKpiStats';
 import { useInventory } from '../../composables/useInventory';
-import { updateInventoryItem, deleteInventoryItem, saveItemToInventory, BUCKET_ID, getCollectionId, DB_ID, getAssetUrl, cloneItemMediaPayload, duplicateItemMediaInStorage } from '../../lib/inventory';
+import { usePurchases } from '../../composables/usePurchases';
+import { toUserMessage } from '../../lib/userFacingErrors';
+import { updateInventoryItem, deleteInventoryItem, saveItemToInventory, BUCKET_ID, getCollectionId, DB_ID, getAssetUrl, cloneItemMediaPayload } from '../../lib/inventory';
 import { useLoader } from '../../composables/useLoader';
 import { useManifest } from '../../composables/useManifest';
 import { useDropcasts } from '../../composables/useDropcasts';
@@ -686,7 +589,7 @@ const InventoryCombineDrawer = defineAsyncComponent(() => import('./InventoryCom
 import { useInventoryFilters } from '../../composables/useInventoryFilters';
 import { addToast } from '../../stores/toast';
 import { confirmDialog } from '../../stores/confirm';
-import { purchasesAPI, syncPurchaseStatusForItems } from '../../lib/purchases';
+import { syncPurchaseStatusForItems } from '../../lib/purchases';
 import { generateGenericCsv, generateEbayCsv, generatePoshmarkCsv, generateRicochetCsv, downloadCsv } from '../../lib/exportUtils';
 import { warehousesApi } from '../../lib/warehouses';
 import { useInventoryBulkActions } from '../../composables/useInventoryBulkActions';
@@ -710,14 +613,6 @@ const props = defineProps({
 });
 
 const emit = defineEmits(['update:viewMode']);
-
-const isScannerOpen = ref(false);
-
-const handleScannedCode = (res) => {
-    if (!res?.rawValue) return;
-    searchQuery.value = res.rawValue;
-    addToast(`Scanned: ${res.rawValue} (${res.format || 'code'})`, 'success');
-};
 
 const dockRef = ref(null);
 
@@ -744,17 +639,16 @@ const isHorizontalCard = computed(() => {
     return isMobile.value && mobileLayout.value === 'list';
 });
 
-const allPurchases = ref([]);
+const { purchases: allPurchases, fetchPurchases } = usePurchases();
 
-const fetchPurchases = async () => {
-    try {
-        const res = await purchasesAPI.listPurchases([
-            Query.orderDesc('$createdAt'),
-            Query.limit(5000)
-        ]);
-        allPurchases.value = res.documents || [];
-    } catch (e) {
-        console.error('Failed to load purchases for inventory search:', e);
+const handleRefreshInventory = async () => {
+    await fetchInventory(currentTeam.value?.$id || '');
+};
+
+const onDrawerSavedDoc = (doc) => {
+    if (doc && (doc.$id || doc.id)) {
+        upsertLocalItems([doc]);
+        markRecentlySaved(doc.$id || doc.id);
     }
 };
 
@@ -770,9 +664,24 @@ const {
     applyBulkUnified, 
     restockInventoryItem, 
     createBundle, 
-    rollbackLot 
-} = useInventoryBulkActions(async () => {
-    await fetchInventory(currentTeam.value?.$id || '');
+    combineItemsIntoBatch,
+    splitOneUnitFromBatch,
+    rollbackLot,
+    deleteBulkItems
+} = useInventoryBulkActions(async (affectedIds, updates) => {
+    if (updates && updates._storeSynced) {
+        return;
+    }
+    if (affectedIds && updates && inventoryItems.value) {
+        if (updates._deleted) {
+            removeLocalItems(affectedIds);
+            selectedItems.value = [];
+        } else {
+            patchLocalItems(affectedIds, updates);
+        }
+    } else {
+        await fetchInventory(currentTeam.value?.$id || '');
+    }
 });
 
 const onDockRestockItem = async ({ item, unitsToAdd, addedCostBasis }) => {
@@ -783,7 +692,18 @@ const onDockRestockItem = async ({ item, unitsToAdd, addedCostBasis }) => {
 };
 
 const onDockSubmitBundle = async ({ items, title, description, estHigh, storageLocation }) => {
-    const ok = await createBundle({ items, title, description, estHigh, storageLocation });
+    const mintInfo = resolveMintingPrefixForMember(capabilities.value, user.value?.$id);
+    const allowRetail = capabilities.value.role === 'founder' || capabilities.value.prefixStatus === 'locked';
+    const ok = await createBundle({
+        items,
+        title,
+        description,
+        estHigh,
+        storageLocation,
+        teamId: currentTeam.value?.$id,
+        upcPrefix: mintInfo.prefix,
+        allowRetailPlacement: allowRetail,
+    });
     if (ok) {
         selectedItems.value = [];
     }
@@ -791,18 +711,32 @@ const onDockSubmitBundle = async ({ items, title, description, estHigh, storageL
 
 const onDockSubmitCombine = async ({ items, title, mode, targetLot }) => {
     if (!items || items.length === 0) return;
-    combineMode.value = mode;
-    combineTitle.value = title;
-    if (targetLot) {
-        selectedTargetLotId.value = targetLot.$id || targetLot.id;
+    const blockReason = checkBulkItemsPermission(items, { requireFull: true });
+    if (blockReason) {
+        addToast({ type: 'warning', message: blockReason });
+        return;
     }
-    if (mode === 'add_to_existing' && targetLot) {
-        const targetId = targetLot.$id || targetLot.id;
-        const allIds = [targetId, ...items.map(i => i.$id || i.id)];
-        selectedItems.value = Array.from(new Set(allIds));
+    if (mode === 'add_to_existing' && targetLot && !canEditItemFull(targetLot)) {
+        addToast({ type: 'warning', message: 'Only the destination lot owner or an Account Steward can merge items into it.' });
+        return;
     }
-    await submitCombine();
-    selectedItems.value = [];
+    const mintInfo = resolveMintingPrefixForMember(capabilities.value, user.value?.$id);
+    const allowRetail = capabilities.value.role === 'founder' || capabilities.value.prefixStatus === 'locked';
+    const ok = await combineItemsIntoBatch({
+        items,
+        mode: mode || (targetLot ? 'add_to_existing' : 'create_new'),
+        title,
+        primaryId: items[0]?.$id,
+        targetLot,
+        allCatalogItems: inventoryItems.value,
+        teamId: currentTeam.value?.$id,
+        upcPrefix: mintInfo.prefix,
+        allowRetailPlacement: allowRetail,
+    });
+    if (ok) {
+        closeCombineModal();
+        selectedItems.value = [];
+    }
 };
 
 const onDockUncombineLot = async (lotItem) => {
@@ -829,17 +763,9 @@ const onLotSplitCompleted = async (payload) => {
     closeEditDrawer();
     selectedItems.value = [];
     if (payload && Array.isArray(payload.createdDocs) && payload.createdDocs.length > 0) {
-        // Optimistically insert new split items into inventoryItems in memory
-        inventoryItems.value.unshift(...payload.createdDocs);
-        if (payload.parentId) {
-            const parent = inventoryItems.value.find(i => i.$id === payload.parentId);
-            if (parent) {
-                parent.status = 'deconstructed';
-            }
-        }
-    } else {
-        await fetchInventory('');
+        return;
     }
+    await fetchInventory(currentTeam.value?.$id || '');
 };
 
 const handleDockSplitOneUnit = async (lotItem) => {
@@ -848,84 +774,15 @@ const handleDockSplitOneUnit = async (lotItem) => {
         addToast({ type: 'warning', message: 'Only the item owner or an Account Steward can split units from this batch.' });
         return;
     }
-    showLoader("Splitting 1 Unit from Batch...", {
-        step: "Allocating cost basis and generating dedicated SKU..."
+    const mintInfo = resolveMintingPrefixForMember(capabilities.value, user.value?.$id);
+    const placementCheck = canItemBePlacedOrPrinted(lotItem, capabilities.value, { userId: user.value?.$id });
+    const ok = await splitOneUnitFromBatch(lotItem, {
+        teamId: currentTeam.value?.$id,
+        upcPrefix: mintInfo.prefix,
+        allowRetailPlacement: placementCheck.allowed,
     });
-    try {
-        const qty = Number(lotItem.quantity || 1);
-        const costNum = parseFloat(lotItem.cost || 0);
-        const unitCost = Number(Number(costNum / (qty || 1)).toFixed(2));
-        const unitResale = parseFloat(lotItem.resalePrice || lotItem.price || 0);
-        const childTitle = `${lotItem.title || 'Inventory Item'} (Piece ${qty})`;
-
-        const mediaPayload = cloneItemMediaPayload({
-            imageId: lotItem.imageId,
-            galleryImageIds: lotItem.galleryImageIds
-        }, { copyAll: false });
-
-        const isRetail = /^(MD|DT)\b/i.test(lotItem.storageLocation || '');
-        const placementCheck = canItemBePlacedOrPrinted(lotItem, capabilities.value, { userId: user.value?.$id });
-        const allowRetail = isRetail && placementCheck.allowed;
-        const mintInfo = resolveMintingPrefixForMember(capabilities.value, user.value?.$id);
-        const ownerOrMintPrefix = extractItemOwnerPrefix(lotItem) || mintInfo.prefix;
-        const rawLoc = String(lotItem.storageLocation || '').trim() || 'HG';
-        const extraData = {
-            cost: unitCost,
-            resalePrice: unitResale,
-            status: lotItem.status === 'sold' ? 'acquired' : (allowRetail ? 'placed' : 'received'),
-            sourcingLocation: lotItem.sourcingLocation,
-            orderId: lotItem.orderId,
-            storageLocation: allowRetail ? rawLoc : (isRetail ? 'HG' : rawLoc),
-            imageId: mediaPayload.imageId,
-            galleryImageIds: mediaPayload.galleryImageIds,
-            quantity: 1,
-            parentLotId: lotItem.$id,
-            purchaseId: lotItem.purchaseId || null,
-            upcPrefix: ownerOrMintPrefix
-        };
-
-        const splitDoc = await saveItemToInventory(
-            { title: childTitle, identity: Math.random().toString(36).substring(2, 10), condition_notes: `Split 1 unit from batch: ${lotItem.$id}` },
-            null,
-            extraData,
-            currentTeam.value?.$id
-        );
-
-        if (splitDoc?.$id && mediaPayload.imageId) {
-            duplicateItemMediaInStorage({
-                imageId: lotItem.imageId,
-                galleryImageIds: lotItem.galleryImageIds
-            }, { copyAll: false }).then(async (deepMedia) => {
-                if (deepMedia.imageId && deepMedia.imageId !== mediaPayload.imageId) {
-                    await updateInventoryItem(splitDoc.$id, {
-                        imageId: deepMedia.imageId,
-                        galleryImageIds: deepMedia.galleryImageIds
-                    });
-                }
-            }).catch(e => console.warn('[handleDockSplitOneUnit] Background deep media clone skipped:', e));
-        }
-
-        const remainingQty = qty - 1;
-        const remainingCost = Number(Math.max(0, costNum - unitCost)).toFixed(2);
-        await updateInventoryItem(lotItem.$id, {
-            quantity: remainingQty,
-            cost: parseFloat(remainingCost)
-        });
-
-        // Optimistically insert into in-memory array with zero network re-render churn
-        if (splitDoc) {
-            inventoryItems.value.unshift(splitDoc);
-        }
-        lotItem.quantity = remainingQty;
-        lotItem.cost = parseFloat(remainingCost);
-
-        addToast({ type: 'success', message: `Split 1 unit into dedicated SKU! (${remainingQty} units remaining in batch)` });
+    if (ok) {
         selectedItems.value = [];
-    } catch (e) {
-        console.error("Failed to split unit:", e);
-        addToast({ type: 'error', message: "Failed to split unit: " + (e?.message || e) });
-    } finally {
-        hideLoader();
     }
 };
 
@@ -933,7 +790,6 @@ const onBundleSuccess = async (bundleId) => {
     isBundleModalOpen.value = false;
     selectedItems.value = [];
     addToast({ type: 'success', message: 'Bundle created successfully!' });
-    // Reload items
     await fetchInventory(currentTeam.value?.$id || '');
 };
 
@@ -945,20 +801,7 @@ const handleBulkDelete = async () => {
         addToast({ type: 'warning', message: blockReason });
         return;
     }
-    const count = selectedItems.value.length;
-    processing.value = true;
-    try {
-        for (const id of selectedItems.value) {
-            await deleteInventoryItem(id);
-        }
-        addToast({ type: 'success', message: `Deleted ${count} items.` });
-        selectedItems.value = [];
-        await fetchInventory('');
-    } catch (e) {
-        addToast({ type: 'error', message: 'Bulk delete failed: ' + e.message });
-    } finally {
-        processing.value = false;
-    }
+    await deleteBulkItems(selectedItems.value);
 };
 
 
@@ -1071,7 +914,7 @@ const checkBulkItemsPermission = (items, { requireFull = false, placement = fals
     return '';
 };
 
-const { inventoryItems, totalItems, loading, error, fetchInventory, hasMore, loadNextPage, generateUpcs, getNextUpc } = useInventory();
+const { inventoryItems, totalItems, loading, error, fetchInventory, hasMore, loadNextPage, generateUpcs, getNextUpc, upsertLocalItems, patchLocalItems, removeLocalItems } = useInventory();
 const loadMore = loadNextPage; // Alias for template
 const currentTeamId = computed(() => currentTeam.value?.$id); 
 
@@ -1105,6 +948,12 @@ const knownTeamPrefixes = computed(() => {
 
 const {
     searchQuery,
+    searchIncludeNotes,
+    proseOnlyMatchCount,
+    getSearchMatchOrigin,
+    hasActiveSearch,
+    isRelevanceSort,
+    applySortSelection,
     filterStatus,
     filterBinLocation,
     filterChannel,
@@ -1132,14 +981,18 @@ const {
     cartItems,
     cartGroups,
     countActive,
+    countAll,
     countByStatus,
     readyToListCount,
     missingPhotosCount,
     missingPricingCount,
+    missingCostCount,
     activeFilterCount,
     activeFilterChips,
     baseInventoryCount,
     filteredInventory,
+    spatialScopedItems,
+    ownerSwitchScopedItems,
     displayedInventory,
     gridPage,
     gridPageSize,
@@ -1158,6 +1011,16 @@ const {
     ownedPrefixes: computed(() => capabilities.value.ownedPrefixes || []),
     currentUserId: computed(() => user.value?.$id || ''),
     defaultToMine: computed(() => !capabilities.value.isConsignor)
+});
+
+const displayedMatchOrigins = computed(() => {
+    const map = new Map();
+    for (const item of displayedInventory.value || []) {
+        if (!item?.$id) continue;
+        const origin = getSearchMatchOrigin(item);
+        if (origin) map.set(item.$id, origin);
+    }
+    return map;
 });
 
 watch(currentTeam, (n) => { 
@@ -1180,8 +1043,8 @@ const markRecentlySaved = (id) => {
     }, 2500);
 };
 const handleUpdateSort = ({ column, direction }) => {
-    if (column) sortColumn.value = column;
-    if (direction === 'asc' || direction === 'desc') sortDirection.value = direction;
+    if (!column) return;
+    applySortSelection(column, direction === 'asc' ? 'asc' : 'desc');
 };
 const bulkProgress = ref(0);
 const bulkTotal = ref(0);
@@ -1415,19 +1278,6 @@ const runAutoGenerateDescriptions = async () => {
     addToast({ type: 'success', message: msg });
 };
 
-onMounted(() => {
-    updateIsMobile();
-    if (typeof window !== 'undefined') {
-        window.addEventListener('resize', updateIsMobile);
-    }
-    fetchPurchases();
-    initFromUrl();
-    closeAllTrays();
-    if (insightFilter.value) {
-        bulkOpen.value = true;
-    }
-});
-
 // Smoothly scroll back to top of grid on page change if scrolled down
 watch(gridPage, () => {
     if (typeof window !== 'undefined' && window.scrollY > 200) {
@@ -1613,27 +1463,15 @@ const handleGenerateUpcs = async (targetPrefix = '') => {
             for (const item of missingOwnItems) {
                 const newUpc = getNextUpc(prefix);
                 await updateInventoryItem(item.$id, { upc: newUpc, upcPrefix: prefix });
-                item.upc = newUpc;
+                patchLocalItems([item.$id], { upc: newUpc, upcPrefix: prefix });
                 count++;
             }
         }
         pruneFilteredOutSelections();
         addToast({ type: 'success', message: `Successfully generated ${count} "${prefix}" UPCs!` });
     } catch (e) {
-        addToast({ type: 'error', message: e.message || 'Failed to generate UPCs' });
+        addToast({ type: 'error', message: toUserMessage(e, 'Could not assign barcodes right now — please try again.') });
     }
-};
-
-const handleCustomGenerateUpcs = async () => {
-    if (capabilities.value.role !== 'founder') {
-        addToast({ type: 'warning', message: 'Only Account Stewards can generate custom team prefixes.' });
-        return;
-    }
-    const custom = window.prompt("Enter custom UPC Prefix (e.g. MYORG-):");
-    if (!custom || !custom.trim()) return;
-    let clean = custom.trim().toUpperCase();
-    if (!clean.endsWith('-') && !/^\d+$/.test(clean)) clean += '-';
-    await handleGenerateUpcs(clean);
 };
 
 const applyBulkUpc = async () => {
@@ -2108,31 +1946,6 @@ watch(loading, (isLoading) => {
     }
 });
 
-// Lifecycle
-onMounted(async () => {
-    console.log("InventoryManager Mounted - Version with Image Fetcher");
-    
-    // Check URL parameters for location or status filters
-    if (typeof window !== 'undefined' && window.location?.search) {
-        const params = new URLSearchParams(window.location.search);
-        const loc = params.get('location');
-        const st = params.get('status');
-        if (loc) filterBinLocation.value = loc;
-        if (st) filterStatus.value = st;
-    }
-
-    try {
-        if (inventoryItems.value.length === 0) {
-            showLoader("Loading Inventory...");
-        }
-        await fetchInventory(''); 
-    } catch (e) {
-        console.error("Failed to load inventory:", e);
-    } finally {
-        hideLoader();
-    }
-});
-
 // Watch for Auth / Team changes
 watch(authLoading, async (newVal, oldVal) => {
     if (oldVal && !newVal) {
@@ -2351,6 +2164,7 @@ function syncUrlWithDrawer(item) {
         url.searchParams.delete('item');
         url.searchParams.delete('sku');
         url.searchParams.delete('id');
+        url.searchParams.delete('edit');
     }
     window.history.replaceState({}, '', url.toString());
 }
@@ -2435,7 +2249,7 @@ watch(isEditDrawerOpen, (isOpen) => {
 function checkUrlForDirectItemOpen() {
     if (typeof window === 'undefined') return;
     const params = new URLSearchParams(window.location.search);
-    const target = params.get('upc') || params.get('sku') || params.get('item') || params.get('id');
+    const target = params.get('upc') || params.get('sku') || params.get('item') || params.get('id') || params.get('edit');
     if (!target || !inventoryItems.value || inventoryItems.value.length === 0) return;
     
     const cleanTarget = target.trim().toLowerCase();
@@ -2456,26 +2270,13 @@ watch(inventoryItems, () => {
 
 const handlePopState = () => {
     const params = new URLSearchParams(window.location.search);
-    const hasTarget = params.get('upc') || params.get('sku') || params.get('item') || params.get('id');
+    const hasTarget = params.get('upc') || params.get('sku') || params.get('item') || params.get('id') || params.get('edit');
     if (hasTarget) {
         checkUrlForDirectItemOpen();
     } else if (isEditDrawerOpen.value) {
         closeEditDrawer();
     }
 };
-
-onMounted(() => {
-    if (typeof window !== 'undefined') {
-        window.addEventListener('popstate', handlePopState);
-    }
-});
-
-onUnmounted(() => {
-    if (typeof window !== 'undefined') {
-        window.removeEventListener('popstate', handlePopState);
-    }
-});
-
 
 const saveEdit = async (payload) => {
     processing.value = true;
@@ -2494,14 +2295,12 @@ const saveEdit = async (payload) => {
             }
 
             const updatedDoc = await updateInventoryItem(targetId, payload);
-            // Optimistic update to immediately reflect in UI before Appwrite query cache clears
-            const idx = inventoryItems.value.findIndex(i => i && (i.$id === targetId || i.id === targetId));
-            if (idx !== -1) {
-                const next = [...inventoryItems.value];
-                next[idx] = { ...next[idx], ...updatedDoc };
-                inventoryItems.value = next;
-                markRecentlySaved(targetId);
+            if (updatedDoc && (updatedDoc.$id || updatedDoc.id)) {
+                upsertLocalItems([updatedDoc]);
+            } else {
+                patchLocalItems([targetId], payload);
             }
+            markRecentlySaved(targetId);
         } else {
             // CREATE NEW
             const prefix = payload.upcPrefix || mintInfo.prefix;
@@ -2511,22 +2310,20 @@ const saveEdit = async (payload) => {
                     : getNextUpc(prefix);
             }
             const effectiveTeamId = currentTeamId.value || user.value?.$id;
-             const newDoc = await saveItemToInventory(
+            const newDoc = await saveItemToInventory(
                 { title: payload.title || 'Untitled Item', identity: payload.title, condition_notes: '' }, 
                 payload.imageFile,
                 payload,
                 effectiveTeamId
             );
             if (newDoc) {
-                inventoryItems.value = [newDoc, ...inventoryItems.value];
+                upsertLocalItems([newDoc]);
                 markRecentlySaved(newDoc.$id);
             }
         }
 
         saveSucceeded = true;
         closeEditDrawer();
-        // Fire async refresh in background just in case
-        // In-place optimistic update + Appwrite Realtime handle state without reshuffling list order
         addToast({ type: 'success', message: 'Item saved successfully.' });
 
         // Background PO Status Synchronization if item is linked to a PO
@@ -2543,7 +2340,7 @@ const saveEdit = async (payload) => {
             });
         }
     } catch (e) {
-        addToast({ type: 'error', message: 'Save failed: ' + e.message });
+        addToast({ type: 'error', message: toUserMessage(e, 'Could not save changes — please try again.') });
     } finally {
         try { payload?.__onSaveComplete?.(saveSucceeded ? '✅ Saved' : ''); } catch {}
         processing.value = false;
@@ -3117,6 +2914,8 @@ const openCombineModal = () => {
     combineTitle.value = defaultTitle;
     combineTitleSuggestions.value = suggestions;
     
+    closeEditDrawer();
+    closeAllTrays();
     isCombineModalOpen.value = true;
 };
 
@@ -3138,6 +2937,14 @@ const closeCombineModal = () => {
     isCombineModalOpen.value = false;
 };
 
+const handleOpenFiltersFromHeader = () => {
+    closeCombineModal();
+    isBundleModalOpen.value = false;
+    showImport.value = false;
+    previewItem.value = null;
+    closeLotSplitter();
+};
+
 const submitCombine = async () => {
     const items = selectedItemsObjects.value;
     if (items.length < 2) return;
@@ -3146,212 +2953,44 @@ const submitCombine = async () => {
         addToast({ type: 'warning', message: blockReason });
         return;
     }
-    const combineMintInfo = resolveMintingPrefixForMember(capabilities.value, user.value?.$id);
-    
-    savingCombine.value = true;
-    try {
-        if (combineMode.value === 'add_to_existing') {
-            const targetLot = inventoryItems.value.find(i => i.$id === selectedTargetLotId.value);
-            if (!targetLot) throw new Error("Destination Main Lot not found.");
-            if (!canEditItemFull(targetLot)) {
-                throw new Error('Only the destination lot owner or an Account Steward can merge items into it.');
-            }
 
-            const itemsToAdd = items.filter(i => i.$id !== targetLot.$id);
-            if (itemsToAdd.length === 0) throw new Error("No items selected to add to this lot.");
-
-            // 1. Combine images from all added items with target lot
-            const galleryIdsSet = new Set(targetLot.galleryImageIds || []);
-            if (targetLot.imageId) galleryIdsSet.add(targetLot.imageId);
-
-            itemsToAdd.forEach(item => {
-                if (item.imageId) galleryIdsSet.add(item.imageId);
-                if (Array.isArray(item.galleryImageIds)) {
-                    item.galleryImageIds.forEach(id => galleryIdsSet.add(id));
-                }
-            });
-
-            // 2. Calculate updated cost and quantity
-            const addedCost = itemsToAdd.reduce((sum, i) => sum + (parseFloat(i.cost) || 0), 0);
-            const addedQty = itemsToAdd.reduce((sum, i) => sum + (parseInt(i.quantity) || 1), 0);
-            const newCost = Number(Number(Number(targetLot.cost || 0) + addedCost).toFixed(2));
-            const newQty = Math.max(1, Number(targetLot.quantity || 1) + addedQty);
-
-            // 3. Update target Main Lot in Appwrite
-            await updateInventoryItem(targetLot.$id, {
-                cost: newCost,
-                quantity: newQty,
-                galleryImageIds: Array.from(galleryIdsSet)
-            });
-
-            // 4. Update each added item: set parentLotId and status = combined
-            const updatePromises = itemsToAdd.map(item => 
-                updateInventoryItem(item.$id, {
-                    parentLotId: targetLot.$id,
-                    status: 'combined'
-                })
-            );
-            await Promise.all(updatePromises);
-
-            // 4b. If combining combines: re-parent any existing child items of merged lots to targetLot
-            const nestedChildren = (inventoryItems.value || []).filter(i => 
-                itemsToAdd.some(added => added.$id === i.parentLotId)
-            );
-            if (nestedChildren.length > 0) {
-                await Promise.all(nestedChildren.map(nc => 
-                    updateInventoryItem(nc.$id, { parentLotId: targetLot.$id })
-                ));
-                nestedChildren.forEach(nc => {
-                    nc.parentLotId = targetLot.$id;
-                });
-            }
-
-            // 5. Sync purchase orders
-            syncPurchaseStatusForItems(itemsToAdd).catch(err => console.warn('[submitCombine] PO sync warning:', err));
-
-            // 6. Optimistically update local state
-            targetLot.cost = newCost;
-            targetLot.quantity = newQty;
-            targetLot.galleryImageIds = Array.from(galleryIdsSet);
-
-            inventoryItems.value.forEach(item => {
-                if (itemsToAdd.some(i => i.$id === item.$id)) {
-                    item.status = 'combined';
-                    item.parentLotId = targetLot.$id;
-                }
-            });
-
-            closeCombineModal();
-            selectedItems.value = [];
-            addToast({ 
-                type: 'success', 
-                message: `Successfully added ${itemsToAdd.length} items to Main Lot "${targetLot.title}"!` 
-            });
+    let targetLot = null;
+    if (combineMode.value === 'add_to_existing') {
+        targetLot = inventoryItems.value.find(i => i.$id === selectedTargetLotId.value);
+        if (!targetLot) {
+            addToast({ type: 'warning', message: 'Destination Main Lot not found.' });
             return;
         }
-
-        // MODE: CREATE NEW MAIN LOT
-        if (!combinePrimaryId.value) return;
-        const primaryItem = items.find(i => i.$id === combinePrimaryId.value);
-        if (!primaryItem) throw new Error("Primary item not found.");
-        
-        const user = await account.get();
-        const teamId = localStorage.getItem('activeTeamId') || user.prefs?.teamId || null;
-        
-        // 1. Combine images from all selected items
-        const galleryIdsSet = new Set();
-        items.forEach(item => {
-            if (item.imageId) galleryIdsSet.add(item.imageId);
-            if (item.galleryImageIds) {
-                item.galleryImageIds.forEach(id => galleryIdsSet.add(id));
-            }
-        });
-        const combinedGallery = Array.from(galleryIdsSet);
-        const mainImageId = primaryItem.imageId || combinedGallery[0] || null;
-        
-        // 2. Prepare description/condition notes merge
-        let combinedNotes = (primaryItem.conditionNotes || '').trim();
-        const otherNotesList = items
-            .filter(i => i.$id !== primaryItem.$id)
-            .map(i => `[Merged Item: ${i.title} - Cost: $${Number(i.cost || 0).toFixed(2)}, Qty: ${i.quantity || 1}]\n${i.conditionNotes || ''}`.trim())
-            .filter(n => n.length > 0);
-        
-        // Clean sourcing URL from combined notes so AI scans strictly use the combined photo gallery
-        combinedNotes = combinedNotes.replace(/Location:\s*https?:\/\/[^\s\n]+/gi, '').trim();
-
-        // Calculate combined resale price
-        const totalResale = items.reduce((sum, i) => sum + (parseFloat(i.resalePrice || i.listPrice || 0) || 0), 0);
-
-        // 3. Create the new combined item document representing the combined lot (do not attach purchaseId to avoid double-counting on PO)
-        const combinedLotPrefix = extractItemOwnerPrefix(primaryItem) || combineMintInfo.prefix;
-        const extraData = {
-            cost: combineCost.value,
-            resalePrice: totalResale ? Number(totalResale ?? 0).toFixed(2) : undefined,
-            status: primaryItem.status === 'acquired' ? 'received' : (primaryItem.status || 'received'),
-            sourcingLocation: 'Combined Lot', // Fresh custom lot: no old auction URL
-            storageLocation: primaryItem.storageLocation || 'HG',
-            upcPrefix: combinedLotPrefix,
-            imageId: mainImageId,
-            galleryImageIds: combinedGallery,
-            keywords: Array.from(new Set(items.flatMap(i => i.keywords || []))),
-            quantity: combineTotalUnits.value,
-            parentLotId: null,
-            rawAnalysis: null // Clear stale analysis so AI runs a fresh comprehensive lot appraisal
-        };
-        
-        const combinedLotDoc = await saveItemToInventory(
-            { 
-                title: combineTitle.value, 
-                identity: combineTitle.value, 
-                condition_notes: combinedNotes 
-            },
-            null, // no file upload
-            extraData,
-            teamId
-        );
-        
-        // Asynchronously duplicate media in Appwrite Storage so the combined lot owns its own dedicated files
-        if (combinedLotDoc?.$id && (mainImageId || combinedGallery.length > 0)) {
-            duplicateItemMediaInStorage({
-                imageId: mainImageId,
-                galleryImageIds: combinedGallery
-            }, { copyAll: true }).then(async (deepMedia) => {
-                if (deepMedia.imageId || (deepMedia.galleryImageIds && deepMedia.galleryImageIds.length > 0)) {
-                    await updateInventoryItem(combinedLotDoc.$id, {
-                        imageId: deepMedia.imageId || undefined,
-                        galleryImageIds: deepMedia.galleryImageIds || []
-                    });
-                    console.log(`[submitCombine] Successfully assigned dedicated storage copies to lot ${combinedLotDoc.$id}`);
-                }
-            }).catch(e => console.warn('[submitCombine] Background media clone skipped/failed:', e));
+        if (!canEditItemFull(targetLot)) {
+            addToast({ type: 'warning', message: 'Only the destination lot owner or an Account Steward can merge items into it.' });
+            return;
         }
+    } else if (!combinePrimaryId.value) {
+        return;
+    }
 
-        // 4. Update all original items: set status to 'combined' and link to new lot
-        const updatePromises = items.map(item => 
-            updateInventoryItem(item.$id, {
-                status: 'combined',
-                parentLotId: combinedLotDoc.$id
-            })
-        );
-        await Promise.all(updatePromises);
+    const combineMintInfo = resolveMintingPrefixForMember(capabilities.value, user.value?.$id);
+    const allowRetail = capabilities.value.role === 'founder' || capabilities.value.prefixStatus === 'locked';
 
-        // 4b. If combining combines: re-parent any existing child items of merged lots to the new lot
-        const nestedChildren = (inventoryItems.value || []).filter(i => 
-            items.some(m => m.$id === i.parentLotId)
-        );
-        if (nestedChildren.length > 0) {
-            await Promise.all(nestedChildren.map(nc => 
-                updateInventoryItem(nc.$id, { parentLotId: combinedLotDoc.$id })
-            ));
-            nestedChildren.forEach(nc => {
-                nc.parentLotId = combinedLotDoc.$id;
-            });
-        }
-        
-        // Auto-sync any linked POs so they immediately recognize combined items and update to 'Received'
-        syncPurchaseStatusForItems(items).catch(err => console.warn('[submitCombine] PO sync warning:', err));
-        
-        // 5. Optimistically update local state
-        // Add new combined document to inventory list
-        inventoryItems.value.unshift(combinedLotDoc);
-        // Mark combined items locally
-        inventoryItems.value.forEach(item => {
-            if (items.some(i => i.$id === item.$id)) {
-                item.status = 'combined';
-                item.parentLotId = combinedLotDoc.$id;
-            }
+    savingCombine.value = true;
+    try {
+        const ok = await combineItemsIntoBatch({
+            items,
+            mode: combineMode.value,
+            title: combineTitle.value,
+            primaryId: combinePrimaryId.value,
+            targetLot,
+            totalCostOverride: combineCost.value,
+            totalUnitsOverride: combineTotalUnits.value,
+            allCatalogItems: inventoryItems.value,
+            teamId: currentTeam.value?.$id,
+            upcPrefix: combineMintInfo.prefix,
+            allowRetailPlacement: allowRetail,
         });
-        
-        // Close modal and reset state
-        closeCombineModal();
-        selectedItems.value = [];
-        addToast({ type: 'success', message: `Successfully combined into new lot "${combineTitle.value}"!` });
-        
-        // Async refresh in background
-        // In-place optimistic update + Appwrite Realtime handle state without reshuffling list order
-    } catch (e) {
-        addToast({ type: 'error', message: 'Failed to combine items: ' + e.message });
-        console.error(e);
+        if (ok) {
+            closeCombineModal();
+            selectedItems.value = [];
+        }
     } finally {
         savingCombine.value = false;
     }
@@ -3391,10 +3030,17 @@ const openHealthAuditFromDrawer = () => {
 };
 
 onMounted(async () => {
-    initActiveDraft('MD');
+    updateIsMobile();
     if (typeof window !== 'undefined') {
         window.addEventListener('resize', updateIsMobile);
+        window.addEventListener('popstate', handlePopState);
     }
+    initFromUrl();
+    closeAllTrays();
+    if (insightFilter.value) {
+        bulkOpen.value = true;
+    }
+    initActiveDraft('MD');
     if (inventoryItems.value.length === 0 && !loading.value) {
         await fetchInventory('');
     }
@@ -3409,6 +3055,7 @@ onMounted(async () => {
 onUnmounted(() => {
     if (typeof window !== 'undefined') {
         window.removeEventListener('resize', updateIsMobile);
+        window.removeEventListener('popstate', handlePopState);
     }
 });
 

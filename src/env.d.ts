@@ -21,6 +21,11 @@ declare module '*.vue' {
   export default component;
 }
 
+declare module '*.md?raw' {
+  const content: string;
+  export default content;
+}
+
 declare namespace App {
   interface Locals {
     tenantId?: string;

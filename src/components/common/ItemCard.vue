@@ -77,6 +77,14 @@
                         <Icon icon="solar:map-point-linear" class="w-3 h-3 inline shrink-0" />{{ locationText }}
                     </span>
                 </div>
+                <div v-if="matchOrigin" class="flex items-center gap-1.5 text-[10px] text-info font-bold mt-0.5 min-w-0">
+                    <span class="badge badge-xs badge-info badge-outline font-bold shrink-0 px-1.5">
+                        📝 {{ matchOrigin.field === 'description' ? 'Description' : 'Notes' }}
+                    </span>
+                    <span v-if="matchOrigin.snippet" class="truncate opacity-80 font-normal" :title="matchOrigin.snippet">
+                        {{ matchOrigin.snippet }}
+                    </span>
+                </div>
             </div>
 
             <!-- Bottom Row: Financials + Actions -->
@@ -206,6 +214,14 @@
                         <Icon icon="solar:shop-2-bold" class="w-2.5 h-2.5 mr-0.5" />{{ effectiveLocationSku }}
                     </span>
                 </div>
+                <div v-if="matchOrigin" class="flex items-center gap-1 text-[10px] text-info font-bold mt-0.5 min-w-0">
+                    <span class="badge badge-xs badge-info badge-outline font-bold shrink-0 px-1.5">
+                        📝 {{ matchOrigin.field === 'description' ? 'Description' : 'Notes' }}
+                    </span>
+                    <span v-if="matchOrigin.snippet" class="truncate opacity-80 font-normal" :title="matchOrigin.snippet">
+                        {{ matchOrigin.snippet }}
+                    </span>
+                </div>
             </div>
 
             <div>
@@ -253,7 +269,8 @@ const props = defineProps({
     compact: { type: Boolean, default: false }, // Makes it look like the small inventory cards
     horizontal: { type: Boolean, default: false }, // Horizontal list row for mobile feed
     selected: { type: Boolean, default: false }, // Whether this item is currently selected
-    imageBroken: { type: Boolean, default: false } // Parent-tracked broken image state
+    imageBroken: { type: Boolean, default: false }, // Parent-tracked broken image state
+    matchOrigin: { type: Object, default: null } // Deep prose match provenance badge ({ field, snippet })
 });
 
 const emit = defineEmits(['click-card', 'click', 'toggle-select', 'image-error']);

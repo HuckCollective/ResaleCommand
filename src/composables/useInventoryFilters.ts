@@ -1,4 +1,4 @@
-import { ref, computed, watch, type Ref } from 'vue';
+import { ref, computed, watch, onScopeDispose, type Ref } from 'vue';
 import type { Models } from 'appwrite';
 import { getAssetUrl, resolveItemImageUrls, normalizeInventoryStatus } from '../lib/inventory';
 import { getWarehouseFacilityOptions, findFacility } from '../lib/warehouses';
@@ -13,7 +13,7 @@ import { useDataFilter, type SortDirection, type FilterChip } from './useDataFil
 import { matchesMySkuFilter, normalizeUpcPrefix } from '../lib/curatorOwnership';
 import { parseSearchQuery, scoreInventoryItemSearch, type ProseMatchOrigin } from '../lib/searchEngine';
 
-export type InventorySortColumn = 'title' | 'cost' | 'resalePrice' | 'soldPrice' | 'soldDate' | 'margin' | 'upc' | 'vendor' | 'status' | 'location' | '$updatedAt' | '$createdAt';
+export type InventorySortColumn = 'title' | 'cost' | 'resalePrice' | 'soldPrice' | 'soldDate' | 'margin' | 'upc' | 'vendor' | 'status' | 'location' | '$updatedAt' | '$createdAt' | 'relevance';
 export type { SortDirection, FilterChip };
 
 // -- 0. IMAGE RESOLUTION HELPER (Universal getAssetUrl standard) --
@@ -85,9 +85,10 @@ export function useInventoryFilters(
     const filterInsight = ref(''); // 'ready_to_list' | 'missing_photos' | 'missing_pricing' | 'missing_cost' | 'missing_sold_price' | 'missing_description'
     const getDefaultBarcodeScope = () => (options.defaultToMine?.value ? '__mine__' : 'all');
     const filterBarcode = ref<string>(getDefaultBarcodeScope()); // '__mine__' | 'all' | '__missing__' | '__numeric__' | '__has_barcode__' | string prefix
+    let hasExplicitUrlBarcode = false;
     if (options.defaultToMine) {
         watch(options.defaultToMine, (shouldMine) => {
-            if (!shouldMine && filterBarcode.value === '__mine__') {
+            if (!shouldMine && !hasExplicitUrlBarcode && filterBarcode.value === '__mine__') {
                 filterBarcode.value = 'all';
             }
         });
@@ -378,6 +379,17 @@ export function useInventoryFilters(
         }).length;
     };
 
+    const countAll = computed(() => ownerScopedItems.value.length);
+
+    const countMissingCost = computed(() => {
+        return ownerScopedItems.value.filter(i => {
+            const itm = i as any;
+            if (!isActiveInventory(itm.status)) return false;
+            const costVal = parseVal(itm, 'cost', 'Paid') || parseVal(itm, 'purchasePrice', 'Paid');
+            return costVal <= 0;
+        }).length;
+    });
+
     const countMissingPhotos = computed(() => {
         return ownerScopedItems.value.filter(i => {
             const anyItem = i as any;
@@ -493,8 +505,50 @@ export function useInventoryFilters(
     });
 
     const parsedSearch = computed(() => parseSearchQuery(searchQuery.value));
+    const hasActiveSearch = computed(() => Boolean(searchQuery.value.trim()));
+    const isRelevanceSort = computed(() =>
+        Boolean(
+            hasActiveSearch.value &&
+            (sortColumn.value === 'relevance' ||
+                (!hasUserSelectedSort.value && sortColumn.value === '$createdAt' && sortDirection.value === 'desc'))
+        )
+    );
 
-    // Auto-sort by soldDate DESC when viewing sold inventory
+    const applySortSelection = (column: string, direction: SortDirection = 'desc') => {
+        if (!column || column === 'relevance') {
+            sortColumn.value = '$createdAt';
+            sortDirection.value = 'desc';
+            hasUserSelectedSort.value = false;
+            return;
+        }
+        sortColumn.value = column;
+        sortDirection.value = direction;
+        hasUserSelectedSort.value = true;
+    };
+
+    let isSyncingExclusions = false;
+
+    const applyExclusionDefaultsForStatus = (statusStr: string) => {
+        const st = (statusStr || 'active').toLowerCase();
+        if (st === 'all') {
+            hideSold.value = false;
+            hideTracked.value = false;
+            hideCombined.value = false;
+            hideDeconstructed.value = false;
+        } else if (st === 'active') {
+            hideSold.value = filterInsight.value === 'missing_sold_price' ? false : true;
+            hideTracked.value = true;
+            hideCombined.value = true;
+            hideDeconstructed.value = true;
+        } else {
+            hideSold.value = (st === 'sold' || filterInsight.value === 'missing_sold_price') ? false : true;
+            hideTracked.value = st === 'tracked' ? false : true;
+            hideCombined.value = st === 'combined' ? false : true;
+            hideDeconstructed.value = st === 'deconstructed' ? false : true;
+        }
+    };
+
+    // Auto-sort by soldDate DESC when viewing sold inventory & keep status <-> exclusion toggles synchronized
     watch(filterStatus, (newStatus, oldStatus) => {
         if (newStatus === 'sold') {
             sortColumn.value = 'soldDate';
@@ -503,10 +557,36 @@ export function useInventoryFilters(
             sortColumn.value = '$createdAt';
             sortDirection.value = 'desc';
         }
+        if (isSyncingExclusions) return;
+        isSyncingExclusions = true;
+        try {
+            applyExclusionDefaultsForStatus(newStatus);
+        } finally {
+            isSyncingExclusions = false;
+        }
+    });
+
+    watch([hideSold, hideTracked, hideCombined, hideDeconstructed], () => {
+        if (isSyncingExclusions) return;
+        isSyncingExclusions = true;
+        try {
+            if (filterStatus.value === 'all' && hideSold.value && hideTracked.value && hideCombined.value && hideDeconstructed.value) {
+                filterStatus.value = 'active';
+            } else if (filterStatus.value === 'active' && !hideSold.value && !hideTracked.value && !hideCombined.value && !hideDeconstructed.value) {
+                filterStatus.value = 'all';
+            }
+        } finally {
+            isSyncingExclusions = false;
+        }
     });
 
     // Custom filtering pipeline for inventory domain rules (shared between table/grid & Spatial Bar)
-    const matchesInventoryDomainFilters = (item: any, skipLocation = false): boolean => {
+    const matchesInventoryDomainFilters = (
+        item: any,
+        opts: boolean | { skipLocation?: boolean; skipBarcode?: boolean } = false
+    ): boolean => {
+        const skipLocation = typeof opts === 'boolean' ? opts : Boolean(opts?.skipLocation);
+        const skipBarcode = typeof opts === 'object' ? Boolean(opts?.skipBarcode) : false;
         const q = searchQuery.value.trim();
         const st = filterStatus.value.toLowerCase();
         const loc = filterLocation.value;
@@ -619,7 +699,7 @@ export function useInventoryFilters(
         }
 
         // 12. Barcode / Partner Prefix / 0EJ filter
-        if (bc && bc !== 'all') {
+        if (!skipBarcode && bc && bc !== 'all') {
             if (!matchesBarcodeScope(anyItem, bc)) return false;
         }
 
@@ -687,7 +767,11 @@ export function useInventoryFilters(
     });
 
     const spatialScopedItems = computed(() => {
-        return filteredItems.value.filter(item => matchesInventoryDomainFilters(item, true));
+        return filteredItems.value.filter(item => matchesInventoryDomainFilters(item, { skipLocation: true }));
+    });
+
+    const ownerSwitchScopedItems = computed(() => {
+        return filteredItems.value.filter(item => matchesInventoryDomainFilters(item, { skipBarcode: true }));
     });
 
     const proseOnlyMatchCount = computed<number>(() => {
@@ -1008,7 +1092,18 @@ export function useInventoryFilters(
         searchQuery.value = '';
         searchIncludeNotes.value = false;
         hasUserSelectedSort.value = false;
-        filterStatus.value = 'active';
+        sortColumn.value = '$createdAt';
+        sortDirection.value = 'desc';
+        isSyncingExclusions = true;
+        try {
+            filterStatus.value = 'active';
+            hideSold.value = true;
+            hideTracked.value = true;
+            hideCombined.value = true;
+            hideDeconstructed.value = true;
+        } finally {
+            isSyncingExclusions = false;
+        }
         filterLocation.value = 'all';
         filterChannel.value = 'all';
         filterInsight.value = '';
@@ -1018,16 +1113,135 @@ export function useInventoryFilters(
         filterPlacedLocated.value = false;
         filterKeywords.value = [];
         filterPurchaseId.value = '';
-        hideSold.value = true;
-        hideTracked.value = true;
-        hideCombined.value = true;
-        hideDeconstructed.value = true;
         clearLineageFilters();
     };
 
-    // -- 6. URL PARAMETER HYDRATION --
+    // -- 6. URL PARAMETER HYDRATION & DEBOUNCED STATE SYNC --
+    let hasHydratedUrl = false;
+    let urlSyncTimer: ReturnType<typeof setTimeout> | null = null;
+
+    const writeUrlState = () => {
+        if (typeof window === 'undefined' || !hasHydratedUrl) return;
+        try {
+            const url = new URL(window.location.href);
+            const sp = url.searchParams;
+
+            const qTrim = searchQuery.value.trim();
+            sp.delete('search');
+            if (qTrim) sp.set('q', qTrim);
+            else sp.delete('q');
+
+            if (searchIncludeNotes.value) sp.set('includeNotes', '1');
+            else sp.delete('includeNotes');
+
+            if (filterStatus.value && filterStatus.value !== 'active') sp.set('status', filterStatus.value);
+            else sp.delete('status');
+
+            sp.delete('loc');
+            if (filterLocation.value && filterLocation.value !== 'all') sp.set('location', filterLocation.value);
+            else sp.delete('location');
+
+            if (filterChannel.value && filterChannel.value !== 'all') sp.set('channel', filterChannel.value);
+            else sp.delete('channel');
+
+            sp.delete('smartQueue');
+            if (filterSmartQueue.value) sp.set('queue', filterSmartQueue.value);
+            else sp.delete('queue');
+
+            if (filterInsight.value) sp.set('insightFilter', filterInsight.value);
+            else sp.delete('insightFilter');
+
+            if (filterLotType.value && filterLotType.value !== 'all') sp.set('lotType', filterLotType.value);
+            else sp.delete('lotType');
+
+            if (hasUserSelectedSort.value && sortColumn.value && sortColumn.value !== 'relevance') {
+                sp.set('sort', `${sortColumn.value}:${sortDirection.value}`);
+            } else {
+                sp.delete('sort');
+            }
+
+            const defaultBc = getDefaultBarcodeScope();
+            const bc = filterBarcode.value || 'all';
+            const hasDeepQueryParam = Boolean(
+                sp.get('q') ||
+                sp.get('queue') ||
+                sp.get('po') ||
+                sp.get('purchaseId') ||
+                sp.get('orderId') ||
+                sp.get('parentLotId') ||
+                sp.get('lot') ||
+                sp.get('lotId') ||
+                sp.get('so') ||
+                sp.get('saleId') ||
+                sp.get('upc') ||
+                sp.get('edit') ||
+                sp.get('id') ||
+                sp.get('item') ||
+                sp.get('sku')
+            );
+            sp.delete('upcPrefix');
+            sp.delete('scope');
+            sp.delete('barcode');
+            if (bc === 'all' && defaultBc === '__mine__') {
+                sp.set('scope', 'all');
+            } else if (bc !== defaultBc) {
+                sp.set('barcode', bc);
+            } else if (bc === '__mine__' && hasDeepQueryParam) {
+                sp.set('barcode', '__mine__');
+            }
+
+            const nextUrl = url.toString();
+            if (nextUrl !== window.location.href) {
+                window.history.replaceState({}, '', nextUrl);
+            }
+        } catch {
+            // Ignore URL history write errors
+        }
+    };
+
+    const flushUrlSync = () => {
+        if (urlSyncTimer) {
+            clearTimeout(urlSyncTimer);
+            urlSyncTimer = null;
+        }
+        writeUrlState();
+    };
+
+    watch(searchQuery, () => {
+        if (typeof window === 'undefined' || !hasHydratedUrl) return;
+        if (urlSyncTimer) clearTimeout(urlSyncTimer);
+        urlSyncTimer = setTimeout(() => {
+            urlSyncTimer = null;
+            writeUrlState();
+        }, 250);
+    });
+
+    watch(
+        [
+            searchIncludeNotes,
+            filterStatus,
+            filterLocation,
+            filterChannel,
+            filterBarcode,
+            filterSmartQueue,
+            filterInsight,
+            filterLotType,
+            sortColumn,
+            sortDirection,
+            hasUserSelectedSort,
+        ],
+        () => {
+            if (!hasHydratedUrl) return;
+            flushUrlSync();
+        }
+    );
+
+    onScopeDispose(() => {
+        flushUrlSync();
+    });
+
     const initFromUrl = (params?: URLSearchParams) => {
-        if (typeof window === 'undefined') return;
+        if (!params && typeof window === 'undefined') return;
         const p = params || new URLSearchParams(window.location.search);
 
         if (p.has('insightFilter')) {
@@ -1069,12 +1283,17 @@ export function useInventoryFilters(
             filterSO.value = p.get('saleId') || '';
         }
         if (p.has('upcPrefix') || p.has('barcode')) {
+            hasExplicitUrlBarcode = true;
             filterBarcode.value = p.get('upcPrefix') || p.get('barcode') || 'all';
         } else if (
             p.get('scope') === 'all' ||
             p.has('search') ||
             p.has('q') ||
             p.has('upc') ||
+            p.has('edit') ||
+            p.has('id') ||
+            p.has('item') ||
+            p.has('sku') ||
             p.has('purchaseId') ||
             p.has('orderId') ||
             p.has('po') ||
@@ -1086,17 +1305,37 @@ export function useInventoryFilters(
             p.has('queue') ||
             p.has('smartQueue')
         ) {
+            hasExplicitUrlBarcode = true;
             filterBarcode.value = 'all';
         }
         if (p.has('status')) {
-            filterStatus.value = p.get('status') || 'active';
+            isSyncingExclusions = true;
+            try {
+                filterStatus.value = p.get('status') || 'active';
+                applyExclusionDefaultsForStatus(filterStatus.value);
+            } finally {
+                isSyncingExclusions = false;
+            }
         }
-        if (p.has('location')) {
-            filterLocation.value = p.get('location') || 'all';
+        if (p.has('location') || p.has('loc')) {
+            filterLocation.value = p.get('location') || p.get('loc') || 'all';
         }
         if (p.has('channel')) {
             filterChannel.value = p.get('channel') || 'all';
         }
+        if (p.has('lotType')) {
+            filterLotType.value = p.get('lotType') || 'all';
+        }
+        if (p.has('sort')) {
+            const rawSort = p.get('sort') || '';
+            if (rawSort.includes(':')) {
+                const [col, dir] = rawSort.split(':');
+                if (col && (dir === 'asc' || dir === 'desc')) {
+                    applySortSelection(col, dir);
+                }
+            }
+        }
+        hasHydratedUrl = true;
     };
 
     return {
@@ -1105,6 +1344,8 @@ export function useInventoryFilters(
         searchIncludeNotes,
         proseOnlyMatchCount,
         getSearchMatchOrigin,
+        hasActiveSearch,
+        isRelevanceSort,
         filterStatus,
         filterLocation,
         filterBinLocation: filterLocation, // Alias for InventoryManager
@@ -1134,6 +1375,7 @@ export function useInventoryFilters(
         sortDirection,
         hasUserSelectedSort,
         setSort,
+        applySortSelection,
         getSortIcon,
         // Option Lists
         allLocations,
@@ -1148,12 +1390,15 @@ export function useInventoryFilters(
         cartGroups,
         // Counters & Badges
         countActive,
+        countAll,
         countByStatus,
         readyToListCount: countReadyToList,
         missingPhotosCount: countMissingPhotos,
         missingPricingCount: countMissingPricing,
+        missingCostCount: countMissingCost,
         countMissingPhotos,
         countMissingPricing,
+        countMissingCost,
         countReadyToList,
         activeFilterChips,
         activeFilterCount,
@@ -1162,6 +1407,7 @@ export function useInventoryFilters(
         filteredItems: inventoryFilteredItems,
         filteredInventory: inventoryFilteredItems, // Alias for InventoryManager
         spatialScopedItems,
+        ownerSwitchScopedItems,
         pagedItems: inventoryPagedItems,
         pagedInventory: inventoryPagedItems, // Alias for InventoryTableView
         displayedInventory: inventoryPagedItems, // Alias for InventoryManager
@@ -1178,6 +1424,7 @@ export function useInventoryFilters(
         clearAllFilters: clearFilters, // Alias for InventoryManager
         clearLineageFilters,
         initFromUrl,
+        flushUrlSync,
         getVendorName,
         calculateRoi,
         getItemImageUrl,

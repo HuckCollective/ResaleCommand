@@ -76,9 +76,13 @@
             <div class="collapse-content px-3 pb-3 pt-0 space-y-2">
                 <div class="form-control w-full">
                     <label class="label pt-1 pb-0.5"><span class="label-text text-[10px] uppercase font-bold opacity-60">Location / Booth</span></label>
-                    <select :value="filterLocation" @change="$emit('update:filterLocation', $event.target.value)" class="select select-bordered select-xs w-full bg-base-100 font-bold">
+                    <select :value="filterLocation" @change="$emit('update:filterLocation', ($event.target as HTMLSelectElement).value)" class="select select-bordered select-xs h-10 md:h-8 w-full rounded-xl bg-base-100 font-bold text-xs">
                         <option value="all">All Locations</option>
                         <option value="__unassigned__">🚨 Unassigned (Missing Location)</option>
+                        <option value="__storage__">📦 All Backstock Storage</option>
+                        <option value="__selling__">🏪 All Selling Channels &amp; Booths</option>
+                        <option value="__online__">🌐 Online Ready</option>
+                        <option value="__events__">🎪 Events / Pop-Ups</option>
                         <option v-for="loc in locations" :key="loc.value || loc" :value="loc.value || loc">{{ loc.label || loc }}</option>
                         <option value="HD">🛋️ Hideout Legacy (HD)</option>
                     </select>
@@ -86,7 +90,7 @@
 
                 <div class="form-control w-full">
                     <label class="label pt-1 pb-0.5"><span class="label-text text-[10px] uppercase font-bold opacity-60">Sales Channel</span></label>
-                    <select :value="filterChannel" @change="$emit('update:filterChannel', $event.target.value)" class="select select-bordered select-xs w-full bg-base-100 font-bold">
+                    <select :value="filterChannel" @change="$emit('update:filterChannel', ($event.target as HTMLSelectElement).value)" class="select select-bordered select-xs h-10 md:h-8 w-full rounded-xl bg-base-100 font-bold text-xs">
                         <option value="all">All Channels</option>
                         <option v-for="ch in channels" :key="ch" :value="ch">{{ ch }}</option>
                     </select>
@@ -94,7 +98,7 @@
 
                 <div class="form-control w-full">
                     <label class="label pt-1 pb-0.5"><span class="label-text text-[10px] uppercase font-bold opacity-60">Lot Type</span></label>
-                    <select :value="filterLotType" @change="$emit('update:filterLotType', $event.target.value)" class="select select-bordered select-xs w-full bg-base-100 font-bold">
+                    <select :value="filterLotType" @change="$emit('update:filterLotType', ($event.target as HTMLSelectElement).value)" class="select select-bordered select-xs h-10 md:h-8 w-full rounded-xl bg-base-100 font-bold text-xs">
                         <option value="all">All Items</option>
                         <option value="lots_only">Parent Lots Only</option>
                         <option value="extracted_only">Extracted Children Only</option>
@@ -275,7 +279,7 @@
             <div class="collapse-content px-3 pb-3 pt-0 space-y-1.5">
                 <button 
                     type="button"
-                    class="btn btn-xs w-full justify-between" 
+                    class="btn btn-xs h-10 md:h-8 w-full justify-between rounded-xl" 
                     :class="filterInsight === 'ready_to_list' ? 'btn-primary font-bold shadow-xs' : 'btn-outline border-base-300'" 
                     @click="$emit('update:filterInsight', filterInsight === 'ready_to_list' ? '' : 'ready_to_list')"
                 >
@@ -284,7 +288,7 @@
                 </button>
                 <button 
                     type="button"
-                    class="btn btn-xs w-full justify-between" 
+                    class="btn btn-xs h-10 md:h-8 w-full justify-between rounded-xl" 
                     :class="filterInsight === 'missing_photos' ? 'btn-error font-bold shadow-xs' : 'btn-outline border-base-300'" 
                     @click="$emit('update:filterInsight', filterInsight === 'missing_photos' ? '' : 'missing_photos')"
                 >
@@ -293,8 +297,8 @@
                 </button>
                 <button 
                     type="button"
-                    class="btn btn-xs w-full justify-between" 
-                    :class="filterInsight === 'missing_est_value' || filterInsight === 'missing_pricing' ? 'btn-warning font-bold shadow-xs' : 'btn-outline border-base-300'" 
+                    class="btn btn-xs h-10 md:h-8 w-full justify-between rounded-xl" 
+                    :class="filterInsight === 'missing_est_value' || filterInsight === 'missing_pricing' ? 'btn-warning text-warning-content font-bold shadow-xs' : 'btn-outline border-base-300'" 
                     @click="$emit('update:filterInsight', (filterInsight === 'missing_est_value' || filterInsight === 'missing_pricing') ? '' : 'missing_est_value')"
                 >
                     <span class="flex items-center gap-1"><Icon icon="solar:dollar-linear" class="w-3.5 h-3.5 text-warning" /> Missing Pricing</span>
@@ -302,8 +306,17 @@
                 </button>
                 <button 
                     type="button"
-                    class="btn btn-xs w-full justify-between" 
-                    :class="filterInsight === 'needs_shop_update' ? 'btn-warning font-bold shadow-xs' : 'btn-outline border-base-300'" 
+                    class="btn btn-xs h-10 md:h-8 w-full justify-between rounded-xl" 
+                    :class="filterInsight === 'missing_cost' ? 'btn-warning text-warning-content font-bold shadow-xs' : 'btn-outline border-base-300'" 
+                    @click="$emit('update:filterInsight', filterInsight === 'missing_cost' ? '' : 'missing_cost')"
+                >
+                    <span class="flex items-center gap-1"><Icon icon="solar:wallet-money-linear" class="w-3.5 h-3.5 text-warning" /> Missing Cost ($0)</span>
+                    <span class="badge badge-xs font-mono font-bold">{{ missingCostCount }}</span>
+                </button>
+                <button 
+                    type="button"
+                    class="btn btn-xs h-10 md:h-8 w-full justify-between rounded-xl" 
+                    :class="filterInsight === 'needs_shop_update' ? 'btn-warning text-warning-content font-bold shadow-xs' : 'btn-outline border-base-300'" 
                     @click="$emit('update:filterInsight', filterInsight === 'needs_shop_update' ? '' : 'needs_shop_update')"
                 >
                     <span class="flex items-center gap-1"><Icon icon="solar:danger-triangle-bold" class="w-3.5 h-3.5 text-warning" /> Needs Shop Update</span>
@@ -350,10 +363,10 @@
                 </div>
                 <input 
                     type="text" 
-                    :value="filterBarcode === 'all' || filterBarcode === '__missing__' || filterBarcode === '__numeric__' ? '' : filterBarcode" 
-                    @input="$emit('update:filterBarcode', $event.target.value || 'all')"
+                    :value="['all', '__mine__', '__missing__', '__numeric__', '__has_barcode__'].includes(filterBarcode) ? '' : filterBarcode" 
+                    @input="$emit('update:filterBarcode', ($event.target as HTMLInputElement).value || 'all')"
                     placeholder="Custom prefix..." 
-                    class="input input-bordered input-xs font-mono w-full bg-base-100 text-xs mt-1" 
+                    class="input input-bordered input-xs h-10 md:h-8 font-mono w-full rounded-xl bg-base-100 text-xs mt-1" 
                 />
             </div>
         </details>
@@ -439,6 +452,10 @@ const props = defineProps({
         default: 0
     },
     missingPricingCount: {
+        type: Number,
+        default: 0
+    },
+    missingCostCount: {
         type: Number,
         default: 0
     },

@@ -5,6 +5,8 @@
             title="Inventory"
             subtitle="Spreadsheet / High-Density View"
             v-model:searchQuery="searchQuery"
+            v-model:searchIncludeNotes="searchIncludeNotes"
+            :proseOnlyMatchCount="proseOnlyMatchCount"
             v-model:filterStatus="filterStatus"
             v-model:filterLocation="filterLocation"
             v-model:filterChannel="filterChannel"
@@ -17,10 +19,17 @@
             v-model:filterInsight="filterInsight"
             v-model:filterBarcode="filterBarcode"
             v-model:filterLotType="filterLotType"
+            v-model:filterKeywords="filterKeywords"
+            :filterParentLotId="filterParentLotId"
+            :filterParentLotTitle="filterParentLotTitle"
+            :filterPO="filterPO"
+            :filterSO="filterSO"
             :locations="allLocations"
+            :channels="allChannels"
             :prefixes="allUpcPrefixes"
             :activeFilterChips="activeFilterChips"
             :totalCount="inventoryItems.length"
+            :countAll="countAll"
             :filteredCount="filteredItems.length"
             :loading="loading"
             :statusCounts="{
@@ -29,8 +38,15 @@
                 received: countByStatus('received'),
                 placed: countByStatus('placed'),
                 tracked: countByStatus('tracked'),
-                sold: countByStatus('sold')
+                sold: countByStatus('sold'),
+                combined: countByStatus('combined'),
+                deconstructed: countByStatus('deconstructed')
             }"
+            :countByStatus="countByStatus"
+            :readyToListCount="readyToListCount"
+            :missingPhotosCount="missingPhotosCount"
+            :missingPricingCount="missingPricingCount"
+            :missingCostCount="missingCostCount"
             switchViewHref="/inventory"
             switchViewLabel="Card Grid"
             switchViewIcon="solar:gallery-wide-linear"
@@ -41,13 +57,17 @@
             @update:viewMode="$emit('update:viewMode', $event)"
             @open-queues="openQueuesTray"
             @open-health-audit="openHealthAuditTray"
+            @open-filters="handleOpenFilters"
             @add="openAdd"
             @import="showImport = true"
             @clear-filters="clearFilters"
+            @clear-lineage="clearLineageFilters"
         >
             <template #spatial-bar>
                 <InventorySpatialBar
                     :inventoryItems="inventoryItems"
+                    :spatialItems="spatialScopedItems"
+                    :ownerScopeItems="ownerSwitchScopedItems"
                     v-model:filterLocation="filterLocation"
                     v-model:filterSmartQueue="filterSmartQueue"
                     v-model:filterBarcode="filterBarcode"
@@ -59,6 +79,8 @@
                     :selectedCount="selectedItems.length"
                     :sortColumn="sortColumn"
                     :sortDirection="sortDirection"
+                    :hasActiveSearch="hasActiveSearch"
+                    :isRelevanceSort="isRelevanceSort"
                     @update-sort="handleTableSortUpdate"
                     @select-all="toggleAll(filteredItems)"
                     @clear-selection="clearSelection"
@@ -185,6 +207,14 @@
                                     <p class="font-bold text-sm opacity-70">No items match your active filters</p>
                                     <div class="flex flex-wrap items-center justify-center gap-2 mt-1">
                                         <button
+                                            v-if="proseOnlyMatchCount > 0 && !searchIncludeNotes"
+                                            type="button"
+                                            class="btn btn-xs btn-info"
+                                            @click="searchIncludeNotes = true"
+                                        >
+                                            📝 Show {{ proseOnlyMatchCount }} match{{ proseOnlyMatchCount === 1 ? '' : 'es' }} in notes &amp; descriptions
+                                        </button>
+                                        <button
                                             v-if="filterBarcode === '__mine__' && inventoryItems.length > 0"
                                             type="button"
                                             class="btn btn-xs btn-primary"
@@ -231,6 +261,14 @@
                                     <span v-if="item.quantity > 1" class="badge badge-warning text-black font-black badge-xs scale-95 shadow-2xs">📦 x{{ item.quantity }}</span>
                                     <span v-if="item.parentLotId" class="badge badge-secondary badge-xs scale-90">Split</span>
                                     <span v-if="item.status === 'deconstructed'" class="badge badge-neutral badge-outline badge-xs scale-90 opacity-70">🗄️ Deconstructed</span>
+                                </div>
+                                <div v-if="pagedMatchOrigins.get(item.$id)" class="flex items-center gap-1 text-[10px] text-info font-bold mt-0.5 min-w-0">
+                                    <span class="badge badge-xs badge-info badge-outline font-bold shrink-0 px-1.5 whitespace-nowrap">
+                                        📝 {{ pagedMatchOrigins.get(item.$id).field === 'description' ? 'Description' : 'Notes' }}
+                                    </span>
+                                    <span v-if="pagedMatchOrigins.get(item.$id).snippet" class="truncate opacity-80 font-normal" :title="pagedMatchOrigins.get(item.$id).snippet">
+                                        {{ pagedMatchOrigins.get(item.$id).snippet }}
+                                    </span>
                                 </div>
                             </td>
 
@@ -308,10 +346,12 @@
 
                             <!-- Landed Cost -->
                             <td class="text-right font-mono font-bold text-warning text-xs">
-                                <div>${{ Number(item.cost || 0).toFixed(2) }}</div>
-                                <div v-if="Number(item.quantity) > 1" class="text-[9px] text-base-content/50 font-normal">
-                                    ${{ (Number(item.cost || 0) / Number(item.quantity)).toFixed(2) }}/ea
-                                </div>
+                                <template v-for="costInfo in [getCostBreakdown(item)]" :key="item.$id + '-cost'">
+                                    <div>${{ costInfo.totalCost.toFixed(2) }}</div>
+                                    <div v-if="Number(item.quantity) > 1" class="text-[9px] text-base-content/50 font-normal">
+                                        ${{ costInfo.unitCost.toFixed(2) }}/ea
+                                    </div>
+                                </template>
                             </td>
 
                             <!-- Resale Price / Net Payout -->
@@ -436,11 +476,41 @@
             @stage-manifest="handleStageManifest"
             @open-manifest="openManifestTray"
             @restock-item="handleDockRestock"
+            @bundle="handleToolbarOpenBundle"
+            @combine="handleToolbarOpenCombine"
             @submit-bundle="handleDockBundle"
             @submit-combine="handleDockCombine"
             @uncombine-lot="handleDockUncombine"
             @split-one-unit="handleDockSplit"
-        />
+            @split-completed="onLotSplitCompleted"
+        >
+            <template #filters>
+                <InventoryFilterPanel
+                    v-model:filterStatus="filterStatus"
+                    v-model:filterLocation="filterLocation"
+                    v-model:filterChannel="filterChannel"
+                    v-model:filterLotType="filterLotType"
+                    v-model:filterBarcode="filterBarcode"
+                    v-model:filterInsight="filterInsight"
+                    v-model:hideSold="hideSold"
+                    v-model:hideTracked="hideTracked"
+                    v-model:hideCombined="hideCombined"
+                    v-model:hideDeconstructed="hideDeconstructed"
+                    v-model:filterPlacedLocated="filterPlacedLocated"
+                    v-model:filterKeywords="filterKeywords"
+                    :locations="allLocations"
+                    :channels="allChannels"
+                    :prefixes="allUpcPrefixes"
+                    :countByStatus="countByStatus"
+                    :readyToListCount="readyToListCount"
+                    :missingPhotosCount="missingPhotosCount"
+                    :missingPricingCount="missingPricingCount"
+                    :missingCostCount="missingCostCount"
+                    :totalCount="inventoryItems.length"
+                    :showKeywords="true"
+                />
+            </template>
+        </InventoryPaginationDock>
 
         <!-- 5. SLIDE-OVER ITEM DRAWER (Async Lazy-Loaded Island) -->
         <ItemDrawer 
@@ -450,8 +520,13 @@
             :health-warning="activeItem ? healthReport.byItemId.get(activeItem.$id) || null : null"
             @close="closeDrawer" 
             @save="onDrawerSaved" 
-            @refresh="fetchInventory"
+            @saved="onDrawerSavedDoc"
+            @refresh="handleRefreshInventory"
+            @uncombined="handleRefreshInventory"
             @selectItem="openItem"
+            @open-bundle="handleDrawerOpenBundle"
+            @open-combine="handleDrawerOpenCombine"
+            @open-restock="handleDrawerOpenRestock"
             @open-splitter="handleDrawerOpenSplit"
             @open-health-audit="openHealthAuditFromDrawer"
         />
@@ -465,6 +540,7 @@
             @toggle-tray="isManifestTrayOpen = false" 
             @close="isManifestTrayOpen = false"
             @open-actions="openActionTray"
+            @drop-changed="handleRefreshInventory"
         />
 
         <!-- 7.5. INTERACTIVE BOTTOM-SHEET QUEUES & LISTS TRAY -->
@@ -496,12 +572,15 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, watch, nextTick, defineAsyncComponent } from 'vue';
+import { ref, computed, onMounted, onUnmounted, watch, nextTick, defineAsyncComponent } from 'vue';
 import { Icon } from '@iconify/vue';
 import { useInventory } from '../../composables/useInventory';
+import { usePurchases } from '../../composables/usePurchases';
 import { useInventorySelection } from '../../composables/useInventorySelection';
 import { useInventoryFilters } from '../../composables/useInventoryFilters';
 import { useInventoryBulkActions } from '../../composables/useInventoryBulkActions';
+import { resolveMultiQtyCost } from '../../composables/useItemDrawerForm';
+import { toUserMessage } from '../../lib/userFacingErrors';
 import { updateInventoryItem, deleteInventoryItem, saveItemToInventory } from '../../lib/inventory';
 import { formatSellingLocationBadge, hasOnlineReadyTag } from '../../lib/onlineCoCuration';
 import { useAuth } from '../../composables/useAuth';
@@ -518,6 +597,7 @@ import { confirmDialog } from '../../stores/confirm';
 import ItemThumbnail from '../common/ItemThumbnail.vue';
 import InventoryHeader from './InventoryHeader.vue';
 import InventorySpatialBar from './InventorySpatialBar.vue';
+import InventoryFilterPanel from './InventoryFilterPanel.vue';
 import InventoryValuationStrip from './InventoryValuationStrip.vue';
 import InventoryQueuesTray from './InventoryQueuesTray.vue';
 import StockHealthAuditTray from './StockHealthAuditTray.vue';
@@ -543,9 +623,12 @@ watch(isLotSplitterOpen, (open) => {
     }
 });
 
-const onLotSplitCompleted = async () => {
+const onLotSplitCompleted = async (payload) => {
     closeLotSplitter();
     selectedItems.value = [];
+    if (payload && Array.isArray(payload.createdDocs) && payload.createdDocs.length > 0) {
+        return;
+    }
     await fetchInventory(currentTeam.value?.$id || '');
 };
 
@@ -585,7 +668,14 @@ const checkBulkTargetsPermission = (ids, { requireFull = false, placement = fals
 };
 
 // -- 1. CORE DATA COMPOSABLE --
-const { inventoryItems, loading, error, fetchInventory } = useInventory();
+const { inventoryItems, loading, error, fetchInventory, upsertLocalItems, patchLocalItems, removeLocalItems } = useInventory();
+const { purchases: allPurchases, fetchPurchases } = usePurchases();
+const handleRefreshInventory = async () => {
+    await fetchInventory(currentTeam.value?.$id || '');
+};
+const getCostBreakdown = (item) => {
+    return resolveMultiQtyCost(item?.cost, item?.quantity, item?.resalePrice || item?.price);
+};
 
 // -- 2. SELECTION COMPOSABLE --
 const { 
@@ -605,6 +695,11 @@ const selectedItemsObjects = computed(() => {
 // -- 3. FILTERING & SORTING COMPOSABLE --
 const {
     searchQuery,
+    searchIncludeNotes,
+    proseOnlyMatchCount,
+    getSearchMatchOrigin,
+    hasActiveSearch,
+    isRelevanceSort,
     filterStatus,
     filterLocation,
     filterChannel,
@@ -617,25 +712,55 @@ const {
     filterBarcode,
     filterSmartQueue,
     filterLotType,
+    filterKeywords,
+    filterParentLotId,
+    filterParentLotTitle,
+    filterPO,
+    filterSO,
     sortColumn,
     sortDirection,
     allLocations,
     allChannels,
     allUpcPrefixes,
     countActive,
+    countAll,
+    readyToListCount,
+    missingPhotosCount,
+    missingPricingCount,
+    missingCostCount,
     activeFilterChips,
     filteredItems,
+    spatialScopedItems,
+    ownerSwitchScopedItems,
+    pagedInventory,
+    currentPage,
+    pageSize,
+    pageSizeOptions,
+    totalPages,
     setSort,
+    applySortSelection,
     getSortIcon,
     countByStatus,
     clearFilters,
+    clearLineageFilters,
     initFromUrl,
     getVendorName,
     calculateRoi
 } = useInventoryFilters(inventoryItems, {
+    purchases: allPurchases,
     ownedPrefixes: computed(() => capabilities.value.ownedPrefixes || []),
     currentUserId: computed(() => user.value?.$id || ''),
     defaultToMine: computed(() => !capabilities.value.isConsignor)
+});
+
+const pagedMatchOrigins = computed(() => {
+    const map = new Map();
+    for (const item of pagedInventory.value || []) {
+        if (!item?.$id) continue;
+        const origin = getSearchMatchOrigin(item);
+        if (origin) map.set(item.$id, origin);
+    }
+    return map;
 });
 
 const tableKpiStats = computed(() => computeInventoryKpiStats(filteredItems.value));
@@ -650,22 +775,22 @@ const {
     exportBulkItems,
     restockInventoryItem,
     createBundle,
+    combineItemsIntoBatch,
+    splitOneUnitFromBatch,
     rollbackLot
 } = useInventoryBulkActions(async (affectedIds, updates) => {
+    if (updates && updates._storeSynced) {
+        return;
+    }
     if (affectedIds && updates && inventoryItems.value) {
         if (updates._deleted) {
-            inventoryItems.value = inventoryItems.value.filter(i => !affectedIds.includes(i.$id) && !affectedIds.includes(i.id));
+            removeLocalItems(affectedIds);
             clearSelection();
         } else {
-            affectedIds.forEach(id => {
-                const item = inventoryItems.value.find(i => i.$id === id || i.id === id);
-                if (item) {
-                    Object.assign(item, updates);
-                }
-            });
+            patchLocalItems(affectedIds, updates);
         }
     } else {
-        await fetchInventory();
+        await fetchInventory(currentTeam.value?.$id || '');
     }
 });
 
@@ -753,34 +878,31 @@ const {
 } = useItemDrawer();
 const showImport = ref(false);
 
-// Pagination
-const currentPage = ref(1);
-const pageSize = ref(50);
-const pageSizeOptions = [25, 50, 100, 200];
-const totalPages = computed(() => Math.ceil(filteredItems.value.length / pageSize.value));
-const pagedInventory = computed(() => {
-    const start = (currentPage.value - 1) * pageSize.value;
-    return filteredItems.value.slice(start, start + pageSize.value);
-});
-
 // Lifecycle
 onMounted(async () => {
     initFromUrl();
     closeAllTrays();
+    if (typeof window !== 'undefined') {
+        window.addEventListener('popstate', handleTablePopState);
+    }
     if (inventoryItems.value.length === 0) {
-        await fetchInventory();
+        await fetchInventory(currentTeam.value?.$id || '');
+    }
+    if (allPurchases.value.length === 0) {
+        fetchPurchases();
     }
     await initActiveDraft('MD');
 });
 
-// Reset page on filter change
-watch([searchQuery, filterStatus, filterLocation, filterChannel, hideSold, hideTracked, hideCombined, hideDeconstructed, filterPlacedLocated, filterInsight, filterBarcode, filterSmartQueue, filterLotType], () => {
-    currentPage.value = 1;
+onUnmounted(() => {
+    if (typeof window !== 'undefined') {
+        window.removeEventListener('popstate', handleTablePopState);
+    }
 });
 
 const handleTableSortUpdate = ({ column, direction }) => {
-    if (column) sortColumn.value = column;
-    if (direction === 'asc' || direction === 'desc') sortDirection.value = direction;
+    if (!column) return;
+    applySortSelection(column, direction === 'asc' ? 'asc' : 'desc');
 };
 
 const handleQuickAssignTableLocation = async (targetCode) => {
@@ -853,37 +975,73 @@ const handleBulkDelete = async () => {
     }
 };
 
+const handleOpenFilters = () => {
+    closeDrawer();
+    showImport.value = false;
+    closeLotSplitter();
+};
+
 const handleDockRestock = async (payload) => {
     if (!payload?.item) return;
-    await restockInventoryItem(payload.item, { unitsToAdd: payload.unitsToAdd, addedCostBasis: payload.addedCostBasis });
+    const ok = await restockInventoryItem(payload.item, { unitsToAdd: payload.unitsToAdd, addedCostBasis: payload.addedCostBasis });
+    if (ok) clearSelection();
+};
+
+const handleToolbarOpenBundle = () => {
+    dockRef.value?.openBundle(selectedItemsObjects.value[0]);
+};
+
+const handleToolbarOpenCombine = () => {
+    dockRef.value?.openCombine(selectedItemsObjects.value[0]);
 };
 
 const handleDockBundle = async (payload) => {
     if (!payload?.items) return;
-    await createBundle(payload);
-    clearSelection();
+    const ok = await createBundle(payload);
+    if (ok) clearSelection();
 };
 
 const handleDockCombine = async (payload) => {
-    if (!payload?.items) return;
-    await createBundle({
+    if (!payload?.items || payload.items.length === 0) return;
+    const mintInfo = resolveMintingPrefixForMember(capabilities.value, user.value?.$id);
+    const allowRetail = capabilities.value.role === 'founder' || capabilities.value.prefixStatus === 'locked';
+    const ok = await combineItemsIntoBatch({
         items: payload.items,
-        title: payload.title || 'Combined Lot',
-        storageLocation: payload.targetLot?.storageLocation || 'HG'
+        mode: payload.mode || (payload.targetLot ? 'add_to_existing' : 'create_new'),
+        title: payload.title,
+        primaryId: payload.primaryId,
+        targetLot: payload.targetLot,
+        totalCostOverride: payload.totalCostOverride,
+        totalUnitsOverride: payload.totalUnitsOverride,
+        allCatalogItems: inventoryItems.value,
+        teamId: currentTeam.value?.$id,
+        upcPrefix: mintInfo.prefix,
+        allowRetailPlacement: allowRetail,
     });
-    clearSelection();
+    if (ok) clearSelection();
 };
 
 const handleDockUncombine = async (lotItem) => {
     if (!lotItem) return;
-    await rollbackLot(lotItem);
-    clearSelection();
+    const ok = await rollbackLot(lotItem);
+    if (ok) clearSelection();
 };
 
-const handleDockSplit = (payload) => {
-    if (payload?.item) {
-        handleDrawerOpenSplit(payload.item);
+const handleDockSplit = async (payload) => {
+    const lotItem = payload?.item || payload;
+    if (!lotItem || Number(lotItem.quantity || 1) <= 1) return;
+    if (!canEditItemFull(lotItem)) {
+        addToast({ type: 'warning', message: 'Only the item owner or an Account Steward can split units from this batch.' });
+        return;
     }
+    const mintInfo = resolveMintingPrefixForMember(capabilities.value, user.value?.$id);
+    const placementCheck = canItemBePlacedOrPrinted(lotItem, capabilities.value, { userId: user.value?.$id });
+    const ok = await splitOneUnitFromBatch(lotItem, {
+        teamId: currentTeam.value?.$id,
+        upcPrefix: mintInfo.prefix,
+        allowRetailPlacement: placementCheck.allowed,
+    });
+    if (ok) clearSelection();
 };
 
 const handleExport = (format) => {
@@ -905,6 +1063,7 @@ function syncUrlWithDrawer(item) {
         url.searchParams.delete('item');
         url.searchParams.delete('sku');
         url.searchParams.delete('id');
+        url.searchParams.delete('edit');
     }
     window.history.replaceState({}, '', url.toString());
 }
@@ -912,7 +1071,7 @@ function syncUrlWithDrawer(item) {
 function checkUrlForDirectItemOpen() {
     if (typeof window === 'undefined') return;
     const params = new URLSearchParams(window.location.search);
-    const target = params.get('upc') || params.get('sku') || params.get('item') || params.get('id');
+    const target = params.get('upc') || params.get('sku') || params.get('item') || params.get('id') || params.get('edit');
     if (!target || !inventoryItems.value || inventoryItems.value.length === 0) return;
     
     const cleanTarget = target.trim().toLowerCase();
@@ -923,6 +1082,17 @@ function checkUrlForDirectItemOpen() {
     );
     if (found && !isDrawerOpen.value) {
         openItem(found);
+    }
+}
+
+function handleTablePopState() {
+    if (typeof window === 'undefined') return;
+    const params = new URLSearchParams(window.location.search);
+    const hasTarget = params.get('upc') || params.get('sku') || params.get('item') || params.get('id') || params.get('edit');
+    if (hasTarget) {
+        checkUrlForDirectItemOpen();
+    } else if (isDrawerOpen.value) {
+        closeDrawer();
     }
 }
 
@@ -961,6 +1131,39 @@ watch(isDrawerOpen, (isOpen) => {
     }
 });
 
+const handleDrawerOpenBundle = (item) => {
+    const target = item || activeItem.value;
+    closeDrawer();
+    if (target?.$id) {
+        selectedItems.value = [target.$id];
+    }
+    nextTick(() => {
+        dockRef.value?.openBundle(target);
+    });
+};
+
+const handleDrawerOpenCombine = (item) => {
+    const target = item || activeItem.value;
+    closeDrawer();
+    if (target?.$id) {
+        selectedItems.value = [target.$id];
+    }
+    nextTick(() => {
+        dockRef.value?.openCombine(target);
+    });
+};
+
+const handleDrawerOpenRestock = (item) => {
+    const target = item || activeItem.value;
+    closeDrawer();
+    if (target?.$id) {
+        selectedItems.value = [target.$id];
+    }
+    nextTick(() => {
+        dockRef.value?.openRestock(target);
+    });
+};
+
 const handleDrawerOpenSplit = (item) => {
     const target = item || activeItem.value;
     closeDrawer();
@@ -972,6 +1175,12 @@ const handleDrawerOpenSplit = (item) => {
     });
 };
 
+const onDrawerSavedDoc = (doc) => {
+    if (doc && (doc.$id || doc.id)) {
+        upsertLocalItems([doc]);
+    }
+};
+
 const isDrawerSaving = ref(false);
 const onDrawerSaved = async (payload) => {
     if (isDrawerSaving.value) return;
@@ -981,7 +1190,12 @@ const onDrawerSaved = async (payload) => {
         const targetItem = activeItem.value;
         const targetId = targetItem?.$id || targetItem?.id;
         if (targetId && payload) {
-            await updateInventoryItem(targetId, payload);
+            const updatedDoc = await updateInventoryItem(targetId, payload);
+            if (updatedDoc && (updatedDoc.$id || updatedDoc.id)) {
+                upsertLocalItems([updatedDoc]);
+            } else {
+                patchLocalItems([targetId], payload);
+            }
             saveSucceeded = true;
             addToast({ type: 'success', message: 'Item updated successfully.' });
         } else if (payload) {
@@ -990,22 +1204,24 @@ const onDrawerSaved = async (payload) => {
                 ...payload,
                 upcPrefix: payload.upcPrefix || resolveMintingPrefixForMember(capabilities.value, user.value?.$id).prefix
             };
-            await saveItemToInventory(
+            const createdDoc = await saveItemToInventory(
                 { title: payload.title || 'Untitled Item', identity: payload.title, condition_notes: '' },
                 payload.imageFile,
                 createPayload,
                 effectiveTeamId
             );
+            if (createdDoc && (createdDoc.$id || createdDoc.id)) {
+                upsertLocalItems([createdDoc]);
+            }
             saveSucceeded = true;
             addToast({ type: 'success', message: 'Item created successfully.' });
         }
     } catch (e) {
-        addToast({ type: 'error', message: 'Save failed: ' + e.message });
+        addToast({ type: 'error', message: toUserMessage(e, 'Could not save changes — please try again.') });
     } finally {
         try { payload?.__onSaveComplete?.(saveSucceeded ? '✅ Saved' : ''); } catch {}
         isDrawerSaving.value = false;
         closeDrawer();
-        fetchInventory().catch(() => {});
     }
 };
 
@@ -1029,10 +1245,10 @@ const quickFlipStatus = async (item, newStatus) => {
     }
     try {
         await updateInventoryItem(item.$id, { status: newStatus });
-        item.status = newStatus;
+        patchLocalItems([item.$id], { status: newStatus });
         addToast({ type: 'success', message: `Item marked as ${newStatus}.` });
     } catch (e) {
-        addToast({ type: 'error', message: e.message });
+        addToast({ type: 'error', message: toUserMessage(e, 'Could not update item status — please try again.') });
     }
 };
 
@@ -1051,10 +1267,10 @@ const deleteItemConfirm = async (item) => {
 
     try {
         await deleteInventoryItem(item.$id);
-        inventoryItems.value = inventoryItems.value.filter(i => i.$id !== item.$id);
+        removeLocalItems([item.$id]);
         addToast({ type: 'success', message: 'Item deleted.' });
     } catch (e) {
-        addToast({ type: 'error', message: `Delete failed: ${e.message}` });
+        addToast({ type: 'error', message: toUserMessage(e, 'Could not delete item — please try again.') });
     }
 };
 
@@ -1078,11 +1294,10 @@ const dismissTableShopUpdate = async (item) => {
             redFlags: updatedFlags,
             conditionNotes: updatedNotes
         });
-        item.redFlags = updatedFlags;
-        item.conditionNotes = updatedNotes;
+        patchLocalItems([item.$id], { redFlags: updatedFlags, conditionNotes: updatedNotes });
         addToast({ type: 'success', message: `✓ Cleared shop reminder for "${item.title || item.upc}"` });
     } catch (e) {
-        addToast({ type: 'error', message: 'Failed to clear reminder: ' + e.message });
+        addToast({ type: 'error', message: toUserMessage(e, 'Could not clear shop reminder — please try again.') });
     }
 };
 
@@ -1155,6 +1370,8 @@ const {
     isManifestTrayOpen,
     closeAllTrays,
     fetchInventory,
+    existingPurchases: allPurchases,
+    fetchExistingPurchases: fetchPurchases,
 });
 
 const openHealthAuditFromDrawer = () => {

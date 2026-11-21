@@ -602,10 +602,9 @@
                                         v-model="bundleForm.storageLocation" 
                                         class="select select-sm select-bordered w-full bg-base-100 font-bold text-xs"
                                     >
-                                        <option value="HG">Huck's Garage (HG)</option>
-                                        <option value="HH">Huck's Hideout (HH)</option>
-                                        <option value="MD">Memory Den (MD)</option>
-                                        <option value="DT">Dusty Tiger (DT)</option>
+                                        <option v-for="fac in canonicalFacilities" :key="fac.code" :value="fac.code">
+                                            {{ fac.icon }} {{ fac.shortName }} ({{ fac.code }})
+                                        </option>
                                     </select>
                                 </div>
                             </div>
@@ -1109,10 +1108,9 @@
                                     <div class="flex items-center gap-1">
                                         <select v-model="selectedWarehouse" class="select select-xs select-bordered bg-base-100 text-xs font-bold flex-1 h-8 min-h-8">
                                             <option value="">No change</option>
-                                            <option value="HG">HG (Garage)</option>
-                                            <option value="HH">HH (Huck's Hideout)</option>
-                                            <option value="MD">MD (Memory Den)</option>
-                                            <option value="DT">DT (Dusty Tiger)</option>
+                                            <option v-for="fac in canonicalFacilities" :key="fac.code" :value="fac.code">
+                                                {{ fac.code }} ({{ fac.shortName }})
+                                            </option>
                                             <option value="__custom__">Custom...</option>
                                         </select>
                                         <input 
@@ -1409,7 +1407,13 @@
                                     class="select select-sm select-bordered w-full bg-base-100 text-xs font-bold"
                                 >
                                     <option value="all">All Locations</option>
-                                    <option v-for="loc in locations" :key="loc" :value="loc">{{ loc }}</option>
+                                    <option
+                                        v-for="loc in locations"
+                                        :key="typeof loc === 'object' && loc !== null ? (loc.value || loc.code) : loc"
+                                        :value="typeof loc === 'object' && loc !== null ? (loc.value || loc.code) : loc"
+                                    >
+                                        {{ typeof loc === 'object' && loc !== null ? (loc.label || loc.displayName || loc.code || loc.value) : loc }}
+                                    </option>
                                 </select>
                             </div>
 
@@ -1622,6 +1626,9 @@ import { useItemDrawer } from '../../composables/useItemDrawer';
 import { useLotSplitter } from '../../composables/useLotSplitter';
 import { generateSmartLotTitle, generateSmartBundleTitle } from '../../lib/lotTitleGenerator';
 import { useDropcasts } from '../../composables/useDropcasts';
+import { getAllLocationSettingMetas } from '../../lib/warehouses';
+
+const canonicalFacilities = getAllLocationSettingMetas();
 
 const props = defineProps({
     isOpen: {
