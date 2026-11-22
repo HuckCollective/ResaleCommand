@@ -1,6 +1,6 @@
 # Resale Command — Universal Core DNA & Master Workspace Guide (`AGENTS.md`)
 
-> **Canonical Workspace Rules (`< 20,000` bytes).** Loaded automatically without truncation by Antigravity IDE, `agy` CLI, and compatible coding agents. Edit this file directly when core architecture laws change. Read [`ACTIVE_SESSION.md`](ACTIVE_SESSION.md) on demand for live in-flight tasks, [`docs/SESSION_ARCHIVE.md`](docs/SESSION_ARCHIVE.md) for historical sprints, and invoke domain skills from `.agents/skills/` whenever relevant.
+> **Canonical Workspace Rules (`< 20,000` bytes) — 🧊 REPOSITORY FEATURE FREEZE ACTIVE.** `ResaleCommand` is frozen for new features (critical production bug, security, or ledger fixes ONLY). All new feature and Strangler parity work runs exclusively in `thehc-platform` (`pnpm verify` / Astro 7) via [`docs/STRANGLER_PARITY_AND_CUTOVER_MATRIX.md`](docs/STRANGLER_PARITY_AND_CUTOVER_MATRIX.md) and [`docs/prompts/README.md`](docs/prompts/README.md). Read [`ACTIVE_SESSION.md`](ACTIVE_SESSION.md) on demand for live status, [`docs/SESSION_ARCHIVE.md`](docs/SESSION_ARCHIVE.md) for historical sprints, and invoke `.agents/skills/` whenever relevant.
 
 ## 1. Universal Core DNA
 
