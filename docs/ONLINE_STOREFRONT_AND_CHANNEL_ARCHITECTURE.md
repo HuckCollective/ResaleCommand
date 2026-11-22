@@ -14,9 +14,12 @@
 | **Shared eBay store** (Sell Inventory API) | Auto | Auto (notifications + polling cron) | Auto (`withdrawOffer`) | 100% | Cloud Function `fn-channel-dispatcher` |
 | **Shopify / Etsy v3 / Square Online** | Auto | Auto (HMAC webhooks) | Auto (inventory 0 / archive) | 100% | Cloud Function `fn-channel-dispatcher` |
 | **AI listing copy, category, weight** | Auto | n/a | n/a | 100% | Cloud Function `fn-ai-listing-enricher` (`@google/genai` + Zod 4) |
-| **Poshmark, Mercari, Depop, Whatnot, FBMP** | 1-click pre-filled | 1-click harvest / CSV | Auto-queued alert + 1-click delist | ~90% | Member's own browser, driven by the outbox (no public seller APIs) |
+| **Poshmark, Depop, Mercari, Whatnot, FBMP** | Official Seller Hub CSV or In-App Split-Screen Copy Kit | CSV / manual sale entry | Outbox reminder inside Works@TheHC | Zero site-script risk | **In-App Copy Kit inside `works.thehc.llc` + Official CSV Uploads ONLY** (no browser script injection!) |
 
-> **Never** run headless browsers, cloud agents, or CAPTCHA workarounds against Poshmark, Mercari, Depop, Whatnot, or Facebook Marketplace. They have no public seller listing APIs and gate logins on residential IP reputation and anti-bot challenges; datacenter logins risk permanent seller-account bans. Those channels stay on the client-side outbox, where the member's own logged-in browser performs the action.
+> **HARD SAFETY RULE (Nov 21, 2026 Incident):** **NEVER** run headless browsers, cloud agents, browser bookmarklets, or injected DOM scripts inside third-party seller portals (`whatnot.com`, `poshmark.com`, `depop.com`, `ebay.com`, `mercari.com`, `facebook.com`). Live marketplaces run aggressive client-side anti-fraud telemetry (and strict `script-src` CSP) that can trigger immediate `"Suspected Account Fraud"` account bans when third-party scripts touch their page DOM. Use ONLY:
+> 1. **Official REST APIs** (`eBay Sell Inventory API`, `Shopify`, `Etsy v3`, `Stripe/Square`) via `thehc-platform` Cloud Functions.
+> 2. **Official Seller Hub Bulk CSV uploads** (`Whatnot CSV`, `eBay CSV`, `Poshmark CSV`).
+> 3. **In-App Side-by-Side Copy Kits** hosted strictly inside `works.thehc.llc` (`ListingQueueActions.vue` — zero scripts ever touch external marketplace pages).
 
 ```mermaid
 flowchart TD
@@ -127,5 +130,5 @@ Any function that records a sale from an eBay, Stripe, or Shopify order must:
 
 - **Resolved on `alpha-1`:** `src/pages/subsite/index.astro` and `src/pages/subsite/item/[id].astro` now read via server `node-appwrite` with cursor pagination (`Query.limit(100)` + `Query.orderDesc('$id')`) and sanitize every document through the allowlist in `src/lib/publicStorefrontItem.ts` (zero `cost` or `rawAnalysis` leaks).
 - **Resolved on `alpha-1`:** `src/lib/exportUtils.ts` now uses canonical `parsePriceValue()` across eBay, Poshmark, Ricochet, and Whatnot exports, populates public Storage `PicURL`s in `generateEbayCsv`, and adds `generateWhatnotCsv()` for live show bulk drops; Depop's US fee hint is updated to `3.3%` (`0%` selling fee + `~3.3% + $0.45` processing).
-- **Live Browser Lane (`Poshmark · Depop · eBay · Whatnot`):** Shipped `src/lib/onlineListingPacket.ts`, `publish_listing` + per-platform dedupe in `src/lib/channelSyncOutbox.ts`, authenticated `/api/bml/listing-packet` (zero descriptions in public outbox), strict-ES5 `public/listing-assist.user.js` (`/scripts/listing-bookmarklet.js`), and `ListingQueueActions.vue` in `ItemOnlineTab.vue`.
+- **Zero-Injection Copy Kit (`Poshmark · Depop · eBay · Whatnot`):** Shipped `src/lib/onlineListingPacket.ts` + in-app `ListingQueueActions.vue` (1-tap formatted Copy Chips + Official Whatnot / eBay / Poshmark CSV downloads inside `works.thehc.llc`). Removed the experimental `listing-assist` bookmarklet permanently after Whatnot's anti-fraud filter flagged script injection and eBay's CSP blocked external scripts.
 - Public storefront traffic should still target the sharded `fn-storefront-catalog-sync` snapshot in `thehc-platform` once Stage 1 ships there.

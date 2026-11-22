@@ -56,8 +56,8 @@
       </div>
     </div>
 
-    <!-- 3-Card Registry Grid -->
-    <div class="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4">
+    <!-- 2-Card Registry Grid -->
+    <div class="grid grid-cols-1 xl:grid-cols-2 gap-4">
       <div
         v-for="toolId in toolOrder"
         :key="toolId"
@@ -429,7 +429,7 @@ const props = withDefaults(
 );
 
 const { currentTeam, user } = useAuth();
-const toolOrder: BookmarkletToolId[] = ['ricochet_sync', 'auction_scout', 'listing_assist'];
+const toolOrder: BookmarkletToolId[] = ['ricochet_sync', 'auction_scout'];
 const displayModes: { id: BookmarkletDisplayMode; label: string }[] = [
   { id: 'full', label: 'Full' },
   { id: 'compact', label: 'Compact' },
@@ -452,9 +452,6 @@ const ricochetHref = computed(() =>
 const auctionScoutHref = computed(() =>
   buildEvergreenBookmarkletHref('/scripts/auction-bookmarklet.js', browserOrigin.value || undefined)
 );
-const listingAssistHref = computed(() =>
-  buildEvergreenBookmarkletHref('/scripts/listing-bookmarklet.js', browserOrigin.value || undefined)
-);
 const bmlTestHref = computed(() =>
   buildEvergreenBookmarkletHref('/scripts/bml-test.js', browserOrigin.value || undefined)
 );
@@ -468,11 +465,7 @@ const targetHost = computed(() => {
 });
 
 const getToolHref = (id: BookmarkletToolId) =>
-  id === 'ricochet_sync'
-    ? ricochetHref.value
-    : id === 'listing_assist'
-      ? listingAssistHref.value
-      : auctionScoutHref.value;
+  id === 'ricochet_sync' ? ricochetHref.value : auctionScoutHref.value;
 
 /** Synchronously re-stamps the anchor with a fresh href built from the LIVE page origin right before a drag / click begins. */
 const stampFreshHref = (event: Event, id: BookmarkletToolId | 'bml_test') => {
@@ -485,9 +478,7 @@ const stampFreshHref = (event: Event, id: BookmarkletToolId | 'bml_test') => {
       ? buildRicochetBookmarkletHref(props.defaultLocationCode || 'MD', origin)
       : id === 'auction_scout'
         ? buildEvergreenBookmarkletHref('/scripts/auction-bookmarklet.js', origin)
-        : id === 'listing_assist'
-          ? buildEvergreenBookmarkletHref('/scripts/listing-bookmarklet.js', origin)
-          : buildEvergreenBookmarkletHref('/scripts/bml-test.js', origin);
+        : buildEvergreenBookmarkletHref('/scripts/bml-test.js', origin);
   if (anchor.getAttribute('href') !== fresh) anchor.setAttribute('href', fresh);
 };
 
@@ -504,10 +495,7 @@ const getMobileBookmarkName = (id: BookmarkletToolId) =>
   );
 
 const getKeywordPreview = (id: BookmarkletToolId) =>
-  (
-    registry.value.tools[id].mobileKeyword ||
-    (id === 'ricochet_sync' ? 'md' : id === 'listing_assist' ? 'rclist' : 'sgw')
-  ).toLowerCase();
+  (registry.value.tools[id].mobileKeyword || (id === 'ricochet_sync' ? 'md' : 'sgw')).toLowerCase();
 
 const markDirtyAndSetIcon = (id: BookmarkletToolId, icon: string) => {
   registry.value.tools[id].icon = icon;

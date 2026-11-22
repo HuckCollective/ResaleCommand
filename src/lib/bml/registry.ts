@@ -5,7 +5,7 @@ import { DEFAULT_SOURCING_DOMAIN_PROFILES } from '../sourcingDomains';
 import { KNOWN_FACILITIES } from '../warehouses';
 import { ALPHA_SITE_URL, siteConfig, SYNC_FALLBACK_ORIGINS, TENANT_ROOT_DOMAIN } from '../../site-config';
 
-export type BookmarkletToolId = 'ricochet_sync' | 'auction_scout' | 'listing_assist';
+export type BookmarkletToolId = 'ricochet_sync' | 'auction_scout';
 export type BookmarkletDisplayMode = 'full' | 'compact' | 'icon_only';
 
 export interface BookmarkletToolConfig {
@@ -60,18 +60,6 @@ export const DEFAULT_BML_REGISTRY_CONFIG: BookmarkletRegistryConfig = {
       summary: 'Universal Online Scout & ShopGoodwill Sync: 12-photo AI Speed Scout, Buyer\'s Premium & Local Cash math, 1-click Photo Archival to /scout/trackers, plus 4-Page ShopGoodwill CSV/Order Sync.',
       status: 'active',
     },
-    listing_assist: {
-      id: 'listing_assist',
-      icon: '🚀',
-      barTitle: 'Listing Assistant',
-      compactTitle: 'List Assist',
-      hudTitle: 'Works@TheHC ➔ Listing Assistant',
-      mobileKeyword: 'rclist',
-      displayMode: 'full',
-      targetSites: 'poshmark.com, depop.com, ebay.com, whatnot.com',
-      summary: 'Guided Browser Cross-Lister for Poshmark, Depop, eBay & Whatnot: pulls queued Online Ready items, pre-fills titles, descriptions, prices & photos with 1-tap copy chips, and saves your live listing URL after you click Submit.',
-      status: 'active',
-    },
   },
 };
 
@@ -110,7 +98,6 @@ export function normalizeBmlRegistryConfig(raw?: Partial<BookmarkletRegistryConf
     tools: {
       ricochet_sync: mergeTool('ricochet_sync'),
       auction_scout: mergeTool('auction_scout'),
-      listing_assist: mergeTool('listing_assist'),
     },
   };
 }

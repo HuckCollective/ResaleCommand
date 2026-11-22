@@ -4,26 +4,24 @@
       <div>
         <div class="flex items-center gap-2 flex-wrap">
           <h4 class="text-xs font-extrabold uppercase tracking-wider text-base-content/85">
-            Browser Listing Assistant (Poshmark · Depop · eBay · Whatnot)
+            Safe Cross-List Copy Kit &amp; Official CSVs
           </h4>
-          <span
-            v-if="queuedCount > 0"
-            class="badge badge-xs badge-info text-info-content font-bold whitespace-nowrap shrink-0"
-          >
-            {{ queuedCount }} Waiting in Browser
+          <span class="badge badge-xs badge-success text-success-content font-bold whitespace-nowrap shrink-0">
+            Zero Site Scripts
           </span>
         </div>
         <p class="text-[11px] text-base-content/70 mt-0.5 leading-snug">
-          Queue this item for your logged-in browser tab — fills title, copy, price, SKU &amp; photos, then you review and press Submit.
+          Copy formatted fields side-by-side or upload an official Seller Hub CSV — nothing ever injects into external marketplace tabs.
         </p>
       </div>
 
       <a
-        href="/studios/bookmarklets"
-        class="btn btn-xs h-11 md:h-8 btn-ghost border border-base-300 rounded-lg font-bold gap-1 shrink-0"
+        :href="activeMeta.createListingUrl"
+        target="_blank"
+        rel="noopener noreferrer"
+        class="btn btn-xs h-11 md:h-8 btn-outline rounded-lg font-bold gap-1 shrink-0"
       >
-        <Icon icon="solar:bolt-bold" class="w-3.5 h-3.5 text-primary shrink-0" />
-        <span>Get Bookmarklet</span>
+        <span>Open {{ activeMeta.label }} ↗</span>
       </a>
     </div>
 
@@ -35,69 +33,129 @@
       {{ blockedReason }}
     </div>
 
-    <div class="grid grid-cols-2 sm:grid-cols-4 gap-2">
-      <div
-        v-for="plat in platformCards"
-        :key="plat.id"
-        class="rounded-xl border p-2.5 bg-base-100 flex flex-col justify-between gap-2"
-        :class="queuedByPlatform[plat.id] ? 'border-info/60 bg-info/5' : 'border-base-300'"
-      >
-        <div class="space-y-0.5">
-          <div class="flex items-center justify-between gap-1">
-            <span class="font-bold text-xs text-base-content truncate">{{ plat.emoji }} {{ plat.shortLabel }}</span>
-            <span
-              v-if="queuedByPlatform[plat.id]"
-              class="badge badge-xs badge-info text-info-content font-bold whitespace-nowrap shrink-0"
-            >
-              Queued
-            </span>
-          </div>
-          <div class="text-[10px] text-base-content/65 leading-tight">{{ plat.feeSummary }}</div>
+    <template v-else>
+      <!-- Platform Picker Pills (<= 4 chips per Hick's Law) -->
+      <div class="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
+        <button
+          v-for="plat in platformCards"
+          :key="plat.id"
+          type="button"
+          class="btn btn-xs h-11 md:h-9 rounded-xl font-bold justify-start px-2.5 gap-1.5"
+          :class="
+            activePlatform === plat.id
+              ? 'btn-primary text-primary-content'
+              : 'btn-ghost bg-base-100 border border-base-300'
+          "
+          @click="activePlatform = plat.id"
+        >
+          <span>{{ plat.emoji }}</span>
+          <span class="truncate">{{ plat.shortLabel }}</span>
+        </button>
+      </div>
+
+      <!-- Formatted Preview & 1-Tap Copy Chips -->
+      <div v-if="packet" class="rounded-xl border border-base-300 bg-base-100 p-3 space-y-2.5">
+        <div class="flex items-center justify-between gap-2 flex-wrap text-[11px]">
+          <span class="font-mono font-bold text-primary">
+            {{ packet.sku || 'NO-SKU' }} • {{ packet.priceFormatted ? `$${packet.priceFormatted}` : 'No price set' }}
+          </span>
+          <span class="text-base-content/65">
+            Title {{ packet.title.length }}/{{ activeMeta.maxTitleChars }}c • {{ activeMeta.feeSummary }}
+          </span>
         </div>
 
-        <div class="flex items-center gap-1">
+        <div class="text-xs font-bold text-base-content leading-snug">
+          {{ packet.title }}
+        </div>
+
+        <div class="flex flex-wrap gap-1.5">
           <button
             type="button"
-            :disabled="Boolean(blockedReason) || busyPlatform === plat.id"
-            class="btn btn-xs h-11 md:h-8 flex-1 rounded-lg font-bold"
-            :class="queuedByPlatform[plat.id] ? 'btn-outline btn-info' : 'btn-primary text-primary-content'"
-            @click="queuePlatform(plat.id)"
+            class="btn btn-xs h-11 md:h-8 btn-outline rounded-lg font-bold gap-1"
+            @click="copyField('Title', packet.title)"
           >
-            <span v-if="busyPlatform === plat.id" class="loading loading-spinner loading-xs"></span>
-            <span v-else>{{ queuedByPlatform[plat.id] ? 'Re-Queue' : `Queue ${plat.shortLabel}` }}</span>
+            <Icon icon="solar:copy-bold" class="w-3.5 h-3.5 text-primary shrink-0" />
+            <span>Copy Title</span>
           </button>
+          <button
+            type="button"
+            class="btn btn-xs h-11 md:h-8 btn-outline rounded-lg font-bold gap-1"
+            @click="copyField('Description', packet.description)"
+          >
+            <Icon icon="solar:copy-bold" class="w-3.5 h-3.5 text-primary shrink-0" />
+            <span>Copy Description</span>
+          </button>
+          <button
+            v-if="packet.priceFormatted"
+            type="button"
+            class="btn btn-xs h-11 md:h-8 btn-outline rounded-lg font-bold gap-1"
+            @click="copyField('Price', packet.priceFormatted)"
+          >
+            <Icon icon="solar:copy-bold" class="w-3.5 h-3.5 text-primary shrink-0" />
+            <span>Copy Price</span>
+          </button>
+          <button
+            v-if="packet.sku"
+            type="button"
+            class="btn btn-xs h-11 md:h-8 btn-outline rounded-lg font-bold gap-1"
+            @click="copyField('SKU', packet.sku)"
+          >
+            <Icon icon="solar:copy-bold" class="w-3.5 h-3.5 text-primary shrink-0" />
+            <span>Copy SKU</span>
+          </button>
+          <button
+            v-if="packet.hashtags.length > 0"
+            type="button"
+            class="btn btn-xs h-11 md:h-8 btn-outline rounded-lg font-bold gap-1"
+            @click="copyField('Hashtags', packet.hashtags.join(' '))"
+          >
+            <Icon icon="solar:copy-bold" class="w-3.5 h-3.5 text-primary shrink-0" />
+            <span>Copy Hashtags</span>
+          </button>
+        </div>
+
+        <div v-if="photoUrls.length > 0" class="flex items-center gap-1.5 flex-wrap pt-1">
+          <span class="text-[11px] font-bold text-base-content/65">Photos ({{ photoUrls.length }}):</span>
           <a
-            :href="plat.createListingUrl"
+            v-for="(url, idx) in photoUrls"
+            :key="url"
+            :href="url"
             target="_blank"
             rel="noopener noreferrer"
-            class="btn btn-xs h-11 w-11 md:h-8 md:w-8 btn-ghost border border-base-300 rounded-lg shrink-0"
-            :title="`Open ${plat.label} Create Listing page`"
-            :aria-label="`Open ${plat.label} Create Listing page`"
+            class="badge badge-sm badge-ghost border border-base-300 font-bold hover:border-primary whitespace-nowrap shrink-0"
           >
-            ↗
+            Photo {{ idx + 1 }} ↗
           </a>
         </div>
       </div>
-    </div>
+    </template>
 
+    <!-- Official Seller Hub Bulk CSV Exports -->
     <div class="flex items-center justify-between gap-2 flex-wrap pt-1 border-t border-base-300/70">
       <span class="text-[11px] text-base-content/65">
-        Need a quick spreadsheet upload instead?
+        Official bulk CSV uploads (zero account risk):
       </span>
       <div class="flex items-center gap-1.5 flex-wrap">
         <button
           type="button"
-          class="btn btn-xs h-11 md:h-8 btn-outline rounded-lg font-bold gap-1"
-          @click="exportSingleCsv('whatnot')"
+          class="btn btn-xs h-11 md:h-8 btn-outline rounded-lg font-bold"
+          @click="exportSingleCsv('ebay')"
         >
-          <span>Download Whatnot CSV</span>
+          eBay CSV
         </button>
         <button
           type="button"
-          class="btn btn-xs h-11 md:h-8 btn-outline rounded-lg font-bold gap-1"
-          @click="exportSingleCsv('ebay')"
+          class="btn btn-xs h-11 md:h-8 btn-outline rounded-lg font-bold"
+          @click="exportSingleCsv('whatnot')"
         >
-          <span>Download eBay CSV</span>
+          Whatnot CSV
+        </button>
+        <button
+          type="button"
+          class="btn btn-xs h-11 md:h-8 btn-outline rounded-lg font-bold"
+          @click="exportSingleCsv('poshmark')"
+        >
+          Poshmark CSV
         </button>
       </div>
     </div>
@@ -105,17 +163,22 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue';
+import { computed, ref } from 'vue';
 import { Icon } from '@iconify/vue';
-import { getCoopJwtHeaders } from '../../../lib/coopLedgerClient';
-import { downloadCsv, generateEbayCsv, generateWhatnotCsv } from '../../../lib/exportUtils';
+import {
+  buildItemPublicImageUrls,
+  downloadCsv,
+  generateEbayCsv,
+  generatePoshmarkCsv,
+  generateWhatnotCsv,
+} from '../../../lib/exportUtils';
 import {
   LISTING_ASSIST_PLATFORMS,
   LISTING_PLATFORM_LIMITS,
+  buildListingPacket,
   checkListingAssistEligibility,
   type ListingAssistPlatform,
 } from '../../../lib/onlineListingPacket';
-import { toUserMessage } from '../../../lib/userFacingErrors';
 import { addToast } from '../../../stores/toast';
 
 const props = defineProps<{
@@ -123,111 +186,39 @@ const props = defineProps<{
   binFacility: 'HG' | 'HH';
 }>();
 
-const busyPlatform = ref<ListingAssistPlatform | ''>('');
-const queuedByPlatform = ref<Record<string, boolean>>({});
+const activePlatform = ref<ListingAssistPlatform>('poshmark');
 
 const platformCards = computed(() =>
   LISTING_ASSIST_PLATFORMS.map((id) => LISTING_PLATFORM_LIMITS[id])
 );
+const activeMeta = computed(() => LISTING_PLATFORM_LIMITS[activePlatform.value]);
 
 const eligibility = computed(() => checkListingAssistEligibility(props.item));
-const blockedReason = computed(() => (eligibility.value.eligible ? '' : eligibility.value.reason || ''));
-const queuedCount = computed(() => Object.values(queuedByPlatform.value).filter(Boolean).length);
-
-const loadQueueStatus = async () => {
-  const itemId = String(props.item?.$id || '').trim();
-  if (!itemId) {
-    queuedByPlatform.value = {};
-    return;
-  }
-  try {
-    const headers = await getCoopJwtHeaders();
-    const responses = await Promise.all(
-      (['HH', 'HG'] as const).map((loc) =>
-        fetch(`/api/sync/channel-outbox?location=${loc}`, { method: 'GET', headers })
-          .then((r) => (r.ok ? r.json() : null))
-          .catch(() => null)
-      )
-    );
-    const nextMap: Record<string, boolean> = {};
-    for (const res of responses) {
-      const pending = Array.isArray(res?.pendingIntents) ? res.pendingIntents : [];
-      for (const intent of pending) {
-        if (intent?.rcItemId === itemId && intent?.action === 'publish_listing') {
-          const plat = String(intent?.platform || intent?.payload?.platform || '').toLowerCase();
-          if (plat) nextMap[plat] = true;
-        }
-      }
-    }
-    queuedByPlatform.value = nextMap;
-  } catch {
-    // Non-blocking badge hydration
-  }
-};
-
-watch(
-  () => props.item?.$id,
-  () => {
-    void loadQueueStatus();
-  },
-  { immediate: true }
+const blockedReason = computed(() =>
+  eligibility.value.eligible ? '' : eligibility.value.reason || ''
 );
 
-const queuePlatform = async (platform: ListingAssistPlatform) => {
-  const item = props.item;
-  const itemId = String(item?.$id || '').trim();
-  if (!item || !itemId || blockedReason.value || busyPlatform.value) return;
+const packet = computed(() => {
+  if (!props.item || !eligibility.value.eligible) return null;
+  const built = buildListingPacket(props.item, activePlatform.value);
+  return built.ok ? built.packet : null;
+});
 
-  busyPlatform.value = platform;
+const photoUrls = computed(() =>
+  props.item ? buildItemPublicImageUrls(props.item, activeMeta.value.maxPhotos) : []
+);
+
+const copyField = async (label: string, value: string) => {
+  if (!value) return;
   try {
-    const headers = await getCoopJwtHeaders();
-    const sku = String(item.upc || item.sku || '').trim().toUpperCase();
-    const title = String(item.title || item.identity || 'Curated Find').trim().slice(0, 140);
-    const locationCode = props.binFacility === 'HG' ? 'HG' : 'HH';
-    const meta = LISTING_PLATFORM_LIMITS[platform];
-
-    const res = await fetch('/api/sync/channel-outbox', {
-      method: 'POST',
-      headers: {
-        ...headers,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        mode: 'enqueue',
-        locationCode,
-        intent: {
-          action: 'publish_listing',
-          platform,
-          rcItemId: itemId,
-          rcUpc: sku,
-          title,
-          reason: `Queued for ${meta.label} Listing Assistant`,
-          payload: { platform },
-        },
-      }),
-    });
-
-    const data = await res.json().catch(() => null);
-    if (!res.ok || !data?.ok) {
-      throw new Error(data?.error || `Could not queue for ${meta.label}.`);
-    }
-
-    queuedByPlatform.value = { ...queuedByPlatform.value, [platform]: true };
-    addToast({
-      type: 'success',
-      message: `Queued for ${meta.label} — open ${meta.label} and click 🚀 Listing Assistant to fill the form.`,
-    });
-  } catch (err: any) {
-    addToast({
-      type: 'error',
-      message: toUserMessage(err, 'Could not queue this item for the browser assistant right now.'),
-    });
-  } finally {
-    busyPlatform.value = '';
+    await navigator.clipboard.writeText(value);
+    addToast({ type: 'success', message: `Copied ${activeMeta.value.label} ${label}!` });
+  } catch {
+    addToast({ type: 'info', message: `${label}: ${value.slice(0, 80)}` });
   }
 };
 
-const exportSingleCsv = (kind: 'whatnot' | 'ebay') => {
+const exportSingleCsv = (kind: 'whatnot' | 'ebay' | 'poshmark') => {
   if (!props.item) return;
   const sku = String(props.item.upc || props.item.sku || props.item.$id || 'item')
     .trim()
@@ -235,6 +226,9 @@ const exportSingleCsv = (kind: 'whatnot' | 'ebay') => {
   if (kind === 'whatnot') {
     downloadCsv(generateWhatnotCsv([props.item]), `whatnot-${sku}.csv`);
     addToast({ type: 'success', message: 'Downloaded Whatnot Seller Hub CSV.' });
+  } else if (kind === 'poshmark') {
+    downloadCsv(generatePoshmarkCsv([props.item]), `poshmark-${sku}.csv`);
+    addToast({ type: 'success', message: 'Downloaded Poshmark CSV.' });
   } else {
     downloadCsv(generateEbayCsv([props.item]), `ebay-${sku}.csv`);
     addToast({ type: 'success', message: 'Downloaded eBay Seller Hub CSV.' });

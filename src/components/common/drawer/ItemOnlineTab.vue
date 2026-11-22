@@ -478,7 +478,7 @@
             </p>
           </section>
 
-          <!-- 4B. 4-PLATFORM BROWSER LISTING ASSISTANT QUEUE & CSV -->
+          <!-- 4B. SAFE IN-APP CROSS-LIST COPY KIT & OFFICIAL CSV EXPORTS -->
           <ListingQueueActions
             v-if="!mustRequest"
             :item="item"
