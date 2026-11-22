@@ -45,8 +45,8 @@ export const ONLINE_MARKETPLACE_PRESETS: readonly OnlineChannelPreset[] = [
   {
     id: 'depop',
     label: '👕 Depop',
-    shortHint: 'Apparel & curated streetwear',
-    feePct: 10,
+    shortHint: '0% selling fee • ~3.3% + $0.45 processing',
+    feePct: 3.3,
     tag: 'ONLINE-DEPOP',
   },
   {

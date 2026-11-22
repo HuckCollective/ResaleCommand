@@ -1,11 +1,16 @@
 ---
-import { databases, Query } from '../../lib/appwrite';
+import { Client as NodeClient, Databases as NodeDatabases, Query } from 'node-appwrite';
 import StoreHeaderCart from '../../components/store/StoreHeaderCart.astro';
 // @ts-ignore
 import StoreCatalog from '../../components/store/StoreCatalog.vue';
 import '../../styles/global.css';
 
-import { getDatabaseId, getItemsCollectionId } from '../../lib/appwriteEnv';
+import { getDatabaseId, getEnvVar, getItemsCollectionId } from '../../lib/appwriteEnv';
+import {
+  isPubliclyListable,
+  toPublicStorefrontItem,
+  type PublicStorefrontItem,
+} from '../../lib/publicStorefrontItem';
 import { siteConfig } from '../../site-config';
 
 // Rendered dynamically under rewritten path (e.g. domain.com/)
@@ -13,14 +18,24 @@ const tenantId = Astro.locals.tenantId || "default_tenant";
 const DB_ID = getDatabaseId();
 const ITEMS_COL = getItemsCollectionId();
 
-let items: any[] = [];
+const ENDPOINT = getEnvVar('PUBLIC_APPWRITE_ENDPOINT', 'https://sfo.cloud.appwrite.io/v1');
+const PROJECT_ID = getEnvVar('PUBLIC_APPWRITE_PROJECT_ID', '69714b35003a8adab6bb');
+const API_KEY = getEnvVar('APPWRITE_API_KEY', '');
+
+const serverClient = new NodeClient().setEndpoint(ENDPOINT).setProject(PROJECT_ID);
+if (API_KEY) {
+  serverClient.setKey(API_KEY);
+}
+const serverDb = new NodeDatabases(serverClient);
+
+let items: PublicStorefrontItem[] = [];
 let storeName = siteConfig.companyName || siteConfig.title;
 let queryTenantId = tenantId;
 
 if (tenantId) {
   // 1. Fetch Store Details from Appwrite tenant_domains (Law 4: Zero static MOCK_TENANTS / DB_TENANT_MAP dictionaries)
   try {
-    const tenantRes = await databases.listDocuments(DB_ID, "tenant_domains", [
+    const tenantRes = await serverDb.listDocuments(DB_ID, "tenant_domains", [
       Query.equal("tenantId", tenantId),
       Query.limit(1)
     ]);
@@ -37,19 +52,28 @@ if (tenantId) {
     }
   }
 
-  // 2. Fetch Active Items for Sale (Only Placed & Located and Toggled to Show on Storefront)
+  // 2. Fetch Active Storefront Items via server-side cursor pagination (never unindexed array queries or raw cost props)
   try {
-    const itemsRes = await databases.listDocuments(DB_ID, ITEMS_COL, [
-      Query.equal("tenantId", queryTenantId),
-      Query.equal("status", "placed"),
-      Query.limit(100)
-    ]);
-    // Filter to only show items that are located and toggled for storefront
-    items = itemsRes.documents.filter((item: any) => {
-      const hasLocation = !!item.storageLocation || (item.sellingLocations && item.sellingLocations.length > 0);
-      const isStorefront = item.sellingLocations && item.sellingLocations.includes("storefront");
-      return hasLocation && isStorefront;
-    });
+    const collected: PublicStorefrontItem[] = [];
+    let lastId = '';
+    for (let page = 0; page < 25; page++) {
+      const queries = [
+        Query.orderDesc('$id'),
+        Query.limit(100),
+      ];
+      if (lastId) {
+        queries.push(Query.cursorAfter(lastId));
+      }
+      const res = await serverDb.listDocuments(DB_ID, ITEMS_COL, queries);
+      for (const doc of res.documents as any[]) {
+        if (doc.tenantId && queryTenantId && doc.tenantId !== queryTenantId) continue;
+        if (!isPubliclyListable(doc)) continue;
+        collected.push(toPublicStorefrontItem(doc));
+      }
+      if (res.documents.length < 100) break;
+      lastId = res.documents[res.documents.length - 1].$id;
+    }
+    items = collected;
   } catch (err: any) {
     console.error(`[Subsite] Failed to fetch items for tenant '${tenantId}' from collection '${ITEMS_COL}':`, err.message || err);
   }
@@ -60,7 +84,7 @@ if (tenantId) {
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>{storeName} - Resale Command Storefront</title>
+  <title>{storeName} - {siteConfig.shortTitle} Storefront</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700&display=swap" rel="stylesheet">
@@ -132,7 +156,7 @@ if (tenantId) {
       <div>
         <h4 class="text-lg font-bold text-white mb-3">{storeName}</h4>
         <p class="text-sm text-neutral-content/60 max-w-xs">
-          Powered by Resale Command. High-fidelity reseller operations, appraisals, and multi-tenant domain integrations.
+          Curated by {siteConfig.companyName || storeName}. High-fidelity vintage curation, appraisals, and open-book cooperative retail.
         </p>
       </div>
       <div>

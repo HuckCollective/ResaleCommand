@@ -1,9 +1,14 @@
 ---
-import { databases, Query } from '../../../lib/appwrite';
+import { Client as NodeClient, Databases as NodeDatabases, Query } from 'node-appwrite';
 import StoreHeaderCart from '../../../components/store/StoreHeaderCart.astro';
 import '../../../styles/global.css';
 
-import { getDatabaseId, getItemsCollectionId, getBucketId } from '../../../lib/appwriteEnv';
+import { getDatabaseId, getEnvVar, getItemsCollectionId, getBucketId } from '../../../lib/appwriteEnv';
+import {
+  isPubliclyListable,
+  toPublicStorefrontItem,
+  type PublicStorefrontItem,
+} from '../../../lib/publicStorefrontItem';
 import { siteConfig } from '../../../site-config';
 
 const { id } = Astro.params;
@@ -13,18 +18,25 @@ const tenantId = Astro.locals.tenantId || "default_tenant";
 const DB_ID = getDatabaseId();
 const ITEMS_COL = getItemsCollectionId();
 const BUCKET_ID = getBucketId();
-const APPWRITE_ENDPOINT = import.meta.env.PUBLIC_APPWRITE_ENDPOINT;
-const APPWRITE_PROJECT_ID = import.meta.env.PUBLIC_APPWRITE_PROJECT_ID;
+const APPWRITE_ENDPOINT = getEnvVar('PUBLIC_APPWRITE_ENDPOINT', 'https://sfo.cloud.appwrite.io/v1');
+const APPWRITE_PROJECT_ID = getEnvVar('PUBLIC_APPWRITE_PROJECT_ID', '69714b35003a8adab6bb');
+const API_KEY = getEnvVar('APPWRITE_API_KEY', '');
+
+const serverClient = new NodeClient().setEndpoint(APPWRITE_ENDPOINT).setProject(APPWRITE_PROJECT_ID);
+if (API_KEY) {
+  serverClient.setKey(API_KEY);
+}
+const serverDb = new NodeDatabases(serverClient);
 
 let queryTenantId = tenantId;
-let item: any = null;
+let item: PublicStorefrontItem | null = null;
 let storeName = siteConfig.companyName || siteConfig.title;
 let errorMsg = "";
 
 try {
   // 1. Fetch Store Details from Appwrite tenant_domains (Law 4: Zero static MOCK_TENANTS / DB_TENANT_MAP dictionaries)
   try {
-    const tenantRes = await databases.listDocuments(DB_ID, "tenant_domains", [
+    const tenantRes = await serverDb.listDocuments(DB_ID, "tenant_domains", [
       Query.equal("tenantId", tenantId),
       Query.limit(1)
     ]);
@@ -39,18 +51,20 @@ try {
     // collection not found or unconfigured, ignore and use siteConfig fallback
   }
 
-  // 2. Fetch the Item Document
-  item = await databases.getDocument(DB_ID, ITEMS_COL, id || "");
+  // 2. Fetch the Item Document via server client and pass strictly through public allowlist
+  const rawDoc: any = await serverDb.getDocument(DB_ID, ITEMS_COL, id || "");
 
-  // 3. Security/Tenant Verification:
-  // Ensure the loaded item actually belongs to the current tenant (or its mapped database tenant)
-  if (item && item.tenantId !== queryTenantId) {
-    item = null;
+  // 3. Security/Tenant & Storefront Visibility Verification
+  if (rawDoc && rawDoc.tenantId && rawDoc.tenantId !== queryTenantId) {
     errorMsg = "This item does not belong to this store's catalog.";
+  } else if (!isPubliclyListable(rawDoc)) {
+    errorMsg = "This item is no longer available on the public storefront.";
+  } else {
+    item = toPublicStorefrontItem(rawDoc);
   }
 } catch (e: any) {
   console.error(`[Public Item Page] Error loading item ID ${id}:`, e.message || e);
-  errorMsg = e.code === 404 ? "Item not found in the database." : "Failed to load product details.";
+  errorMsg = e.code === 404 ? "This item is no longer in our catalog." : "Unable to load product details right now.";
 }
 
 // Image URLs resolving

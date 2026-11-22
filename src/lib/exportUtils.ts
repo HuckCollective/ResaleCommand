@@ -2,7 +2,45 @@
  * Export utilities for generating marketplace-specific CSV formats.
  */
 
-export type ExportFormat = 'generic' | 'ebay' | 'poshmark' | 'ricochet';
+import { parsePriceValue } from './lot-strategy';
+
+export type ExportFormat = 'generic' | 'ebay' | 'poshmark' | 'ricochet' | 'whatnot';
+
+/**
+ * Canonical CSV price: `parsePriceValue` (never strip-non-digits, which turns "$25 - $35" into 2535).
+ * Returns `blank` when there is no usable positive price so the marketplace rejects the row
+ * instead of silently importing a wrong amount.
+ */
+function toCsvPrice(rawPrice: unknown, blank: string): string {
+    const n = parsePriceValue(rawPrice);
+    return n > 0 ? n.toFixed(2) : blank;
+}
+
+/**
+ * Resolves public Appwrite Storage `/view` URLs for marketplace CSV photo columns (pipe-delimited for eBay,
+ * separate columns for Whatnot). Uses clean File IDs only (never data: URIs).
+ */
+export function buildItemPublicImageUrls(item: any, maxPhotos = 8): string[] {
+    const endpoint = String((import.meta as any)?.env?.PUBLIC_APPWRITE_ENDPOINT || 'https://sfo.cloud.appwrite.io/v1').replace(/\/+$/, '');
+    const projectId = String((import.meta as any)?.env?.PUBLIC_APPWRITE_PROJECT_ID || '69714b35003a8adab6bb').trim();
+    const bucketId = String((import.meta as any)?.env?.PUBLIC_APPWRITE_BUCKET_ID || 'item_images').trim();
+    if (!endpoint || !projectId || !bucketId) return [];
+
+    const ids: string[] = [];
+    const addId = (raw: unknown) => {
+        const clean = String(raw || '').trim();
+        if (!clean || clean.startsWith('data:') || clean.length > 255) return;
+        if (!/^[A-Za-z0-9_][A-Za-z0-9._-]{0,254}$/.test(clean)) return;
+        if (!ids.includes(clean)) ids.push(clean);
+    };
+    addId(item?.imageId);
+    if (Array.isArray(item?.galleryImageIds)) {
+        item.galleryImageIds.forEach(addId);
+    }
+    return ids
+        .slice(0, maxPhotos)
+        .map((id) => `${endpoint}/storage/buckets/${bucketId}/files/${encodeURIComponent(id)}/view?project=${encodeURIComponent(projectId)}`);
+}
 
 /**
  * Helper to escape CSV strings
@@ -79,7 +117,9 @@ export function generateEbayCsv(items: any[]): string {
         }
 
         const rawPrice = item.resalePrice || item.listPrice || item.estValue || item.cost || 0;
-        const cleanPrice = String(rawPrice).replace(/[^0-9.]/g, '') || '';
+        const cleanPrice = toCsvPrice(rawPrice, '');
+
+        const picUrls = buildItemPublicImageUrls(item, 12).join('|');
 
         return [
             'Add', // Action
@@ -87,7 +127,7 @@ export function generateEbayCsv(items: any[]): string {
             (item.title || '').substring(0, 80), // Max 80 chars
             desc, // Description
             '3000', // Default ConditionID (Used)
-            '', // PicURL (Would map to our public image URL if enabled)
+            picUrls, // PicURL (pipe-delimited public storage URLs)
             item.quantity || 1, // Quantity
             'FixedPrice', // Format
             cleanPrice, // StartPrice
@@ -137,7 +177,7 @@ export function generatePoshmarkCsv(items: any[]): string {
         }
 
         const rawPrice = item.resalePrice || item.listPrice || item.estValue || item.cost || 0;
-        const cleanPrice = String(rawPrice).replace(/[^0-9.]/g, '') || '';
+        const cleanPrice = toCsvPrice(rawPrice, '');
 
         return [
             '', // Department
@@ -453,7 +493,7 @@ export function generateRicochetCsv(items: any[], options?: RicochetExportOption
 
         // 4. Clean Numeric Price
         const rawPrice = item.resalePrice || item.listPrice || item.estValue || item.cost || 0;
-        const cleanPrice = String(rawPrice).replace(/[^0-9.]/g, '') || '0.00';
+        const cleanPrice = toCsvPrice(rawPrice, '0.00');
 
         // 5. Ensure SKU strictly uses valid org prefix (never fabricate unpersisted ghost numbers)
         let sku = (item.upc || item.sku || '').trim().toUpperCase();
@@ -484,6 +524,67 @@ export function generateRicochetCsv(items: any[], options?: RicochetExportOption
         .join('\n');
 
     return csvContent;
+}
+
+/**
+ * Generate Whatnot Seller Hub Bulk CSV for live show drops & Buy It Now listings.
+ * Columns align with Whatnot's standard CSV importer (Category, Sub Category, Title, Description,
+ * Quantity, Type, Price, Shipping Profile, Offerable, SKU, Image URL 1..4).
+ */
+export function generateWhatnotCsv(items: any[]): string {
+    const headers = [
+        'Category',
+        'Sub Category',
+        'Title',
+        'Description',
+        'Quantity',
+        'Type',
+        'Price',
+        'Shipping Profile',
+        'Offerable',
+        'SKU',
+        'Image URL 1',
+        'Image URL 2',
+        'Image URL 3',
+        'Image URL 4',
+    ];
+
+    const rows = items.map((item) => {
+        const title = String(item.title || item.identity || 'Curated Find')
+            .replace(/\s+/g, ' ')
+            .trim()
+            .slice(0, 100);
+        const desc = String(item.marketDescription || item.conditionNotes || title)
+            .replace(/<[^>]*>/g, ' ')
+            .replace(/\s+/g, ' ')
+            .trim()
+            .slice(0, 1500);
+        const rawPrice = item.resalePrice || item.listPrice || item.estValue || item.cost || 0;
+        const cleanPrice = toCsvPrice(rawPrice, '');
+        const sku = String(item.upc || item.sku || item.$id || '').trim().toUpperCase();
+        const imgs = buildItemPublicImageUrls(item, 4);
+
+        return [
+            '', // Category (selected in Whatnot Seller Hub)
+            '', // Sub Category
+            title,
+            desc,
+            Math.max(1, Math.floor(Number(item.quantity || 1))),
+            'Buy it Now',
+            cleanPrice,
+            '', // Shipping Profile (e.g. "8-11 oz" or "1-2 lbs")
+            'TRUE',
+            sku,
+            imgs[0] || '',
+            imgs[1] || '',
+            imgs[2] || '',
+            imgs[3] || '',
+        ];
+    });
+
+    return [headers, ...rows]
+        .map((row) => row.map((val) => escapeCsv(val)).join(','))
+        .join('\n');
 }
 
 /**

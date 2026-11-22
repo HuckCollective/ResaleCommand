@@ -123,8 +123,9 @@ Any function that records a sale from an eBay, Stripe, or Shopify order must:
 
 ---
 
-## 9. Known Legacy `ResaleCommand` Gaps (Open, Not Patched Here)
+## 9. Legacy `ResaleCommand` Hygiene & Live Browser Assistant Status
 
-- `src/pages/subsite/index.astro` hands raw item documents (including `cost` and `rawAnalysis`) to a `client:load` `StoreCatalog`, reads through the guest SDK on a document-security collection, and stops at 100 rows without pagination. `/subsite/item/[id].astro` should be checked the same way.
-- `src/lib/exportUtils.ts` (eBay CSV price, around line 82) uses `replace(/[^0-9.]/g, '')`, which turns a range like "$25 - $35" into 2535. Use `parsePriceValue` from `src/lib/lot-strategy.ts`.
-- Until `fn-storefront-catalog-sync` replaces it, treat `/subsite` as not for public launch.
+- **Resolved on `alpha-1`:** `src/pages/subsite/index.astro` and `src/pages/subsite/item/[id].astro` now read via server `node-appwrite` with cursor pagination (`Query.limit(100)` + `Query.orderDesc('$id')`) and sanitize every document through the allowlist in `src/lib/publicStorefrontItem.ts` (zero `cost` or `rawAnalysis` leaks).
+- **Resolved on `alpha-1`:** `src/lib/exportUtils.ts` now uses canonical `parsePriceValue()` across eBay, Poshmark, Ricochet, and Whatnot exports, populates public Storage `PicURL`s in `generateEbayCsv`, and adds `generateWhatnotCsv()` for live show bulk drops; Depop's US fee hint is updated to `3.3%` (`0%` selling fee + `~3.3% + $0.45` processing).
+- **Live Browser Lane (`Poshmark · Depop · eBay · Whatnot`):** Shipped `src/lib/onlineListingPacket.ts`, `publish_listing` + per-platform dedupe in `src/lib/channelSyncOutbox.ts`, authenticated `/api/bml/listing-packet` (zero descriptions in public outbox), strict-ES5 `public/listing-assist.user.js` (`/scripts/listing-bookmarklet.js`), and `ListingQueueActions.vue` in `ItemOnlineTab.vue`.
+- Public storefront traffic should still target the sharded `fn-storefront-catalog-sync` snapshot in `thehc-platform` once Stage 1 ships there.

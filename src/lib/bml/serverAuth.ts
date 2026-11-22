@@ -550,7 +550,7 @@ export async function requireBookmarkletMember(
   };
 }
 
-export async function loadServerBmlToolConfig(toolId: 'ricochet_sync' | 'auction_scout') {
+export async function loadServerBmlToolConfig(toolId: 'ricochet_sync' | 'auction_scout' | 'listing_assist') {
   const endpoint = getEnvVar('PUBLIC_APPWRITE_ENDPOINT') || 'https://sfo.cloud.appwrite.io/v1';
   const project = getEnvVar('PUBLIC_APPWRITE_PROJECT_ID') || '69714b35003a8adab6bb';
   const apiKey = getEnvVar('APPWRITE_API_KEY') || '';

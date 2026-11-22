@@ -138,7 +138,7 @@ export const ONLINE_PLATFORM_OPTIONS: ReadonlyArray<{
 }> = [
   { id: 'ebay', label: '📦 eBay Store (MUAA)', feePctHint: 13.6 },
   { id: 'whatnot', label: '📡 Whatnot Live', feePctHint: 11 },
-  { id: 'depop', label: '👕 Depop', feePctHint: 10 },
+  { id: 'depop', label: '👕 Depop (0% + 3.3% proc)', feePctHint: 3.3 },
   { id: 'poshmark', label: '👗 Poshmark', feePctHint: 20 },
   { id: 'district', label: '🌐 District', feePctHint: 11 },
 ];

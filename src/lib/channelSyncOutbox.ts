@@ -9,7 +9,8 @@ export type ChannelSyncAction =
   | 'deactivate_or_remove'
   | 'update_price'
   | 'update_title'
-  | 'fill_blank_upc';
+  | 'fill_blank_upc'
+  | 'publish_listing';
 
 export type ChannelSyncIntentStatus = 'pending' | 'applied' | 'skipped' | 'failed';
 
@@ -18,6 +19,8 @@ export interface ChannelSyncIntent {
   locationCode: string;
   targetSystem: ChannelTargetSystem;
   action: ChannelSyncAction;
+  /** Optional target marketplace key for `publish_listing` intents (`poshmark`, `depop`, `ebay`, `whatnot`). */
+  platform?: string;
   rcItemId: string;
   rcUpc: string;
   externalSku: string;
@@ -60,6 +63,7 @@ export interface NewChannelSyncIntentInput {
   locationCode?: string;
   targetSystem?: ChannelTargetSystem;
   action: ChannelSyncAction;
+  platform?: string;
   rcItemId?: string;
   rcUpc?: string;
   externalSku?: string;
@@ -93,14 +97,18 @@ export function resolveTargetSystemForLocation(
 export function buildIntentDedupeKey(intent: {
   id?: string;
   action: ChannelSyncAction;
+  platform?: string;
+  payload?: Record<string, any>;
   rcItemId?: string;
   externalSku?: string;
 }): string {
   const action = cleanStr(intent.action, 40) || 'deactivate_or_remove';
+  const rawPlat = cleanStr(intent.platform || intent.payload?.platform, 32).toLowerCase();
+  const platSuffix = action === 'publish_listing' && rawPlat ? `:${rawPlat}` : '';
   const rcItemId = cleanStr(intent.rcItemId, 64);
-  if (rcItemId) return `item:${rcItemId}:${action}`;
+  if (rcItemId) return `item:${rcItemId}:${action}${platSuffix}`;
   const extSku = cleanUpper(intent.externalSku, 64);
-  if (extSku) return `sku:${extSku}:${action}`;
+  if (extSku) return `sku:${extSku}:${action}${platSuffix}`;
   return `id:${cleanStr(intent.id, 80) || Math.random().toString(36).slice(2, 10)}`;
 }
 
@@ -116,16 +124,18 @@ export function normalizeChannelSyncIntent(
   const action: ChannelSyncAction =
     raw.action === 'update_price' ||
     raw.action === 'update_title' ||
-    raw.action === 'fill_blank_upc'
+    raw.action === 'fill_blank_upc' ||
+    raw.action === 'publish_listing'
       ? raw.action
       : 'deactivate_or_remove';
+  const platform = cleanStr(raw.platform || raw.payload?.platform, 32).toLowerCase();
   const rcItemId = cleanStr(raw.rcItemId, 64);
   const rcUpc = cleanUpper(raw.rcUpc, 48);
   const externalSku = cleanUpper(raw.externalSku, 48);
   const locationCode = cleanUpper(raw.locationCode || defaults.locationCode, 16) || defaults.locationCode;
   const targetSystem: ChannelTargetSystem = raw.targetSystem || defaults.targetSystem;
 
-  const fallbackIdSeed = `${locationCode}_${action}_${rcItemId || externalSku || rcUpc || Date.now()}`
+  const fallbackIdSeed = `${locationCode}_${action}${platform ? `_${platform}` : ''}_${rcItemId || externalSku || rcUpc || Date.now()}`
     .toLowerCase()
     .replace(/[^a-z0-9_-]+/g, '_');
 
@@ -150,10 +160,19 @@ export function normalizeChannelSyncIntent(
     createdAt: cleanStr(raw.createdAt, 48) || nowIso,
   };
 
+  if (platform) normalized.platform = platform;
   if (raw.keeperUpc) normalized.keeperUpc = cleanUpper(raw.keeperUpc, 48);
   if (raw.keeperExternalSku) normalized.keeperExternalSku = cleanUpper(raw.keeperExternalSku, 48);
   if (raw.payload && typeof raw.payload === 'object' && Object.keys(raw.payload).length > 0) {
-    normalized.payload = raw.payload;
+    // Keep publish_listing outbox payloads compact and privacy-safe (full copy/photos fetch via /api/bml/listing-packet)
+    if (action === 'publish_listing') {
+      const safePayload: Record<string, any> = {};
+      if (platform) safePayload.platform = platform;
+      if (raw.payload.listingUrl) safePayload.listingUrl = cleanStr(raw.payload.listingUrl, 240);
+      if (Object.keys(safePayload).length > 0) normalized.payload = safePayload;
+    } else {
+      normalized.payload = raw.payload;
+    }
   }
   if ((raw as ChannelSyncIntent).appliedAt) {
     normalized.appliedAt = cleanStr((raw as ChannelSyncIntent).appliedAt, 48);

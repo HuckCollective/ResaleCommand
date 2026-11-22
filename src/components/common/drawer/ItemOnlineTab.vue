@@ -478,6 +478,13 @@
             </p>
           </section>
 
+          <!-- 4B. 4-PLATFORM BROWSER LISTING ASSISTANT QUEUE & CSV -->
+          <ListingQueueActions
+            v-if="!mustRequest"
+            :item="item"
+            :bin-facility="binFacility"
+          />
+
           <!-- 5. LIVE MARKETPLACE LISTING LINKS -->
           <section v-if="!mustRequest" class="space-y-2.5">
             <div class="flex items-center justify-between gap-2 flex-wrap">
@@ -612,6 +619,7 @@
 import { computed, ref, watch } from 'vue';
 import { Icon } from '@iconify/vue';
 import ItemThumbnail from '../ItemThumbnail.vue';
+import ListingQueueActions from './ListingQueueActions.vue';
 import { useAuth } from '../../../composables/useAuth';
 import { loadCoopGovernanceState } from '../../../lib/coopGovernance';
 import { getCoopJwtHeaders } from '../../../lib/coopLedgerClient';
