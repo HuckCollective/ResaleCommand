@@ -292,3 +292,47 @@ export function buildListingPacket(
     },
   };
 }
+
+/**
+ * Builds a zero-injection Chrome Gemini Sidebar prompt from an allowlisted `OnlineListingPacket`.
+ * Always pauses before final submission so the human operator drags in photos, reviews, and clicks List.
+ */
+export function buildChromeSidebarListingPrompt(packet: OnlineListingPacket): string {
+  const lines: string[] = [
+    `🌐 OPEN PAGE FIRST: ${packet.createListingUrl}`,
+    `PLATFORM: ${packet.platformLabel} (${packet.feeSummary})`,
+    '',
+    'PRE-CLICK CHECKLIST:',
+    `1. Open ${packet.createListingUrl} in this tab while signed in.`,
+    '2. If you downloaded the photo pack from Works@TheHC, have your Downloads folder ready to drag-and-drop.',
+    '',
+    'SAFETY RULES (STRICT):',
+    '- Fill ONLY the visible listing form fields verbatim from the packet below.',
+    '- NEVER click List, Post, Publish, Save Draft, or Submit.',
+    '- NEVER bypass any CAPTCHA or verification prompt.',
+    packet.platform === 'whatnot'
+      ? '- NOTE: For Whatnot, prefer the official Whatnot Bulk CSV upload when listing multiple items.'
+      : '- When finished filling fields, STOP and reply: "Fields filled — drag in your photos, review, and click List!"',
+    '',
+    'ITEM PACKET (COPY VERBATIM):',
+    `SKU: ${packet.sku || 'N/A'}`,
+    `TITLE: ${packet.title}`,
+    `PRICE: ${packet.priceFormatted ? `$${packet.priceFormatted}` : 'Leave blank for me to enter'}`,
+    `CONDITION: ${packet.condition}`,
+  ];
+
+  if (packet.hashtags.length > 0) {
+    lines.push(`HASHTAGS (MAX ${packet.hashtags.length}): ${packet.hashtags.join(' ')}`);
+  }
+
+  lines.push('', 'DESCRIPTION:', packet.description);
+
+  if (packet.photoFileIds.length > 0) {
+    lines.push(
+      '',
+      `PHOTOS: ${packet.photoFileIds.length} photo(s) ready in my Downloads folder (${packet.sku || packet.itemId}-photo-1..${packet.photoFileIds.length}). I will drag-and-drop them manually when you pause.`
+    );
+  }
+
+  return lines.join('\n');
+}

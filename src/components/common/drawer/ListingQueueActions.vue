@@ -71,6 +71,14 @@
         <div class="flex flex-wrap gap-1.5">
           <button
             type="button"
+            class="btn btn-xs h-11 md:h-8 btn-primary text-primary-content rounded-lg font-bold gap-1"
+            @click="copySidebarPrompt"
+          >
+            <Icon icon="solar:magic-stick-3-bold" class="w-3.5 h-3.5 shrink-0" />
+            <span>Copy Sidebar Prompt</span>
+          </button>
+          <button
+            type="button"
             class="btn btn-xs h-11 md:h-8 btn-outline rounded-lg font-bold gap-1"
             @click="copyField('Title', packet.title)"
           >
@@ -115,7 +123,18 @@
         </div>
 
         <div v-if="photoUrls.length > 0" class="flex items-center gap-1.5 flex-wrap pt-1">
-          <span class="text-[11px] font-bold text-base-content/65">Photos ({{ photoUrls.length }}):</span>
+          <button
+            type="button"
+            class="btn btn-xs h-11 md:h-8 btn-secondary text-secondary-content rounded-lg font-bold gap-1 shrink-0"
+            :disabled="isDownloadingPhotos"
+            @click="downloadPhotoPack"
+          >
+            <span v-if="isDownloadingPhotos" class="loading loading-spinner loading-xs" aria-hidden="true"></span>
+            <Icon v-else icon="solar:download-minimalistic-bold" class="w-3.5 h-3.5 shrink-0" />
+            <span>
+              {{ isDownloadingPhotos ? 'Downloading…' : `Download Photos (${photoUrls.length})` }}
+            </span>
+          </button>
           <a
             v-for="(url, idx) in photoUrls"
             :key="url"
@@ -175,6 +194,7 @@ import {
 import {
   LISTING_ASSIST_PLATFORMS,
   LISTING_PLATFORM_LIMITS,
+  buildChromeSidebarListingPrompt,
   buildListingPacket,
   checkListingAssistEligibility,
   type ListingAssistPlatform,
@@ -187,6 +207,7 @@ const props = defineProps<{
 }>();
 
 const activePlatform = ref<ListingAssistPlatform>('poshmark');
+const isDownloadingPhotos = ref(false);
 
 const platformCards = computed(() =>
   LISTING_ASSIST_PLATFORMS.map((id) => LISTING_PLATFORM_LIMITS[id])
@@ -215,6 +236,70 @@ const copyField = async (label: string, value: string) => {
     addToast({ type: 'success', message: `Copied ${activeMeta.value.label} ${label}!` });
   } catch {
     addToast({ type: 'info', message: `${label}: ${value.slice(0, 80)}` });
+  }
+};
+
+const copySidebarPrompt = async () => {
+  if (!packet.value) return;
+  const promptText = buildChromeSidebarListingPrompt(packet.value);
+  try {
+    await navigator.clipboard.writeText(promptText);
+    addToast({
+      type: 'success',
+      message: `Copied ${activeMeta.value.label} Sidebar Prompt — paste into Chrome Sidebar on the listing page!`,
+    });
+  } catch {
+    addToast({ type: 'error', message: 'Could not copy to clipboard. Check browser clipboard permissions.' });
+  }
+};
+
+const downloadPhotoPack = async () => {
+  if (isDownloadingPhotos.value || photoUrls.value.length === 0) return;
+  isDownloadingPhotos.value = true;
+  const rawSku = String(packet.value?.sku || props.item?.upc || props.item?.$id || 'item')
+    .trim()
+    .replace(/[^a-zA-Z0-9_-]+/g, '-');
+  let downloaded = 0;
+
+  try {
+    for (let i = 0; i < photoUrls.value.length; i += 1) {
+      const url = photoUrls.value[i];
+      const resp = await fetch(`/api/proxy-image?url=${encodeURIComponent(url)}`);
+      if (!resp.ok) continue;
+      const blob = await resp.blob();
+      const ext = blob.type.includes('png') ? 'png' : blob.type.includes('webp') ? 'webp' : 'jpg';
+      const objUrl = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = objUrl;
+      link.download = `${rawSku}-photo-${i + 1}.${ext}`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      setTimeout(() => URL.revokeObjectURL(objUrl), 2500);
+      downloaded += 1;
+      if (i < photoUrls.value.length - 1) {
+        await new Promise((resolve) => setTimeout(resolve, 220));
+      }
+    }
+
+    if (downloaded > 0) {
+      addToast({
+        type: 'success',
+        message: `Downloaded ${downloaded} photo${downloaded === 1 ? '' : 's'} for ${rawSku} — ready to drag & drop!`,
+      });
+    } else {
+      addToast({
+        type: 'warning',
+        message: 'Could not fetch photos automatically. Use the Photo links to save them manually.',
+      });
+    }
+  } catch {
+    addToast({
+      type: 'error',
+      message: 'Unable to download photos right now. Use the Photo links instead.',
+    });
+  } finally {
+    isDownloadingPhotos.value = false;
   }
 };
 
